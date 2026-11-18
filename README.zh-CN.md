@@ -19,7 +19,7 @@
 <h2><img src="docs/assets/readme/zh-CN/heading-download.svg" width="360" height="66" alt="下载"></h2>
 
 <p align="center">
-  <a href="https://github.com/lighfu/remote-code/releases/download/v0.19.5/remote-code-v0.19.5-win32-x64.zip"><img src="docs/assets/readme/zh-CN/download-windows.svg" width="400" height="180" alt="获取 Windows x64 版 ZIP（0.19.5）"></a>
+  <a href="https://github.com/lighfu/remote-code/releases/download/v0.19.6/remote-code-v0.19.6-win32-x64.zip"><img src="docs/assets/readme/zh-CN/download-windows.svg" width="400" height="180" alt="获取 Windows x64 版 ZIP（0.19.6）"></a>
 </p>
 
 Windows 发行版可从 [GitHub Releases](https://github.com/lighfu/remote-code/releases) 下载。
@@ -95,5 +95,5 @@ APK 生成路径为 `android/app/build/outputs/apk/release/app-release.apk`。�
 <h2><img src="docs/assets/readme/zh-CN/heading-docs.svg" width="360" height="66" alt="文档"></h2>
 
 <p>
-  <a href="docs/releases/zh-CN/0.19.5.md"><img src="docs/assets/readme/zh-CN/card-notes.svg" width="360" height="128" alt="0.19.5 发布说明"></a>
+  <a href="docs/releases/zh-CN/0.19.6.md"><img src="docs/assets/readme/zh-CN/card-notes.svg" width="360" height="128" alt="0.19.6 发布说明"></a>
 </p>
