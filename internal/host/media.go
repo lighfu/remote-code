@@ -1,6 +1,7 @@
 package host
 
 import (
+	"bytes"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
@@ -13,6 +14,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"unicode/utf8"
 )
 
 var mediaImages = map[string]string{".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".gif": "image/gif", ".webp": "image/webp", ".bmp": "image/bmp", ".svg": "image/svg+xml"}
@@ -289,6 +291,9 @@ func mediaLinkInfo(raw, cwd string) (M, error) {
 		info["mediaId"] = MediaID(path)
 		return info, nil
 	}
+	if !st.Mode().IsRegular() || fileHasBinaryExtension(path) {
+		return info, nil
+	}
 	f, err := os.Open(path)
 	if err != nil {
 		return info, nil
@@ -298,10 +303,16 @@ func mediaLinkInfo(raw, cwd string) (M, error) {
 	if err != nil {
 		return info, nil
 	}
-	if strings.Contains(mediaTextExtensions, " "+strings.TrimPrefix(ext, ".")+" ") || !strings.ContainsRune(string(data), 0) {
+	truncated := st.Size() > int64(len(data))
+	text, encoding, ok := fileText(data, truncated)
+	if !ok && encoding == "utf-8" && !utf8.Valid(data) && strings.Contains(mediaTextExtensions, " "+strings.TrimPrefix(ext, ".")+" ") {
+		// Preserve the text preview of legacy-encoded source files.
+		text, _, ok = fileText(bytes.ToValidUTF8(data, []byte("�")), truncated)
+	}
+	if ok {
 		info["kind"] = "text"
-		info["text"] = strings.ToValidUTF8(string(data), "�")
-		info["truncated"] = st.Size() > projectTextLimit
+		info["text"] = text
+		info["truncated"] = truncated
 	}
 	return info, nil
 }
@@ -456,6 +467,28 @@ func AttachmentsPrompt(text string, files []M) string {
 	return text
 }
 
+const rawFileLimit = 60 << 20
+const rawFilePageLimit = 1 << 20
+
+// Large files may only be fetched in bounded pages. Never serve the full file
+// when an If-Range condition would cause ServeContent to ignore Range.
+func boundedRawFileRange(r *http.Request, etag string) bool {
+	if condition := r.Header.Get("If-Range"); condition != "" && condition != etag {
+		return false
+	}
+	value, ok := strings.CutPrefix(r.Header.Get("Range"), "bytes=")
+	if !ok {
+		return false
+	}
+	left, right, ok := strings.Cut(value, "-")
+	if !ok {
+		return false
+	}
+	start, err1 := strconv.ParseUint(left, 10, 63)
+	end, err2 := strconv.ParseUint(right, 10, 63)
+	return err1 == nil && err2 == nil && start <= end && end-start < rawFilePageLimit
+}
+
 func registerMedia(a *App, mux *http.ServeMux) {
 	fileRoute(a, mux, "GET /api/file", func(r *http.Request, _ *Record, _ M) (any, error) {
 		cwd := ""
@@ -475,14 +508,27 @@ func registerMedia(a *App, mux *http.ServeMux) {
 			fileError(w, fileProblem(404, "File not found"))
 			return
 		}
-		if st.Size() > 60*1024*1024 {
+		f, err := os.Open(path)
+		if err != nil {
+			fileError(w, err)
+			return
+		}
+		defer f.Close()
+		st, err = f.Stat()
+		if err != nil || !st.Mode().IsRegular() {
+			fileError(w, fileProblem(404, "File not found"))
+			return
+		}
+		etag := fmt.Sprintf(`"%x-%x"`, st.Size(), st.ModTime().UnixNano())
+		if st.Size() > rawFileLimit && !boundedRawFileRange(r, etag) {
 			fileError(w, fileProblem(413, "File is too large (up to 60 MB)"))
 			return
 		}
 		w.Header().Set("Content-Type", mediaMime(path))
 		w.Header().Set("Content-Disposition", "attachment; filename*=UTF-8''"+url.PathEscape(filepath.Base(path)))
 		w.Header().Set("Cache-Control", "no-store")
-		http.ServeFile(w, r, path)
+		w.Header().Set("ETag", etag)
+		http.ServeContent(w, r, filepath.Base(path), st.ModTime(), io.NewSectionReader(f, 0, st.Size()))
 	})
 	mux.HandleFunc("POST /api/uploads", func(w http.ResponseWriter, r *http.Request) {
 		file, err := receiveUpload(a.DataDir, r)

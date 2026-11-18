@@ -300,16 +300,17 @@ func fileList(root, path, query string) (M, error) {
 	return M{"root": root, "path": fileRelative(root, path), "parent": parent, "entries": entries, "truncated": matching > 3000, "fileCount": fileCount, "folderCount": folderCount, "matchingCount": matching}, nil
 }
 
-var fileBinaryExtensions = " pdf png jpg jpeg gif webp avif heic bmp ico mp3 wav flac ogg mp4 mov webm avi mkv zip gz 7z rar tar exe dll so a class jar wasm doc docx xls xlsx ppt pptx sqlite db ttf otf woff woff2 "
+const fileBinaryExtensions = " bin pdf png jpg jpeg gif webp avif heic bmp ico mp3 wav flac ogg mp4 mov webm avi mkv zip gz 7z rar tar exe dll so a class jar wasm doc docx xls xlsx ppt pptx sqlite db ttf otf woff woff2 "
+
+func fileHasBinaryExtension(path string) bool {
+	return strings.Contains(fileBinaryExtensions, " "+strings.TrimPrefix(strings.ToLower(filepath.Ext(path)), ".")+" ")
+}
 
 func fileNormalize(text string) string {
 	return strings.ReplaceAll(strings.ReplaceAll(text, "\r\n", "\n"), "\r", "\n")
 }
-func fileDecode(data []byte, path string) (text, encoding, ending string, ok bool) {
-	encoding, ending = "utf-8", "lf"
-	if strings.Contains(fileBinaryExtensions, " "+strings.TrimPrefix(strings.ToLower(filepath.Ext(path)), ".")+" ") {
-		return
-	}
+func fileText(data []byte, partial bool) (text, encoding string, ok bool) {
+	encoding = "utf-8"
 	if bytes.HasPrefix(data, []byte{239, 187, 191}) {
 		encoding = "utf-8-bom"
 		data = data[3:]
@@ -321,6 +322,15 @@ func fileDecode(data []byte, path string) (text, encoding, ending string, ok boo
 			order = binary.BigEndian
 		}
 		data = data[2:]
+		if partial {
+			data = data[:len(data)/2*2]
+			if len(data) >= 2 {
+				last := order.Uint16(data[len(data)-2:])
+				if last >= 0xd800 && last <= 0xdbff {
+					data = data[:len(data)-2]
+				}
+			}
+		}
 		if len(data)%2 != 0 {
 			return
 		}
@@ -340,6 +350,15 @@ func fileDecode(data []byte, path string) (text, encoding, ending string, ok boo
 		data = nil
 	}
 	if data != nil {
+		if partial && len(data) > 0 {
+			i := len(data) - 1
+			for i > 0 && len(data)-i < utf8.UTFMax && !utf8.RuneStart(data[i]) {
+				i--
+			}
+			if !utf8.FullRune(data[i:]) {
+				data = data[:i]
+			}
+		}
 		if !utf8.Valid(data) {
 			return
 		}
@@ -350,6 +369,17 @@ func fileDecode(data []byte, path string) (text, encoding, ending string, ok boo
 			return
 		}
 	}
+	return text, encoding, true
+}
+func fileDecode(data []byte, path string) (text, encoding, ending string, ok bool) {
+	encoding, ending = "utf-8", "lf"
+	if fileHasBinaryExtension(path) {
+		return
+	}
+	text, encoding, ok = fileText(data, false)
+	if !ok {
+		return
+	}
 	crlf := strings.Count(text, "\r\n")
 	rest := strings.ReplaceAll(text, "\r\n", "")
 	lf, cr := strings.Count(rest, "\n"), strings.Count(rest, "\r")
@@ -359,7 +389,6 @@ func fileDecode(data []byte, path string) (text, encoding, ending string, ok boo
 		ending = "cr"
 	}
 	text = fileNormalize(text)
-	ok = true
 	return
 }
 func fileEncode(text, encoding, ending string) []byte {
