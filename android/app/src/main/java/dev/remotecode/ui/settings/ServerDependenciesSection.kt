@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.CheckCircle
 import androidx.compose.material.icons.rounded.Cloud
 import androidx.compose.material.icons.rounded.Download
 import androidx.compose.material.icons.rounded.ExpandLess
@@ -186,10 +187,11 @@ internal fun ServerDependenciesSection(api: Api, server: ServerConfig?, connecte
 
 @Composable
 private fun DependencyCard(dependency: ServerDependency, enabled: Boolean, install: () -> Unit) {
+    val installed = dependency.installed && !dependency.inProgress && !dependency.failed
     val status = when {
         dependency.inProgress -> stringResource(R.string.server_dependencies_installing)
         dependency.failed -> stringResource(R.string.server_dependencies_failed)
-        dependency.installed -> stringResource(R.string.server_dependencies_installed)
+        installed -> stringResource(R.string.server_dependencies_installed)
         dependency.status.equals("Not installed", ignoreCase = true) -> stringResource(R.string.server_dependencies_missing)
         else -> dependency.status.ifBlank { stringResource(R.string.server_dependencies_status_unknown) }
     }
@@ -197,7 +199,16 @@ private fun DependencyCard(dependency: ServerDependency, enabled: Boolean, insta
         Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 if (dependency.target == "cloudflared") Icon(Icons.Rounded.Cloud, null, Modifier.size(24.dp)) else BrandIcon(dependency.target, 24.dp)
-                Text(dependency.name.ifBlank { dependency.target }, modifier = Modifier.weight(1f), style = MaterialTheme.typography.titleMedium)
+                Row(
+                    modifier = Modifier.weight(1f),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    Text(dependency.name.ifBlank { dependency.target }, modifier = Modifier.weight(1f, fill = false), style = MaterialTheme.typography.titleMedium)
+                    if (installed) {
+                        Icon(Icons.Rounded.CheckCircle, contentDescription = null, modifier = Modifier.size(22.dp), tint = MaterialTheme.colorScheme.primary)
+                    }
+                }
                 if (dependency.inProgress) CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
             }
             Text(status, style = MaterialTheme.typography.labelLarge, color = if (dependency.failed) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary)
