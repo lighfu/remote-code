@@ -72,6 +72,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.material.icons.rounded.LinkOff
@@ -129,7 +130,9 @@ fun SessionsScreen(onOpen: (String) -> Unit, onHistory: () -> Unit, onSettings: 
         }
     }
 
-    BackHandler(fabOpen) { fabOpen = false }
+    BackHandler(enabled = fabOpen || showArchived) {
+        if (fabOpen) fabOpen = false else showArchived = false
+    }
 
     fun act(block: suspend () -> Unit) {
         scope.launch {
@@ -264,6 +267,7 @@ fun SessionsScreen(onOpen: (String) -> Unit, onHistory: () -> Unit, onSettings: 
         val prefs = remember { context.getSharedPreferences("home_view", android.content.Context.MODE_PRIVATE) }
         var tab by rememberSaveable { mutableStateOf(prefs.getString("tab", "history") ?: "history") }
         val showHistory = tab == "history" && !showArchived
+        val listStates = rememberSaveableStateHolder()
         val usageHeader: androidx.compose.foundation.lazy.LazyListScope.() -> Unit = {
             if (!showArchived && conn is ConnState.Connected) {
                 item(key = "__usage") {
@@ -286,7 +290,7 @@ fun SessionsScreen(onOpen: (String) -> Unit, onHistory: () -> Unit, onSettings: 
                     prefs.edit().putString("tab", it).apply()
                 }
             }
-            if (showHistory) {
+            if (showHistory) listStates.SaveableStateProvider("history") {
                 dev.remotecode.ui.history.HistoryContent(
                     onOpen = onOpen,
                     modifier = Modifier.weight(1f),
@@ -303,7 +307,7 @@ fun SessionsScreen(onOpen: (String) -> Unit, onHistory: () -> Unit, onSettings: 
                         }
                     },
                 )
-            } else {
+            } else listStates.SaveableStateProvider(if (showArchived) "archive" else "sessions") {
                 PullToRefreshBox(
                     isRefreshing = refreshing,
                     onRefresh = {
