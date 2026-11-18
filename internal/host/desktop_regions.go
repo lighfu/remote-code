@@ -22,11 +22,14 @@ type desktopRegionState struct {
 	dirty                              []bool
 	generations                        map[string]uint64
 	sequence                           uint64
+	cursorArea                         image.Rectangle
+	cursorBackground, cursorPixels     []byte
 }
 
 func (s *desktopRegionState) begin(size image.Point, frame *desktopFrame, previous string) bool {
 	fresh := previous == "" || previous != s.tag || s.size != size || s.layout != frame.layout || s.method != frame.capture
 	if fresh {
+		s.cursorArea = image.Rectangle{}
 		s.size, s.layout, s.method = size, frame.layout, frame.capture
 		// Gaps between offset monitors are black, even after a layout change.
 		s.pixels = make([]byte, size.X*size.Y*4)
@@ -42,6 +45,7 @@ func (s *desktopRegionState) begin(size image.Point, frame *desktopFrame, previo
 
 func (s *desktopRegionState) updateComposite(pixels []byte, size image.Point, frame *desktopFrame, previous string) bool {
 	fresh := s.begin(size, frame, previous)
+	s.cursorArea = image.Rectangle{}
 	// A composed bitmap may contain a custom cursor in an otherwise idle
 	// monitor. Resample every monitor when switching back to direct GPU input.
 	clear(s.generations)

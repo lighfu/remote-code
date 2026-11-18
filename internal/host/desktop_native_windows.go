@@ -252,8 +252,9 @@ func captureDuplicatedFrame(frame *desktopFrame, monitors []desktopDisplay, disp
 	if s == nil && frame.etag == options.previousETag {
 		return checkInteractiveDesktop()
 	}
-	if s != nil && cursor.handle == 0 && supportsDirectDesktopRegions(parts) {
+	if s != nil && supportsDirectDesktopRegions(parts) {
 		fresh := s.begin(size, frame, options.previousETag)
+		s.restoreCursorBackground()
 		for _, part := range parts {
 			o := part.output
 			if !fresh && s.generations[part.display.ID] == o.generation {
@@ -265,6 +266,10 @@ func captureDuplicatedFrame(frame *desktopFrame, monitors []desktopDisplay, disp
 				return desktopDuplicationError(part.display, o, err)
 			}
 			s.generations[part.display.ID] = o.generation
+		}
+		if !s.drawCursorPatch(target, cursor) {
+			// A driver or unusual cursor can require the full Windows surface.
+			return renderDesktopFrame(frame, cursor, monitors, parts, target, size, options)
 		}
 		if err := checkInteractiveDesktop(); err != nil {
 			return err
@@ -288,7 +293,8 @@ func supportsDirectDesktopRegions(parts []desktopOutputPart) bool {
 	return true
 }
 
-func renderDesktopFrame(frame *desktopFrame, cursor desktopCursorInfo, monitors []desktopDisplay, parts []desktopOutputPart, target image.Rectangle, size image.Point, options desktopFrameOptions) error {
+// Keep the DIB selected and alive until all pixel reads and writes finish.
+func withDesktopDIB(size image.Point, render func(mem, screen uintptr, raw []byte) error) error {
 	screen, _, _ := desktopGetDC.Call(0)
 	if screen == 0 {
 		return errors.New("could not open the Windows screen")
@@ -313,54 +319,62 @@ func renderDesktopFrame(frame *desktopFrame, cursor desktopCursorInfo, monitors 
 	}
 	defer desktopSelect.Call(mem, previous)
 	raw := unsafe.Slice((*byte)(bits), size.X*size.Y*4)
-	// A single monitor covers every pixel. Only composite layouts can have
-	// uncovered gaps requiring an explicit black background.
-	covered := false
-	for _, monitor := range monitors {
-		if target.In(monitorRectangle(monitor)) {
-			covered = true
-			break
-		}
-	}
-	if !covered {
-		clear(raw)
-	}
-	if parts == nil {
-		if err := drawGDIDesktop(mem, screen, target, size, monitors); err != nil {
-			return err
-		}
-	} else {
-		for _, part := range parts {
-			if err := part.output.draw(raw, size.X*4, part.destination); err != nil {
-				return desktopDuplicationError(part.display, part.output, err)
+	return render(mem, screen, raw)
+}
+
+func renderDesktopFrame(frame *desktopFrame, cursor desktopCursorInfo, monitors []desktopDisplay, parts []desktopOutputPart, target image.Rectangle, size image.Point, options desktopFrameOptions) error {
+	return withDesktopDIB(size, func(mem, screen uintptr, raw []byte) error {
+		// A single monitor covers every pixel. Only composite layouts can have
+		// uncovered gaps requiring an explicit black background.
+		covered := false
+		for _, monitor := range monitors {
+			if target.In(monitorRectangle(monitor)) {
+				covered = true
+				break
 			}
 		}
-	}
-	if cursor.handle != 0 {
-		drawDesktopCursor(mem, target, size, cursor)
-	}
-	if ok, _, _ := desktopFlush.Call(); ok == 0 {
-		return errors.New("Windows could not finish capturing the desktop")
-	}
-	if err := checkInteractiveDesktop(); err != nil {
-		return err
-	}
-	if s := options.regions; s != nil {
-		fresh := s.updateComposite(raw, size, frame, options.previousETag)
-		return encodeDesktopUpdate(s, fresh, frame, options)
-	}
-	if frame.capture == "gdi" {
-		// GDI supplies pixels even when the scene is idle. Compare their digest
-		// before encoding or transferring another complete desktop image.
-		sum := sha256.Sum256(raw)
-		frame.etag = fmt.Sprintf(`"g-%s-%dx%d-%s-%t-%x"`, frame.layout, size.X, size.Y, options.codec, options.highDetail || options.native, sum[:16])
-		if frame.etag == options.previousETag {
-			return nil
+		if !covered {
+			clear(raw)
 		}
-	}
-	var err error
-	frame.data, err = encodeDesktopPixels(raw, size, options, false)
-	return err
+		if parts == nil {
+			if err := drawGDIDesktop(mem, screen, target, size, monitors); err != nil {
+				return err
+			}
+		} else {
+			for _, part := range parts {
+				if err := part.output.draw(raw, size.X*4, part.destination); err != nil {
+					return desktopDuplicationError(part.display, part.output, err)
+				}
+			}
+		}
+		if cursor.handle != 0 {
+			if rect, ok := desktopCursorBounds(target, size, cursor); ok {
+				drawDesktopCursor(mem, cursor.handle, rect)
+			}
+		}
+		if ok, _, _ := desktopFlush.Call(); ok == 0 {
+			return errors.New("Windows could not finish capturing the desktop")
+		}
+		if err := checkInteractiveDesktop(); err != nil {
+			return err
+		}
+		if s := options.regions; s != nil {
+			fresh := s.updateComposite(raw, size, frame, options.previousETag)
+			return encodeDesktopUpdate(s, fresh, frame, options)
+		}
+		if frame.capture == "gdi" {
+			// GDI supplies pixels even when the scene is idle. Compare their digest
+			// before encoding or transferring another complete desktop image.
+			sum := sha256.Sum256(raw)
+			frame.etag = fmt.Sprintf(`"g-%s-%dx%d-%s-%t-%x"`, frame.layout, size.X, size.Y, options.codec, options.highDetail || options.native, sum[:16])
+			if frame.etag == options.previousETag {
+				return nil
+			}
+		}
+		var err error
+		frame.data, err = encodeDesktopPixels(raw, size, options, false)
+		return err
+	})
 }
 
 func encodeDesktopUpdate(s *desktopRegionState, fresh bool, frame *desktopFrame, opts desktopFrameOptions) error {
@@ -531,13 +545,13 @@ func sampleDesktopCursor(frame *desktopFrame, separate bool, target image.Rectan
 	return c
 }
 
-func drawDesktopCursor(dc uintptr, target image.Rectangle, size image.Point, cursor desktopCursorInfo) {
+func desktopCursorBounds(target image.Rectangle, size image.Point, cursor desktopCursorInfo) (image.Rectangle, bool) {
 	var icon struct {
 		isIcon, hotX, hotY uint32
 		mask, color        uintptr
 	}
 	if ok, _, _ := desktopGetIcon.Call(cursor.handle, uintptr(unsafe.Pointer(&icon))); ok == 0 {
-		return
+		return image.Rectangle{}, false
 	}
 	bmp := icon.color
 	if icon.mask != 0 {
@@ -554,7 +568,7 @@ func drawDesktopCursor(dc uintptr, target image.Rectangle, size image.Point, cur
 		bits                        uintptr
 	}
 	if ok, _, _ := desktopGetObject.Call(bmp, unsafe.Sizeof(info), uintptr(unsafe.Pointer(&info))); ok == 0 {
-		return
+		return image.Rectangle{}, false
 	}
 	if icon.color == 0 {
 		info.height /= 2 // Monochrome AND/XOR masks share a bitmap.
@@ -563,5 +577,10 @@ func drawDesktopCursor(dc uintptr, target image.Rectangle, size image.Point, cur
 	y := (int(cursor.y) - int(icon.hotY) - target.Min.Y) * size.Y / target.Dy()
 	w := max(1, int(info.width)*size.X/target.Dx())
 	h := max(1, int(info.height)*size.Y/target.Dy())
-	desktopDrawIcon.Call(dc, uintptr(x), uintptr(y), cursor.handle, uintptr(w), uintptr(h), 0, 0, 3 /* DI_NORMAL */)
+	return image.Rect(x, y, x+w, y+h), true
+}
+
+func drawDesktopCursor(dc, handle uintptr, rect image.Rectangle) bool {
+	ok, _, _ := desktopDrawIcon.Call(dc, uintptr(rect.Min.X), uintptr(rect.Min.Y), handle, uintptr(rect.Dx()), uintptr(rect.Dy()), 0, 0, 3 /* DI_NORMAL */)
+	return ok != 0
 }
