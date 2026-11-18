@@ -944,6 +944,8 @@
     <string name="screen_history_017">" · PC 上已開啟 %1$s 項"</string>
     <string name="screen_history_018">"關閉"</string>
     <string name="screen_history_019">"開啟"</string>
+    <string name="history_expand_all">全部展開</string>
+    <string name="history_collapse_all">全部摺疊</string>
     <string name="screen_history_020">"已匯入此應用程式"</string>
     <string name="screen_directory_picker_001">"選擇資料夾"</string>
     <string name="screen_directory_picker_002">"關閉"</string>

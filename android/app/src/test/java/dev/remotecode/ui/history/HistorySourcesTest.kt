@@ -9,6 +9,16 @@ import org.junit.Assert.assertEquals
 import org.junit.Test
 
 class HistorySourcesTest {
+    @Test fun bulkExpansionPreservesFilteredGroupsAndIndividualOverrides() {
+        val visible = setOf("A", "B")
+        val mixed = setOf("B", "hidden")
+        val closed = mixed.withProjectExpansion(visible, expanded = false)
+        assertEquals(setOf("A", "B", "hidden"), closed)
+        assertEquals(mixed, closed.withProjectExpansion(setOf("A"), expanded = true))
+        assertEquals(setOf("hidden"), mixed.withProjectExpansion(visible, expanded = true))
+        assertEquals(mixed, mixed.withProjectExpansion(emptySet(), expanded = false))
+    }
+
     @Test fun slowOrUnavailableSourcesDoNotHideOtherHistories() = runBlocking {
         val codexShown = CompletableDeferred<Unit>()
         val item = HistoryItem("shared-id", "Same title")

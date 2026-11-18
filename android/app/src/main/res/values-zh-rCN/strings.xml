@@ -944,6 +944,8 @@
     <string name="screen_history_017">" · PC 上已打开 %1$s 条"</string>
     <string name="screen_history_018">"关闭"</string>
     <string name="screen_history_019">"打开"</string>
+    <string name="history_expand_all">全部展开</string>
+    <string name="history_collapse_all">全部折叠</string>
     <string name="screen_history_020">"已导入此应用"</string>
     <string name="screen_directory_picker_001">"选择文件夹"</string>
     <string name="screen_directory_picker_002">"关闭"</string>

@@ -8,6 +8,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -27,6 +28,8 @@ import androidx.compose.material.icons.rounded.ExpandMore
 import androidx.compose.material.icons.rounded.Folder
 import androidx.compose.material.icons.rounded.History
 import androidx.compose.material.icons.rounded.SwapVert
+import androidx.compose.material.icons.rounded.UnfoldLess
+import androidx.compose.material.icons.rounded.UnfoldMore
 import androidx.compose.material3.FilterChip
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
@@ -76,6 +79,9 @@ private enum class HistorySort(val label: String) { NEWEST(appString(R.string.sc
 
 private const val AllHistory = "all"
 private val historyFilters = listOf(AllHistory) + Providers.all
+
+internal fun Set<String>.withProjectExpansion(projects: Set<String>, expanded: Boolean): Set<String> =
+    if (expanded) this - projects else this + projects
 
 /** Deliver each source as it finishes so a slow or unavailable CLI cannot hide the others. */
 internal suspend fun loadHistorySources(
@@ -144,8 +150,13 @@ fun HistoryContent(
     var sort by remember { mutableStateOf(runCatching { HistorySort.valueOf(prefs.getString("sort", null) ?: "") }.getOrDefault(HistorySort.NEWEST)) }
     var grouped by remember { mutableStateOf(prefs.getBoolean("grouped", false)) }
     var liveOnly by remember { mutableStateOf(prefs.getBoolean("liveOnly", false)) }
-    val collapsed = remember { androidx.compose.runtime.mutableStateListOf<String>().apply { addAll(prefs.getStringSet("collapsed", emptySet()).orEmpty()) } }
-    fun save() = prefs.edit().putString("sort", sort.name).putBoolean("grouped", grouped).putBoolean("liveOnly", liveOnly).putStringSet("collapsed", collapsed.toSet()).apply()
+    var collapsed by remember { mutableStateOf(prefs.getStringSet("collapsed", emptySet()).orEmpty().toSet()) }
+    fun save() = prefs.edit().putString("sort", sort.name).putBoolean("grouped", grouped).putBoolean("liveOnly", liveOnly).apply()
+    fun setExpanded(projects: Set<String>, expanded: Boolean) {
+        haptics.toggle(expanded)
+        collapsed = collapsed.withProjectExpansion(projects, expanded)
+        prefs.edit().putStringSet("collapsed", collapsed).apply()
+    }
 
     fun importHistory(h: HistoryItem) {
         importing = true
@@ -201,6 +212,7 @@ fun HistoryContent(
             HistorySort.NAME -> g.sortedBy { e -> e.key.substringAfterLast('/').lowercase() }
         }
     }
+    val visibleProjects = remember(groups) { groups.mapTo(mutableSetOf()) { it.key } }
 
     run {
         Column(modifier.fillMaxSize()) {
@@ -266,6 +278,29 @@ fun HistoryContent(
                     label = { Text(stringResource(R.string.screen_history_008)) },
                 )
             }
+            if (visibleProjects.isNotEmpty()) {
+                FlowRow(
+                    Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+                    horizontalArrangement = Arrangement.spacedBy(4.dp, Alignment.End),
+                ) {
+                    TextButton(
+                        onClick = { setExpanded(visibleProjects, true) },
+                        enabled = visibleProjects.any { it in collapsed },
+                    ) {
+                        Icon(Icons.Rounded.UnfoldMore, null, Modifier.size(18.dp))
+                        Spacer(Modifier.size(4.dp))
+                        Text(stringResource(R.string.history_expand_all))
+                    }
+                    TextButton(
+                        onClick = { setExpanded(visibleProjects, false) },
+                        enabled = visibleProjects.any { it !in collapsed },
+                    ) {
+                        Icon(Icons.Rounded.UnfoldLess, null, Modifier.size(18.dp))
+                        Spacer(Modifier.size(4.dp))
+                        Text(stringResource(R.string.history_collapse_all))
+                    }
+                }
+            }
             Box(Modifier.fillMaxSize()) {
                 val listState = key(provider) { rememberLazyListState() }
                 // On return, measuring just the headers would reset a restored scroll position.
@@ -285,9 +320,7 @@ fun HistoryContent(
                             val open = project !in collapsed
                             item(key = "group:$project") {
                                 ProjectHeader(project, list, open) {
-                                    haptics.context()
-                                    if (open) collapsed.add(project) else collapsed.remove(project)
-                                    save()
+                                    setExpanded(setOf(project), !open)
                                 }
                             }
                             if (open) {

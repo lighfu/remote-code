@@ -944,6 +944,8 @@
     <string name="screen_history_017">" · %1$s open on PC"</string>
     <string name="screen_history_018">"Close"</string>
     <string name="screen_history_019">"Open"</string>
+    <string name="history_expand_all">Expand all</string>
+    <string name="history_collapse_all">Collapse all</string>
     <string name="screen_history_020">"Imported to this app"</string>
     <string name="screen_directory_picker_001">"Select folder"</string>
     <string name="screen_directory_picker_002">"Close"</string>
