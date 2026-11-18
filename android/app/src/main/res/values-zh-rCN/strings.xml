@@ -113,8 +113,8 @@
     <string name="chat_chat_screen_060">"该模型不支持 Fast mode"</string>
     <string name="chat_chat_screen_061">"遵循 PC 设置"</string>
     <string name="chat_chat_screen_062">"模型：%1$s"</string>
-    <string name="chat_chat_screen_063">"确认方式"</string>
-    <string name="chat_chat_screen_064">"确认方式：%1$s"</string>
+    <string name="chat_chat_screen_063">"权限"</string>
+    <string name="chat_chat_screen_064">"权限：%1$s"</string>
     <string name="chat_chat_screen_065">"PC 端会话 ID"</string>
     <string name="chat_chat_screen_066">"复制 PC 端会话 ID"</string>
     <string name="chat_chat_screen_067">"会话 ID"</string>
@@ -975,7 +975,7 @@
     <string name="screen_new_session_sheet_007">"取消收藏"</string>
     <string name="screen_new_session_sheet_008">"收藏"</string>
     <string name="screen_new_session_sheet_009">"查看所有最近使用的文件夹（%1$s）"</string>
-    <string name="screen_new_session_sheet_010">"确认方式"</string>
+    <string name="screen_new_session_sheet_010">"权限"</string>
     <string name="screen_new_session_sheet_011">"Fast mode 开"</string>
     <string name="screen_new_session_sheet_012">"模型: %1$s"</string>
     <string name="screen_new_session_sheet_013">"首条指令（稍后输入亦可）"</string>

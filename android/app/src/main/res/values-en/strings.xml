@@ -113,8 +113,8 @@
     <string name="chat_chat_screen_060">"This model does not support Fast mode"</string>
     <string name="chat_chat_screen_061">"Same as PC settings"</string>
     <string name="chat_chat_screen_062">"Model: %1$s"</string>
-    <string name="chat_chat_screen_063">"Confirmation behavior"</string>
-    <string name="chat_chat_screen_064">"Confirmation behavior: %1$s"</string>
+    <string name="chat_chat_screen_063">"Permissions"</string>
+    <string name="chat_chat_screen_064">"Permissions: %1$s"</string>
     <string name="chat_chat_screen_065">"PC session ID"</string>
     <string name="chat_chat_screen_066">"Copy PC session ID"</string>
     <string name="chat_chat_screen_067">"Session ID"</string>
@@ -975,7 +975,7 @@
     <string name="screen_new_session_sheet_007">"Remove from favorites"</string>
     <string name="screen_new_session_sheet_008">"Add to favorites"</string>
     <string name="screen_new_session_sheet_009">"View all recent folders (%1$s)"</string>
-    <string name="screen_new_session_sheet_010">"Review mode"</string>
+    <string name="screen_new_session_sheet_010">"Permissions"</string>
     <string name="screen_new_session_sheet_011">"Fast mode ON"</string>
     <string name="screen_new_session_sheet_012">"Model: %1$s"</string>
     <string name="screen_new_session_sheet_013">"First prompt (optional, can add later)"</string>

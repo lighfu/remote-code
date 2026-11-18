@@ -113,8 +113,8 @@
     <string name="chat_chat_screen_060">"이 모델은 Fast mode를 지원하지 않습니다"</string>
     <string name="chat_chat_screen_061">"PC 설정 적용"</string>
     <string name="chat_chat_screen_062">"모델: %1$s"</string>
-    <string name="chat_chat_screen_063">"확인 방식"</string>
-    <string name="chat_chat_screen_064">"확인 방식: %1$s"</string>
+    <string name="chat_chat_screen_063">"권한"</string>
+    <string name="chat_chat_screen_064">"권한: %1$s"</string>
     <string name="chat_chat_screen_065">"PC 세션 ID"</string>
     <string name="chat_chat_screen_066">"PC 세션 ID 복사"</string>
     <string name="chat_chat_screen_067">"세션 ID"</string>
@@ -975,7 +975,7 @@
     <string name="screen_new_session_sheet_007">"즐겨찾기에서 제거"</string>
     <string name="screen_new_session_sheet_008">"즐겨찾기에 추가"</string>
     <string name="screen_new_session_sheet_009">"최근 폴더 모두 보기 (%1$s)"</string>
-    <string name="screen_new_session_sheet_010">"확인 방식"</string>
+    <string name="screen_new_session_sheet_010">"권한"</string>
     <string name="screen_new_session_sheet_011">"Fast mode 켜짐"</string>
     <string name="screen_new_session_sheet_012">"모델: %1$s"</string>
     <string name="screen_new_session_sheet_013">"첫 요청 (나중에 입력해도 됨)"</string>

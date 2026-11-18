@@ -222,7 +222,7 @@
     <string name="screen_new_session_sheet_007">"お気に入りから外す"</string>
     <string name="screen_new_session_sheet_008">"お気に入りにする"</string>
     <string name="screen_new_session_sheet_009">"最近のフォルダをすべて見る（%1$s）"</string>
-    <string name="screen_new_session_sheet_010">"確認のしかた"</string>
+    <string name="screen_new_session_sheet_010">"権限"</string>
     <string name="screen_new_session_sheet_011">"Fast mode ON"</string>
     <string name="screen_new_session_sheet_012">"モデル: %1$s"</string>
     <string name="screen_new_session_sheet_013">"最初の依頼（あとからでも可）"</string>

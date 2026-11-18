@@ -113,8 +113,8 @@
     <string name="chat_chat_screen_060">このモデルは Fast mode に対応していません</string>
     <string name="chat_chat_screen_061">PC の設定どおり</string>
     <string name="chat_chat_screen_062">モデル: %1$s</string>
-    <string name="chat_chat_screen_063">確認のしかた</string>
-    <string name="chat_chat_screen_064">確認のしかた: %1$s</string>
+    <string name="chat_chat_screen_063">権限</string>
+    <string name="chat_chat_screen_064">権限: %1$s</string>
     <string name="chat_chat_screen_065">PC のセッション ID</string>
     <string name="chat_chat_screen_066">PC のセッション ID をコピー</string>
     <string name="chat_chat_screen_067">セッション ID</string>

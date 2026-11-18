@@ -113,8 +113,8 @@
     <string name="chat_chat_screen_060">"此模型不支援 Fast mode"</string>
     <string name="chat_chat_screen_061">"依照 PC 端設定"</string>
     <string name="chat_chat_screen_062">"模型：%1$s"</string>
-    <string name="chat_chat_screen_063">"確認方式"</string>
-    <string name="chat_chat_screen_064">"確認方式：%1$s"</string>
+    <string name="chat_chat_screen_063">"權限"</string>
+    <string name="chat_chat_screen_064">"權限：%1$s"</string>
     <string name="chat_chat_screen_065">"PC 的工作階段 ID"</string>
     <string name="chat_chat_screen_066">"複製 PC 的工作階段 ID"</string>
     <string name="chat_chat_screen_067">"工作階段 ID"</string>
@@ -975,7 +975,7 @@
     <string name="screen_new_session_sheet_007">"從常用項目移除"</string>
     <string name="screen_new_session_sheet_008">"加到常用項目"</string>
     <string name="screen_new_session_sheet_009">"查看所有最近使用的資料夾（%1$s）"</string>
-    <string name="screen_new_session_sheet_010">"確認方式"</string>
+    <string name="screen_new_session_sheet_010">"權限"</string>
     <string name="screen_new_session_sheet_011">"Fast mode 開啟"</string>
     <string name="screen_new_session_sheet_012">"模型：%1$s"</string>
     <string name="screen_new_session_sheet_013">"初次指示（稍後填寫亦可）"</string>
