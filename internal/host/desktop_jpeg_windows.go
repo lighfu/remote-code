@@ -50,6 +50,33 @@ func desktopNativeJPEG(raw []byte, size image.Point, quality uint32) []byte {
 	if !desktopImagingReady() {
 		return nil
 	}
+	// Reserve only spare cores. A second stream can continue encoding on its
+	// calling thread while the first is busy, without waiting for workers.
+	workers := min(6, size.X*size.Y/(480*1024), size.Y/32)
+	reserved := 0
+	for reserved+1 < workers {
+		select {
+		case desktopJPEGWorkers <- struct{}{}:
+			reserved++
+		default:
+			workers = reserved + 1
+		}
+	}
+	if reserved > 0 {
+		encoded := encodeDesktopJPEGBands(raw, size, quality, reserved+1)
+		for range reserved {
+			<-desktopJPEGWorkers
+		}
+		if encoded != nil {
+			return encoded
+		}
+	}
+	return desktopJPEGScan(raw, size, quality)
+}
+
+var desktopJPEGWorkers = make(chan struct{}, max(0, min(5, runtime.GOMAXPROCS(0)/2-1)))
+
+func desktopJPEGScan(raw []byte, size image.Point, quality uint32) []byte {
 	// GDI+ retains scan0 until DisposeImage, including between native calls.
 	// Pin is a no-op for the operating system's DIB memory.
 	var pinned runtime.Pinner
