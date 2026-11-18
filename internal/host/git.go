@@ -17,27 +17,23 @@ import (
 )
 
 var gitWrites sync.Mutex
-var gitReads sync.Mutex
-var gitSnapshots = map[string]struct {
-	until time.Time
-	value M
-}{}
+var gitSnapshots = newGitStatusCache(2)
 var gitBase = []string{"--no-pager", "--literal-pathspecs", "-c", "color.ui=false", "-c", "core.quotepath=false", "-c", "core.fsmonitor=false", "-c", "diff.renameLimit=200", "-c", "status.renameLimit=200"}
 
 type gitBuffer struct {
-	bytes.Buffer
+	data     bytes.Buffer
 	max      int
 	overflow bool
 }
 
 func (b *gitBuffer) Write(p []byte) (int, error) {
 	n := len(p)
-	remaining := b.max - b.Len()
+	remaining := b.max - b.data.Len()
 	if remaining > 0 {
 		if remaining > n {
 			remaining = n
 		}
-		_, _ = b.Buffer.Write(p[:remaining])
+		_, _ = b.data.Write(p[:remaining])
 	}
 	if n > remaining {
 		b.overflow = true
@@ -78,9 +74,9 @@ func gitRun(cwd, input string, timeout time.Duration, args ...string) (string, e
 		if _, ok := err.(*exec.Error); ok {
 			return "", fileProblem(503, "Git not found. Please install Git on your PC.")
 		}
-		message := strings.TrimSpace(stderr.String())
+		message := strings.TrimSpace(stderr.data.String())
 		if message == "" {
-			message = strings.TrimSpace(out.String())
+			message = strings.TrimSpace(out.data.String())
 		}
 		if message == "" {
 			message = err.Error()
@@ -88,11 +84,12 @@ func gitRun(cwd, input string, timeout time.Duration, args ...string) (string, e
 		message = gitSanitize(message)
 		return "", fileProblem(409, message)
 	}
-	return out.String(), nil
+	return out.data.String(), nil
 }
 
 var gitCredentials = regexp.MustCompile(`(https?://)[^\s/@]+@`)
 var gitANSI = regexp.MustCompile("\x1b\\[[0-9;]*[A-Za-z]")
+var gitDrivePrefix = regexp.MustCompile(`^[A-Za-z]:`)
 
 func gitSanitize(message string) string {
 	message = gitCredentials.ReplaceAllString(gitANSI.ReplaceAllString(message, ""), "${1}***@")
@@ -252,8 +249,11 @@ func gitLines(data []byte) int {
 	return count
 }
 func gitStatus(cwd string, force bool) (M, error) {
-	gitReads.Lock()
-	defer gitReads.Unlock()
+	// Most sessions start at the worktree root. A poll there can reuse the
+	// snapshot (or pending read) without starting another Git process.
+	if pending := gitSnapshots.lookup(fileKey(filepath.Clean(cwd)), force); pending != nil {
+		return pending.wait()
+	}
 	root, err := gitRoot(cwd)
 	if err != nil {
 		return nil, err
@@ -261,10 +261,10 @@ func gitStatus(cwd string, force bool) (M, error) {
 	if root == "" {
 		return gitEmpty(), nil
 	}
-	key := fileKey(root)
-	if cached, ok := gitSnapshots[key]; ok && !force && time.Now().Before(cached.until) {
-		return cached.value, nil
-	}
+	return gitSnapshots.read(fileKey(root), force, func() (M, error) { return gitReadStatus(root) })
+}
+
+func gitReadPorcelain(root string) (M, error) {
 	out, err := gitRun(root, "", 12*time.Second, "status", "--porcelain=v2", "--branch", "-z", "--untracked-files=all")
 	if err != nil {
 		return nil, err
@@ -274,8 +274,42 @@ func gitStatus(cwd string, force bool) (M, error) {
 	if len(files) > 5000 {
 		return nil, fileProblem(413, "Changed files exceed 5000. Please reduce the scope of changes.")
 	}
+	var staged, unstaged, untracked, conflicted int
+	for _, file := range files {
+		if B(file, "staged") {
+			staged++
+		}
+		if B(file, "unstaged") {
+			unstaged++
+		}
+		if B(file, "untracked") {
+			untracked++
+		}
+		if B(file, "conflict") {
+			conflicted++
+		}
+	}
+	status["changedFiles"] = len(files)
+	status["stagedFiles"], status["unstagedFiles"] = staged, unstaged
+	status["untrackedFiles"], status["conflictedFiles"] = untracked, conflicted
+	return status, nil
+}
+
+func gitReadStatus(root string) (M, error) {
+	status, err := gitReadPorcelain(root)
+	if err != nil {
+		return nil, err
+	}
+	files := gitFiles(status)
 	stats := []map[string]M{}
-	for _, args := range [][]string{{"diff", "--cached", "--numstat", "-z", "--no-ext-diff", "--no-textconv", "--find-renames"}, {"diff", "--numstat", "-z", "--no-ext-diff", "--no-textconv", "--find-renames"}} {
+	for _, cached := range []bool{true, false} {
+		if (cached && N(status, "stagedFiles") == 0) || (!cached && N(status, "unstagedFiles") == 0) {
+			continue
+		}
+		args := []string{"diff", "--numstat", "-z", "--no-ext-diff", "--no-textconv", "--find-renames"}
+		if cached {
+			args = append(args, "--cached")
+		}
 		text, err := gitRun(root, "", 12*time.Second, args...)
 		if err != nil {
 			return nil, err
@@ -316,13 +350,16 @@ func gitStatus(cwd string, force bool) (M, error) {
 		for _, key := range []string{"additions", "deletions"} {
 			status[key] = int(N(status, key) + N(file, key))
 		}
-		for field, key := range map[string]string{"staged": "stagedFiles", "unstaged": "unstagedFiles", "untracked": "untrackedFiles", "conflict": "conflictedFiles"} {
-			if B(file, field) {
-				status[key] = int(N(status, key)) + 1
-			}
-		}
 	}
-	status["changedFiles"] = len(files)
+	remotes, err := gitRemotes(root)
+	if err != nil {
+		return nil, err
+	}
+	status["remotes"] = remotes
+	return status, nil
+}
+
+func gitRemotes(root string) ([]M, error) {
 	text, err := gitRun(root, "", 12*time.Second, "remote", "-v")
 	if err != nil {
 		return nil, err
@@ -344,12 +381,7 @@ func gitStatus(cwd string, force bool) (M, error) {
 			remotes = append(remotes, remote)
 		}
 	}
-	status["remotes"] = remotes
-	gitSnapshots[key] = struct {
-		until time.Time
-		value M
-	}{time.Now().Add(3 * time.Second), status}
-	return status, nil
+	return remotes, nil
 }
 func gitRemoteURL(raw string) string {
 	if u, err := url.Parse(raw); err == nil && (u.Scheme == "https" || u.Scheme == "http") {
@@ -361,7 +393,7 @@ func gitRemoteURL(raw string) string {
 	return raw
 }
 func gitPath(path string) error {
-	if path == "" || path == "." || len(path) > 4096 || strings.ContainsRune(path, 0) || strings.HasPrefix(path, "/") || strings.HasPrefix(path, "\\") || filepath.IsAbs(path) || regexp.MustCompile(`^[A-Za-z]:`).MatchString(path) {
+	if path == "" || path == "." || len(path) > 4096 || strings.ContainsRune(path, 0) || strings.HasPrefix(path, "/") || strings.HasPrefix(path, "\\") || filepath.IsAbs(path) || gitDrivePrefix.MatchString(path) {
 		return fileProblem(400, "Please specify a file within the repository.")
 	}
 	for _, part := range strings.FieldsFunc(path, func(r rune) bool { return r == '/' || r == '\\' }) {
@@ -375,11 +407,17 @@ func gitDiff(cwd, path string, staged bool) (M, error) {
 	if err := gitPath(path); err != nil {
 		return nil, err
 	}
-	status, err := gitStatus(cwd, true)
+	root, err := gitRoot(cwd)
 	if err != nil {
 		return nil, err
 	}
-	root := S(status, "root")
+	if root == "" {
+		return nil, fileProblem(404, "No modified files found. Please refresh and check again.")
+	}
+	status, err := gitReadPorcelain(root)
+	if err != nil {
+		return nil, err
+	}
 	var file M
 	for _, v := range gitFiles(status) {
 		if S(v, "path") == path {
@@ -507,8 +545,8 @@ func gitMutation(cwd, action string, b M) (M, error) {
 	if root == "" {
 		return nil, fileProblem(404, "This folder is not managed by Git.")
 	}
-	defer func() { gitReads.Lock(); delete(gitSnapshots, fileKey(root)); gitReads.Unlock() }()
-	status, err := gitStatus(root, true)
+	defer gitSnapshots.invalidate(fileKey(root))
+	status, err := gitReadPorcelain(root)
 	if err != nil {
 		return nil, err
 	}
@@ -682,7 +720,10 @@ func gitPush(root string, status, b M) (M, error) {
 		remote = configured
 	}
 	valid := false
-	remotes, _ := status["remotes"].([]M)
+	remotes, err := gitRemotes(root)
+	if err != nil {
+		return nil, err
+	}
 	for _, v := range remotes {
 		if S(v, "name") == remote {
 			valid = true
@@ -706,7 +747,7 @@ func gitPush(root string, status, b M) (M, error) {
 		return nil, err
 	}
 	if B(b, "setUpstream") {
-		after, err := gitStatus(root, true)
+		after, err := gitReadPorcelain(root)
 		if err != nil {
 			return nil, err
 		}

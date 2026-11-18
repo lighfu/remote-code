@@ -52,6 +52,14 @@ func (a *App) session(id string) (*Record, error) {
 	}
 	return rec, nil
 }
+
+func (a *App) sessionInfoRecord(id string) (*Record, error) {
+	rec := a.Store.infoRecord(id)
+	if rec == nil {
+		return nil, &HTTPError{404, "Session not found"}
+	}
+	return rec, nil
+}
 func (a *App) provider(name string) (Provider, error) {
 	p := a.Providers[name]
 	if p == nil {
@@ -280,7 +288,7 @@ func (a *App) Handler() http.Handler {
 	for _, item := range []struct{ path, action string }{{"context", "contextDetail"}, {"cache", "cacheDetail"}} {
 		item := item
 		route(mux, "GET /api/sessions/{id}/"+item.path, func(r *http.Request, b M) (any, error) {
-			rec, err := a.session(r.PathValue("id"))
+			rec, err := a.sessionInfoRecord(r.PathValue("id"))
 			if err != nil {
 				return nil, err
 			}

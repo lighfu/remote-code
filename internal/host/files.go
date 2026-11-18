@@ -52,7 +52,7 @@ func fileRoute(a *App, mux *http.ServeMux, pattern string, fn func(*http.Request
 	mux.HandleFunc(pattern, func(w http.ResponseWriter, r *http.Request) {
 		var rec *Record
 		if id := r.PathValue("id"); id != "" {
-			rec = a.Store.Get(id)
+			rec = a.Store.infoRecord(id)
 			if rec == nil {
 				fileError(w, fileProblem(404, "Session not found"))
 				return

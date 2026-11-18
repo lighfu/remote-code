@@ -28,6 +28,7 @@ type storePendingDelta struct {
 
 type Store struct {
 	mu         sync.RWMutex
+	persistMu  sync.Mutex
 	directory  string
 	records    map[string]*Record
 	dirty      map[string]bool
@@ -200,11 +201,72 @@ func (s *Store) listLocked() []M {
 func (s *Store) Get(id string) *Record {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
+	return snapshotRecord(s.records[id])
+}
+
+// Used by routes which only need session metadata, even for very large histories.
+func (s *Store) infoRecord(id string) *Record {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
 	r := s.records[id]
 	if r == nil {
 		return nil
 	}
-	return clone(r)
+	return &Record{Info: snapshotMap(r.Info)}
+}
+
+func snapshotRecord(r *Record) *Record {
+	if r == nil {
+		return nil
+	}
+	result := &Record{Info: snapshotMap(r.Info)}
+	if r.Entries != nil {
+		result.Entries = make([]M, len(r.Entries))
+		for i, entry := range r.Entries {
+			result.Entries[i] = snapshotMap(entry)
+		}
+	}
+	return result
+}
+
+// Copy JSON containers and share immutable strings. Keep the wire representation
+// of typed values that have not yet been normalized by a save and reload.
+func snapshotMap(m M) M {
+	if m == nil {
+		return nil
+	}
+	out := make(M, len(m))
+	for k, v := range m {
+		out[k] = snapshotValue(v)
+	}
+	return out
+}
+
+func snapshotValue(v any) any {
+	switch value := v.(type) {
+	case nil, string, float64, bool:
+		return value
+	case int:
+		return float64(value)
+	case int64:
+		return float64(value)
+	case M:
+		if value == nil {
+			return nil
+		}
+		return snapshotMap(value)
+	case []any:
+		if value == nil {
+			return nil
+		}
+		items := make([]any, len(value))
+		for i, item := range value {
+			items[i] = snapshotValue(item)
+		}
+		return items
+	default:
+		return clone(v)
+	}
 }
 
 func (s *Store) timelineSnapshot(id string) (*Record, int64) {
@@ -212,7 +274,7 @@ func (s *Store) timelineSnapshot(id string) (*Record, int64) {
 	defer s.mu.Unlock()
 	// Assign revisions to the deltas already reflected in the snapshot's text.
 	s.flushDeltasLocked(id, "")
-	return clone(s.records[id]), s.timelineRevision
+	return snapshotRecord(s.records[id]), s.timelineRevision
 }
 
 func (s *Store) FindExternal(provider, externalID string) *Record {
@@ -220,7 +282,7 @@ func (s *Store) FindExternal(provider, externalID string) *Record {
 	defer s.mu.RUnlock()
 	for _, r := range s.records {
 		if S(r.Info, "provider") == provider && S(r.Info, "externalId") == externalID {
-			return clone(r)
+			return snapshotRecord(r)
 		}
 	}
 	return nil
@@ -705,6 +767,8 @@ func (repair transcriptUserRepair) apply(entry M, existing map[string]bool) []M 
 }
 
 func (s *Store) Remove(id string) error {
+	s.persistMu.Lock()
+	defer s.persistMu.Unlock()
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if _, ok := s.records[id]; !ok {
@@ -720,16 +784,30 @@ func (s *Store) Remove(id string) error {
 	return nil
 }
 func (s *Store) Flush() error {
+	// Serialize disk writes and removals. A slow disk must not block all
+	// sessions while encoding or syncing a large transcript.
+	s.persistMu.Lock()
+	defer s.persistMu.Unlock()
 	s.mu.Lock()
-	defer s.mu.Unlock()
 	s.flushDeltasLocked("", "")
+	ids := make([]string, 0, len(s.dirty))
 	for id := range s.dirty {
-		if r := s.records[id]; r != nil {
-			if err := atomicJSON(filepath.Join(s.directory, id+".json"), r); err != nil {
+		ids = append(ids, id)
+	}
+	s.mu.Unlock()
+	for _, id := range ids {
+		s.mu.Lock()
+		record := snapshotRecord(s.records[id])
+		delete(s.dirty, id)
+		s.mu.Unlock()
+		if record != nil {
+			if err := atomicJSON(filepath.Join(s.directory, id+".json"), record); err != nil {
+				s.mu.Lock()
+				s.dirty[id] = true
+				s.mu.Unlock()
 				return err
 			}
 		}
-		delete(s.dirty, id)
 	}
 	return nil
 }

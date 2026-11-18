@@ -2,6 +2,7 @@ package host
 
 import (
 	"bufio"
+	"bytes"
 	_ "embed"
 	"encoding/json"
 	"errors"
@@ -422,43 +423,62 @@ func (s *analyticsState) read(provider, path string, config M) (int64, error) {
 		return 0, err
 	}
 	if s.file != nil && (!os.SameFile(s.file, info) || info.Size() < s.offset || info.Size() == s.offset && !info.ModTime().Equal(s.file.ModTime())) {
-		s.offset = 0
-		s.rest = nil
-		s.model = ""
-		s.analyticsSeries = analyticsSeries{}
-		s.codexCounts = analyticsSeries{}
-		s.codexTotal = analyticsUsage{}
-		s.codexContext = codexContextWeights{}
-		s.agyContext = agyContextWeights{}
-		s.claudePlan = claudePlanState{}
-		s.used, s.window = 0, 0
+		s.resetTranscript()
 	}
 	s.file = info
+	if info.Size() == s.offset {
+		return s.offset, nil
+	}
 	if _, err = f.Seek(s.offset, 0); err != nil {
 		return 0, err
 	}
-	reader := bufio.NewReaderSize(f, 64<<10)
-	for s.offset < info.Size() {
-		chunk := make([]byte, min(info.Size()-s.offset, 8<<20))
-		n, e := io.ReadFull(reader, chunk)
-		s.offset += int64(n)
-		data := append(s.rest, chunk[:n]...)
-		start := 0
-		for i, c := range data {
-			if c == '\n' {
-				s.line(provider, data[start:i], config)
-				start = i + 1
-			}
+	return s.readUntil(provider, f, info.Size(), config)
+}
+
+// Parse whole records directly out of a reusable buffer. Only a line that
+// crosses a buffer or append boundary needs an owned copy.
+func (s *analyticsState) readUntil(provider string, f io.Reader, end int64, config M) (int64, error) {
+	reader := bufio.NewReaderSize(io.LimitReader(f, end-s.offset), 64<<10)
+	pending := s.rest
+	for s.offset < end {
+		line, err := reader.ReadSlice('\n')
+		s.offset += int64(len(line))
+		if err == nil {
+			line = line[:len(line)-1]
 		}
-		s.rest = append([]byte{}, data[start:]...)
-		if len(s.rest) > 32<<20 {
+		if len(pending)+len(line) > 32<<20 {
+			s.resetTranscript()
 			return 0, errors.New("Transcript line exceeds 32 MB")
 		}
-		if e != nil && e != io.ErrUnexpectedEOF && e != io.EOF {
-			return 0, e
+		if len(pending) != 0 || err != nil {
+			pending = append(pending, line...)
+			line = pending
+		}
+		if err == nil {
+			s.line(provider, line, config)
+			pending = pending[:0]
+		} else if err != bufio.ErrBufferFull && (err != io.EOF || s.offset < end) {
+			// The file can be rewritten while we scan it. EOF before the
+			// stat size must terminate this read even when no bytes arrived.
+			s.resetTranscript()
+			if err == io.EOF {
+				err = io.ErrUnexpectedEOF
+			}
+			return 0, err
 		}
 	}
-	return info.Size(), nil
+	// Keep only the unfinished suffix between polls, not a multi-MiB buffer
+	// from an earlier compaction record.
+	s.rest = bytes.Clone(pending)
+	return s.offset, nil
+}
+
+func (s *analyticsState) resetTranscript() {
+	s.offset, s.rest, s.file, s.model = 0, nil, nil, ""
+	s.analyticsSeries, s.codexCounts = analyticsSeries{}, analyticsSeries{}
+	s.codexTotal, s.codexContext = analyticsUsage{}, codexContextWeights{}
+	s.agyContext, s.claudePlan = agyContextWeights{}, claudePlanState{}
+	s.used, s.window = 0, 0
 }
 
 func (s *analyticsSeries) result(size int64) (M, M) {

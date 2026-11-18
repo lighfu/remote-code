@@ -179,7 +179,7 @@ type App struct {
 	closers           []func()
 	contextMu         sync.Mutex
 	contexts          map[string]contextCacheValue
-	contextFlights    map[contextCacheKey]chan struct{}
+	contextFlights    map[contextCacheKey]*contextFlight
 	fx                fxRates
 	analyticsBusy     sync.Map
 	requestMu         sync.Mutex
@@ -217,7 +217,7 @@ func NewApp(dataDir string) (*App, error) {
 	a.taskCtx, a.taskCancel = context.WithCancel(context.Background())
 	a.btwCancel = map[string]context.CancelFunc{}
 	a.contexts = map[string]contextCacheValue{}
-	a.contextFlights = map[contextCacheKey]chan struct{}{}
+	a.contextFlights = map[contextCacheKey]*contextFlight{}
 	a.fx.restore(abs)
 	if id := os.Getenv("REMOTE_CODE_INSTANCE"); id != "" {
 		a.InstanceID = id

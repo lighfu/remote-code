@@ -2,6 +2,7 @@ package host
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
@@ -9,6 +10,25 @@ import (
 	"testing"
 	"time"
 )
+
+func TestContextRefreshWaiterReceivesProviderFailure(t *testing.T) {
+	rec := &Record{Info: M{"id": "session", "provider": "claude"}}
+	key := contextKey(rec.Info)
+	cause := errors.New("context request timed out")
+	flight := &contextFlight{done: make(chan struct{}), err: cause}
+	close(flight.done)
+	a := &App{
+		contexts:       map[string]contextCacheValue{key.id: {key: key, at: time.Now().Add(-time.Hour), detail: M{"totalTokens": 1}}},
+		contextFlights: map[contextCacheKey]*contextFlight{key: flight},
+	}
+	value, err := a.loadContextSnapshot(t.Context(), rec, false, func(context.Context) (any, error) {
+		t.Fatal("duplicate provider request")
+		return nil, nil
+	})
+	if value != nil || !errors.Is(err, cause) {
+		t.Fatalf("refresh returned stale context: %v, %v", value, err)
+	}
+}
 
 func TestDisconnectionFinalizesTimeline(t *testing.T) {
 	for _, name := range []string{"codex", "claude"} {

@@ -10,6 +10,7 @@ import (
 	"math"
 	"net"
 	"os"
+	"reflect"
 	"regexp"
 	"strings"
 	"sync"
@@ -25,11 +26,15 @@ type desktopPending struct {
 	method string
 	reply  chan desktopReply
 }
+type desktopProjectedItem struct {
+	item      M
+	completed bool
+}
 type desktopBinding struct {
 	sid, parent, owner string
 	state              M
 	revision           float64
-	items              map[string]string
+	items              map[string]desktopProjectedItem
 	itemTurns          map[string]string
 	aliases            map[string]string
 	children           map[string]string
@@ -346,7 +351,7 @@ func (d *providerDesktop) follow(ctx context.Context, id, sid, parent string) er
 	d.mu.Lock()
 	b = d.follows[id]
 	if b == nil {
-		b = &desktopBinding{sid: sid, parent: parent, items: map[string]string{}}
+		b = &desktopBinding{sid: sid, parent: parent}
 		d.follows[id] = b
 	}
 	b.owner = owner
@@ -691,7 +696,7 @@ func desktopMessageClientID(item M) string {
 	return ""
 }
 func (d *providerDesktop) project(thread string, b *desktopBinding, state M) {
-	rec := d.p.store.Get(b.sid)
+	rec := d.p.store.infoRecord(b.sid)
 	if rec == nil {
 		return
 	}
@@ -725,7 +730,7 @@ func (d *providerDesktop) project(thread string, b *desktopBinding, state M) {
 			}
 		}
 	}
-	items := map[string]string{}
+	items := map[string]desktopProjectedItem{}
 	itemTurns := map[string]string{}
 	presentTurns := map[string]bool{}
 	questionItems := map[string]bool{}
@@ -738,7 +743,10 @@ func (d *providerDesktop) project(thread string, b *desktopBinding, state M) {
 		if turnID != "" {
 			presentTurns[turnID] = true
 		}
-		completedIDs := providerAnswerList(turn["completedItemIds"])
+		completedIDs := map[string]bool{}
+		for _, completedID := range providerAnswerList(turn["completedItemIds"]) {
+			completedIDs[completedID] = true
+		}
 		for _, item := range turnMessages[i] {
 			id := S(item, "id")
 			if id == "" {
@@ -749,10 +757,11 @@ func (d *providerDesktop) project(thread string, b *desktopBinding, state M) {
 				questionItems[id] = len(providerRows(item["questions"])) > 0
 			}
 			itemTurns[id] = turnID
-			completed := S(item, "type") == "userMessage" || S(turn, "status") != "inProgress" || desktopContains(completedIDs, id) || item["completedAtMs"] != nil || desktopContains([]string{"completed", "failed", "declined"}, S(item, "status"))
-			fingerprint := providerPretty(item) + fmt.Sprint(completed)
-			items[id] = fingerprint
-			if b.items[id] == fingerprint {
+			completed := S(item, "type") == "userMessage" || S(turn, "status") != "inProgress" || completedIDs[id] || item["completedAtMs"] != nil || desktopContains([]string{"completed", "failed", "declined"}, S(item, "status"))
+			// Desktop patches copy the changed path. Unchanged item maps retain their
+			// identity; full snapshots are compared by value on reconnect.
+			items[id] = desktopProjectedItem{item, completed}
+			if prev, ok := b.items[id]; ok && prev.completed == completed && reflect.DeepEqual(prev.item, item) {
 				continue
 			}
 			entryID := b.aliases[id]
@@ -979,7 +988,7 @@ func (d *providerDesktop) followChild(thread, sid, parent string) {
 		d.mu.Unlock()
 		return
 	}
-	d.follows[thread] = &desktopBinding{sid: sid, parent: parent, items: map[string]string{}}
+	d.follows[thread] = &desktopBinding{sid: sid, parent: parent}
 	d.mu.Unlock()
 	ctx, cancel := context.WithTimeout(context.Background(), 12*time.Second)
 	defer cancel()

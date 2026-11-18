@@ -284,7 +284,7 @@ func TestDesktopChildCardsAndRewind(t *testing.T) {
 	p := NewProvider("codex", store, t.TempDir()).(*nativeProvider)
 	defer p.Close()
 	d := p.desktopClient()
-	binding := &desktopBinding{sid: S(rec.Info, "id"), items: map[string]string{}}
+	binding := &desktopBinding{sid: S(rec.Info, "id")}
 	spawn := M{"id": "spawn", "type": "collabAgentToolCall", "tool": "spawnAgent", "prompt": "Task", "receiverThreadIds": []any{"child"}}
 	child := M{"id": "activity", "type": "subAgentActivity", "agentThreadId": "child", "agentPath": "/root/tests", "kind": "completed", "model": "test-model", "reasoningEffort": "high"}
 	answer := M{"id": "answer", "type": "agentMessage", "text": "Old answer"}

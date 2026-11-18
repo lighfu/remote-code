@@ -1,12 +1,126 @@
 package host
 
 import (
+	"errors"
+	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
+	"sync"
 	"testing"
 	"time"
 )
+
+func TestGitProcessOutputIsBounded(t *testing.T) {
+	// Pipe copies can use io.ReaderFrom without invoking Write if the
+	// destination exposes an embedded bytes.Buffer.
+	out := &gitBuffer{max: 4}
+	n, err := io.Copy(out, io.LimitReader(strings.NewReader("0123456789"), 10))
+	if err != nil || n != 10 || !out.overflow || out.data.String() != "0123" {
+		t.Fatalf("stored %q, overflow %v, read %d, error %v", out.data.String(), out.overflow, n, err)
+	}
+}
+
+func TestGitStatusCacheConcurrentReadsAndInvalidation(t *testing.T) {
+	cache := newGitStatusCache(2)
+	started, release, firstDone := make(chan struct{}), make(chan struct{}), make(chan struct{})
+	go func() {
+		defer close(firstDone)
+		_, _ = cache.read("slow", false, func() (M, error) {
+			close(started)
+			<-release
+			return M{"head": "old"}, nil
+		})
+	}()
+	<-started
+	finish := sync.OnceFunc(func() { close(release); <-firstDone })
+	defer finish()
+	old := cache.lookup("slow", true)
+	if old == nil {
+		t.Fatal("a refresh should join the in-flight repository read")
+	}
+	read := func(key, head string, force bool) {
+		t.Helper()
+		done := make(chan M, 1)
+		go func() {
+			value, _ := cache.read(key, force, func() (M, error) { return M{"head": head}, nil })
+			done <- value
+		}()
+		select {
+		case value := <-done:
+			if S(value, "head") != head {
+				t.Fatalf("got %v for %s, want %s", value, key, head)
+			}
+		case <-time.After(5 * time.Second):
+			t.Fatalf("read of %s blocked behind unrelated or invalidated snapshot", key)
+		}
+	}
+	read("other", "independent", false)
+	cache.invalidate("slow")
+	read("slow", "after mutation", false)
+	finish()
+	if v, _ := old.wait(); S(v, "head") != "old" {
+		t.Fatalf("pending response was modified: %v", v)
+	}
+	got, err := cache.read("slow", false, func() (M, error) { return nil, errors.New("cache miss") })
+	if err != nil || S(got, "head") != "after mutation" {
+		t.Fatalf("obsolete read replaced the post-mutation status: %v %v", got, err)
+	}
+	read("slow", "manual refresh", true)
+}
+
+func TestGitCountsAllUntrackedFilesWhenLineStatsArePartial(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git is not installed")
+	}
+	root := t.TempDir()
+	if _, err := gitRun(root, "", 12*time.Second, "init"); err != nil {
+		t.Fatal(err)
+	}
+	for i := range 9 {
+		name := filepath.Join(root, fmt.Sprintf("untracked-%d.dat", i))
+		if err := os.WriteFile(name, nil, 0644); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Truncate(name, 256*1024); err != nil {
+			t.Fatal(err)
+		}
+	}
+	status, err := gitStatus(root, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if N(status, "untrackedFiles") != 9 || N(status, "changedFiles") != 9 || !B(status, "lineStatsPartial") {
+		t.Fatalf("partial line scan lost files: %v", status)
+	}
+}
+
+func BenchmarkGitStatusPoll(b *testing.B) {
+	if _, err := exec.LookPath("git"); err != nil {
+		b.Skip("git is not installed")
+	}
+	root := b.TempDir()
+	if _, err := gitRun(root, "", 12*time.Second, "init"); err != nil {
+		b.Fatal(err)
+	}
+	for _, mode := range []struct {
+		name  string
+		force bool
+	}{{"fresh", true}, {"cached", false}} {
+		b.Run(mode.name, func(b *testing.B) {
+			if _, err := gitStatus(root, true); err != nil {
+				b.Fatal(err)
+			}
+			for b.Loop() {
+				if _, err := gitStatus(root, mode.force); err != nil {
+					b.Fatal(err)
+				}
+			}
+		})
+	}
+}
 
 func TestGitStatusV2RenameAndNumstat(t *testing.T) {
 	text := "# branch.oid abc\x00# branch.head main\x00# branch.upstream origin/main\x00# branch.ab +2 -3\x002 R. N... 100644 100644 100644 aaa bbb R100 destination name.txt\x00source name.txt\x00? untracked.txt\x00"
@@ -48,14 +162,14 @@ func TestGitNativeWorkflowAndLiteralPathspec(t *testing.T) {
 	if _, err = gitMutation(root, "stage", M{"paths": []any{name}}); err != nil {
 		t.Fatal(err)
 	}
-	status, err = gitStatus(root, true)
+	status, err = gitStatus(root, false)
 	if err != nil || N(status, "stagedFiles") != 1 {
 		t.Fatalf("staging failed %#v %v", status, err)
 	}
 	if _, err = gitMutation(root, "unstage", M{"paths": []any{name}}); err != nil {
 		t.Fatal(err)
 	}
-	status, err = gitStatus(root, true)
+	status, err = gitStatus(root, false)
 	if err != nil || N(status, "stagedFiles") != 0 {
 		t.Fatalf("initial unstage failed %#v %v", status, err)
 	}

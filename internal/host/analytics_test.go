@@ -1,12 +1,35 @@
 package host
 
 import (
+	"bytes"
 	"encoding/json"
+	"errors"
+	"io"
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
+
+func TestAnalyticsIncrementalReadAcrossBufferAndAppendBoundaries(t *testing.T) {
+	var s analyticsState
+	row, err := json.Marshal(M{"type": "turn_context", "payload": M{"padding": strings.Repeat("x", 100<<10), "model": "updated"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	n := int64(len(row))
+	if _, err := s.readUntil("codex", bytes.NewReader(row), n, nil); err != nil || s.model != "" || len(s.rest) != len(row) {
+		t.Fatalf("unfinished row: cursor=%d partial=%d model=%q err=%v", s.offset, len(s.rest), s.model, err)
+	}
+	if _, err := s.readUntil("codex", strings.NewReader("\n"), n+1, nil); err != nil || s.model != "updated" || len(s.rest) != 0 {
+		t.Fatalf("finished row: model=%q err=%v", s.model, err)
+	}
+	if _, err := s.readUntil("codex", strings.NewReader("short"), s.offset+50, nil); !errors.Is(err, io.ErrUnexpectedEOF) ||
+		s.offset != 0 || s.model != "" || len(s.rest) != 0 {
+		t.Fatalf("shortened transcript kept partial state: cursor=%d model=%q err=%v", s.offset, s.model, err)
+	}
+}
 
 func analyticsFixture(t *testing.T, rows []M) string {
 	t.Helper()

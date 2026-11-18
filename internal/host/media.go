@@ -459,14 +459,14 @@ func AttachmentsPrompt(text string, files []M) string {
 func registerMedia(a *App, mux *http.ServeMux) {
 	fileRoute(a, mux, "GET /api/file", func(r *http.Request, _ *Record, _ M) (any, error) {
 		cwd := ""
-		if rec := a.Store.Get(r.URL.Query().Get("session")); rec != nil {
+		if rec := a.Store.infoRecord(r.URL.Query().Get("session")); rec != nil {
 			cwd = S(rec.Info, "cwd")
 		}
 		return mediaLinkInfo(r.URL.Query().Get("link"), cwd)
 	})
 	mux.HandleFunc("GET /api/file/raw", func(w http.ResponseWriter, r *http.Request) {
 		cwd := ""
-		if rec := a.Store.Get(r.URL.Query().Get("session")); rec != nil {
+		if rec := a.Store.infoRecord(r.URL.Query().Get("session")); rec != nil {
 			cwd = S(rec.Info, "cwd")
 		}
 		path, _ := mediaResolveLink(r.URL.Query().Get("link"), cwd)

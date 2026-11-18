@@ -127,15 +127,21 @@ type contextCacheValue struct {
 	detail M
 }
 
-func (a *App) loadContextSnapshot(ctx context.Context, rec *Record, cached bool, load func(context.Context) (any, error)) (M, error) {
+type contextFlight struct {
+	done   chan struct{}
+	detail M
+	err    error
+}
+
+func (a *App) loadContextSnapshot(ctx context.Context, rec *Record, cached bool, load func(context.Context) (any, error)) (_ M, err error) {
 	key := contextKey(rec.Info)
 	a.contextMu.Lock()
 	entry := a.contexts[key.id]
 	at := entry.at
 	flight := a.contextFlights[key]
 	if entry.key == key && entry.detail != nil && (cached || time.Since(at) < 10*time.Second) {
-		previous := clone(entry.detail)
 		a.contextMu.Unlock()
+		previous := snapshotMap(entry.detail)
 		previous["cachedAt"] = at.UnixMilli()
 		if cached && time.Since(at) > 30*time.Second && flight == nil {
 			a.startTask(func() { _, _ = a.loadContextSnapshot(a.taskCtx, rec, false, load) })
@@ -147,20 +153,20 @@ func (a *App) loadContextSnapshot(ctx context.Context, rec *Record, cached bool,
 		select {
 		case <-ctx.Done():
 			return nil, ctx.Err()
-		case <-flight:
-			a.contextMu.Lock()
-			value := a.contexts[key.id]
-			a.contextMu.Unlock()
-			if value.key != key || value.detail == nil {
-				return nil, errors.New("Context could not be read")
-			}
-			return clone(value.detail), nil
+		case <-flight.done:
+			return snapshotMap(flight.detail), flight.err
 		}
 	}
-	flight = make(chan struct{})
+	flight = &contextFlight{done: make(chan struct{})}
 	a.contextFlights[key] = flight
 	a.contextMu.Unlock()
-	defer func() { a.contextMu.Lock(); delete(a.contextFlights, key); close(flight); a.contextMu.Unlock() }()
+	defer func() {
+		a.contextMu.Lock()
+		flight.err = err
+		delete(a.contextFlights, key)
+		close(flight.done)
+		a.contextMu.Unlock()
+	}()
 	timeout := 10 * time.Second
 	if S(rec.Info, "provider") == "claude" {
 		timeout = 30 * time.Second
@@ -172,16 +178,19 @@ func (a *App) loadContextSnapshot(ctx context.Context, rec *Record, cached bool,
 		return nil, err
 	}
 	c := normalizeContext(value)
-	a.contextMu.Lock()
-	defer a.contextMu.Unlock()
-	if !a.Store.applyContextSnapshot(key, c) {
+	entry = contextCacheValue{key: key, at: time.Now(), detail: snapshotMap(c)}
+	if !a.applyContextSnapshot(entry) {
 		return nil, errors.New("Conversation changed while reading context")
 	}
-	a.contexts[key.id] = contextCacheValue{key: key, at: time.Now(), detail: clone(c)}
+	flight.detail = entry.detail
 	return c, nil
 }
 
-func (s *Store) applyContextSnapshot(key contextCacheKey, detail M) bool {
+func (a *App) applyContextSnapshot(entry contextCacheValue) bool {
+	s := a.Store
+	key, detail := entry.key, entry.detail
+	// A save or timeline update may hold the store lock. Other sessions can
+	// still read their cached context while we wait to commit this result.
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	rec := s.records[key.id]
@@ -197,5 +206,8 @@ func (s *Store) applyContextSnapshot(key contextCacheKey, detail M) bool {
 			s.emitLocked(M{"type": "session", "session": rec.Info})
 		}
 	}
+	a.contextMu.Lock()
+	a.contexts[key.id] = entry
+	a.contextMu.Unlock()
 	return true
 }
