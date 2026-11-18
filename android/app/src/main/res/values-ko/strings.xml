@@ -1434,4 +1434,23 @@
     <string name="screen_appearance_ui_sample">"메뉴·버튼·설정 Aa 123"</string>
     <string name="screen_appearance_apply">"적용"</string>
     <string name="screen_appearance_cancel">"취소"</string>
+    <string name="server_dependencies_changed">"연결된 서버가 변경되었습니다. 새로고침한 후 다시 시도하세요."</string>
+    <string name="server_dependencies_connect">"종속 항목을 관리하려면 서버에 연결하세요."</string>
+    <string name="server_dependencies_description">"연결된 PC에 Claude Code, Codex, Antigravity, cloudflared를 설치합니다."</string>
+    <string name="server_dependencies_failed">"설치 실패"</string>
+    <string name="server_dependencies_hint">"사용 가능한 경우 winget을 사용합니다. 설치 후 PC에서 각 제공자에 로그인하세요."</string>
+    <string name="server_dependencies_install">"설치"</string>
+    <string name="server_dependencies_installed">"설치됨"</string>
+    <string name="server_dependencies_installing">"설치 중…"</string>
+    <string name="server_dependencies_load_error">"종속 항목 상태를 불러올 수 없습니다."</string>
+    <string name="server_dependencies_login">"설치 후 PC에서 제공자에 로그인하세요. 사용 가능한 경우 세부 정보에 PowerShell 명령어가 표시됩니다."</string>
+    <string name="server_dependencies_missing">"미설치"</string>
+    <string name="server_dependencies_old_server">"이 앱에서 종속 항목을 관리하려면 서버를 업데이트하세요."</string>
+    <string name="server_dependencies_refresh">"새로고침"</string>
+    <string name="server_dependencies_retry">"다시 설치"</string>
+    <string name="server_dependencies_status_unknown">"상태 확인 불가"</string>
+    <string name="server_dependencies_title">"서버 종속 항목"</string>
+    <string name="server_dependencies_unavailable">"자동 설치는 Windows에서만 사용할 수 있습니다."</string>
+    <string name="server_dependencies_unknown">"알 수 없는 종속 항목입니다."</string>
+    <string name="server_dependencies_working">"다른 설치가 진행 중입니다."</string>
 </resources>

@@ -1434,4 +1434,23 @@
     <string name="screen_appearance_ui_sample">"菜单·按钮·设置 Aa 123"</string>
     <string name="screen_appearance_apply">"应用"</string>
     <string name="screen_appearance_cancel">"取消"</string>
+    <string name="server_dependencies_changed">"连接的服务器已更改。请刷新后重试。"</string>
+    <string name="server_dependencies_connect">"连接服务器以管理依赖项。"</string>
+    <string name="server_dependencies_description">"在已连接的 PC 上安装 Claude Code、Codex、Antigravity 和 cloudflared。"</string>
+    <string name="server_dependencies_failed">"安装失败"</string>
+    <string name="server_dependencies_hint">"可用时将使用 winget。安装后请在 PC 上登录各提供商账号。"</string>
+    <string name="server_dependencies_install">"安装"</string>
+    <string name="server_dependencies_installed">"已安装"</string>
+    <string name="server_dependencies_installing">"正在安装…"</string>
+    <string name="server_dependencies_load_error">"无法加载依赖项状态。"</string>
+    <string name="server_dependencies_login">"安装后请在 PC 上登录提供商账号。可用时，详情中会显示 PowerShell 命令。"</string>
+    <string name="server_dependencies_missing">"未安装"</string>
+    <string name="server_dependencies_old_server">"请更新服务器以在此应用中管理依赖项。"</string>
+    <string name="server_dependencies_refresh">"刷新"</string>
+    <string name="server_dependencies_retry">"重试安装"</string>
+    <string name="server_dependencies_status_unknown">"状态不可用"</string>
+    <string name="server_dependencies_title">"服务器依赖项"</string>
+    <string name="server_dependencies_unavailable">"自动安装仅支持 Windows。"</string>
+    <string name="server_dependencies_unknown">"未知依赖项。"</string>
+    <string name="server_dependencies_working">"另一项安装正在进行中。"</string>
 </resources>

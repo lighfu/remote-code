@@ -65,10 +65,12 @@ fun SettingsScreen(onBack: () -> Unit, onChangeServer: () -> Unit, onAppearance:
     val settings by repo.settings.collectAsState()
     val conn by repo.connection.collectAsState()
     val meta by repo.meta.collectAsState()
+    val route by repo.route.collectAsState()
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var thinkingMenu by remember { mutableStateOf(false) }
     val s = settings ?: return
+    val dependencyServer = remember(s.server, route, conn) { repo.api.server }
     val haptics = dev.remotecode.ui.common.rememberHaptics()
 
     Scaffold(
@@ -124,11 +126,12 @@ fun SettingsScreen(onBack: () -> Unit, onChangeServer: () -> Unit, onAppearance:
             Text("PC", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(start = 8.dp, top = 16.dp, bottom = 8.dp))
             SegmentedListItem(
                 onClick = onTerminals,
-                shapes = ListItemDefaults.segmentedShapes(0, 1),
+                shapes = ListItemDefaults.segmentedShapes(0, 2),
                 colors = ListItemDefaults.segmentedColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
                 leadingContent = { Icon(Icons.Rounded.Terminal, null) },
                 supportingContent = { Text(stringResource(R.string.screen_settings_011)) },
             ) { Text(stringResource(R.string.screen_settings_012)) }
+            ServerDependenciesSection(api = repo.api, server = dependencyServer, connected = conn is ConnState.Connected, refreshAvailability = { expected, fresh -> repo.refreshMeta(expected, fresh) })
 
             Text(stringResource(R.string.screen_settings_013), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(start = 8.dp, top = 16.dp, bottom = 8.dp))
             listOf(

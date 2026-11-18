@@ -1434,4 +1434,23 @@
     <string name="screen_appearance_ui_sample">"選單·按鈕·設定 Aa 123"</string>
     <string name="screen_appearance_apply">"套用"</string>
     <string name="screen_appearance_cancel">"取消"</string>
+    <string name="server_dependencies_changed">"連線的伺服器已變更。請重新整理後再試一次。"</string>
+    <string name="server_dependencies_connect">"連線至伺服器以管理相依套件。"</string>
+    <string name="server_dependencies_description">"在已連線的 PC 上安裝 Claude Code、Codex、Antigravity 與 cloudflared。"</string>
+    <string name="server_dependencies_failed">"安裝失敗"</string>
+    <string name="server_dependencies_hint">"可用時會使用 winget。安裝完成後，請在 PC 上登入各提供者帳號。"</string>
+    <string name="server_dependencies_install">"安裝"</string>
+    <string name="server_dependencies_installed">"已安裝"</string>
+    <string name="server_dependencies_installing">"正在安裝…"</string>
+    <string name="server_dependencies_load_error">"無法載入相依套件狀態。"</string>
+    <string name="server_dependencies_login">"安裝完成後，請在 PC 上登入提供者帳號。可用時，詳細資訊中會顯示 PowerShell 指令。"</string>
+    <string name="server_dependencies_missing">"未安裝"</string>
+    <string name="server_dependencies_old_server">"請更新伺服器以透過此應用程式管理相依套件。"</string>
+    <string name="server_dependencies_refresh">"重新整理"</string>
+    <string name="server_dependencies_retry">"重試安裝"</string>
+    <string name="server_dependencies_status_unknown">"無法取得狀態"</string>
+    <string name="server_dependencies_title">"伺服器相依套件"</string>
+    <string name="server_dependencies_unavailable">"自動安裝僅適用於 Windows。"</string>
+    <string name="server_dependencies_unknown">"未知的相依套件。"</string>
+    <string name="server_dependencies_working">"正在進行另一項安裝作業。"</string>
 </resources>

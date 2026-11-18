@@ -1434,4 +1434,23 @@
     <string name="screen_appearance_ui_sample">"Menu · Buttons · Settings Aa 123"</string>
     <string name="screen_appearance_apply">"Apply"</string>
     <string name="screen_appearance_cancel">"Cancel"</string>
+    <string name="server_dependencies_title">"Server dependencies"</string>
+    <string name="server_dependencies_description">"Install Claude Code, Codex, Antigravity, and cloudflared on the connected PC."</string>
+    <string name="server_dependencies_hint">"Uses winget when available. Sign in to each provider on the PC after installation."</string>
+    <string name="server_dependencies_refresh">"Refresh"</string>
+    <string name="server_dependencies_install">"Install"</string>
+    <string name="server_dependencies_retry">"Retry installation"</string>
+    <string name="server_dependencies_installing">"Installing…"</string>
+    <string name="server_dependencies_installed">"Installed"</string>
+    <string name="server_dependencies_missing">"Not installed"</string>
+    <string name="server_dependencies_failed">"Installation failed"</string>
+    <string name="server_dependencies_unavailable">"Automatic installation is available on Windows only."</string>
+    <string name="server_dependencies_connect">"Connect to a server to manage dependencies."</string>
+    <string name="server_dependencies_old_server">"Update the server to manage dependencies from this app."</string>
+    <string name="server_dependencies_load_error">"Could not load dependency status."</string>
+    <string name="server_dependencies_changed">"The connected server changed. Refresh and try again."</string>
+    <string name="server_dependencies_unknown">"Unknown dependency."</string>
+    <string name="server_dependencies_working">"Another installation is in progress."</string>
+    <string name="server_dependencies_status_unknown">"Status unavailable"</string>
+    <string name="server_dependencies_login">"After installation, sign in to the provider on the PC. The PowerShell command is shown in the details when available."</string>
 </resources>

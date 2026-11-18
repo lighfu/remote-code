@@ -1,4 +1,23 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name" translatable="false">Remote Code</string>
+    <string name="server_dependencies_changed">"接続先のサーバーが変更されました。更新してからもう一度お試しください。"</string>
+    <string name="server_dependencies_connect">"依存関係を管理するにはサーバーに接続してください。"</string>
+    <string name="server_dependencies_description">"接続中のPCに Claude Code、Codex、Antigravity、cloudflared をインストールします。"</string>
+    <string name="server_dependencies_failed">"インストール失敗"</string>
+    <string name="server_dependencies_hint">"利用可能な場合は winget を使用します。インストール完了後、PCで各プロバイダーにサインインしてください。"</string>
+    <string name="server_dependencies_install">"インストール"</string>
+    <string name="server_dependencies_installed">"インストール済み"</string>
+    <string name="server_dependencies_installing">"インストール中…"</string>
+    <string name="server_dependencies_load_error">"依存関係の状態を読み込めませんでした。"</string>
+    <string name="server_dependencies_login">"インストール完了後、PCでプロバイダーにサインインしてください。利用可能な場合、詳細に PowerShell コマンドが表示されます。"</string>
+    <string name="server_dependencies_missing">"未インストール"</string>
+    <string name="server_dependencies_old_server">"このアプリから依存関係を管理するにはサーバーを更新してください。"</string>
+    <string name="server_dependencies_refresh">"更新"</string>
+    <string name="server_dependencies_retry">"再試行"</string>
+    <string name="server_dependencies_status_unknown">"状態不明"</string>
+    <string name="server_dependencies_title">"サーバーの依存関係"</string>
+    <string name="server_dependencies_unavailable">"自動インストールは Windows のみで利用可能です。"</string>
+    <string name="server_dependencies_unknown">"不明な依存関係です。"</string>
+    <string name="server_dependencies_working">"別のインストールが進行中です。"</string>
 </resources>

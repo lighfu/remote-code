@@ -87,6 +87,7 @@ class Api(private val client: OkHttpClient, private val strings: AppStringResolv
         return withContext(Dispatchers.IO) {
             trace.dispatched()
             val activeClient = when {
+                method == "POST" && path.startsWith("/api/dependencies/") && path.endsWith("/install") -> gitMutationClient
                 method == "POST" && path.endsWith("/project/action") -> projectActionClient
                 method == "POST" && path.startsWith("/api/sessions/") && (path.contains("/git/") || path.contains("/project/")) -> gitMutationClient
                 method == "POST" && path.endsWith("/messages") && body is JsonObject && (body["files"] as? JsonArray)?.isNotEmpty() == true -> fileUploadClient
@@ -154,6 +155,31 @@ class Api(private val client: OkHttpClient, private val strings: AppStringResolv
     suspend fun meta(): Meta = get("/api/meta", Meta.serializer())
 
     suspend fun controlPaths(): ControlPathsSnapshot = get("/api/control-paths", ControlPathsSnapshot.serializer())
+
+    private fun dependencyTarget(expectedServer: ServerConfig?): ServerConfig {
+        val current = base()
+        if (expectedServer != null && current.connectionIdentity() != expectedServer.connectionIdentity()) {
+            throw ApiException(localString(R.string.server_dependencies_changed), 409)
+        }
+        return expectedServer ?: current
+    }
+
+    suspend fun dependencies(expectedServer: ServerConfig? = null): ServerDependencies {
+        val target = dependencyTarget(expectedServer)
+        val result = callAs("GET", "/api/dependencies", cfg = target) { AppJson.decodeFromString(ServerDependencies.serializer(), it) }
+        dependencyTarget(target)
+        return result
+    }
+
+    suspend fun installDependency(dependency: String, expectedServer: ServerConfig? = null): ServerDependencies {
+        if (dependency !in serverDependencyTargets) throw ApiException(localString(R.string.server_dependencies_unknown), 400)
+        val target = dependencyTarget(expectedServer)
+        val result = callAs("POST", "/api/dependencies/$dependency/install", buildJsonObject {}, cfg = target) {
+            AppJson.decodeFromString(ServerDependencies.serializer(), it)
+        }
+        dependencyTarget(target)
+        return result
+    }
 
     suspend fun sessions(): List<SessionInfo> = get("/api/sessions", ListSerializer(SessionInfo.serializer()))
 

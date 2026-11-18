@@ -80,6 +80,26 @@ class Repository(context: Context, private val scope: CoroutineScope) {
 
     private val _meta = MutableStateFlow<Meta?>(null)
     val meta: StateFlow<Meta?> = _meta.asStateFlow()
+    private val metadataRefresh = MetadataRefresh()
+
+    /** インストール後も再接続せず、利用可能なプロバイダーを更新する。 */
+    suspend fun refreshMeta(expectedServer: ServerConfig? = null, fresh: Boolean = false) {
+        val target = expectedServer ?: api.server ?: return
+        val identity = target.connectionIdentity()
+        if (api.server?.connectionIdentity() != identity) return
+        val ticket = metadataRefresh.ticket(fresh)
+        reads.run(ReadKey(identity, "meta:$ticket")) {
+            val next = api.check(target)
+            var accepted = false
+            metadataRefresh.publish(ticket) {
+                if (api.server?.connectionIdentity() == identity) {
+                    _meta.value = next
+                    accepted = true
+                }
+            }
+            if (accepted) next.publicUrl?.let { rememberPublicUrl(it) }
+        }
+    }
 
     private val _usage = MutableStateFlow<UsageInfo?>(null)
     val usage: StateFlow<UsageInfo?> = _usage.asStateFlow()
@@ -347,15 +367,7 @@ class Repository(context: Context, private val scope: CoroutineScope) {
     }
 
     private suspend fun refreshAfterConnect() = coroutineScope {
-        val server = api.server?.connectionIdentity()
-        launch {
-            runCatching { api.meta() }.onSuccess { meta ->
-                if (api.server?.connectionIdentity() == server) {
-                    _meta.value = meta
-                    meta.publicUrl?.let { rememberPublicUrl(it) }
-                }
-            }
-        }
+        launch { runCatching { refreshMeta() } }
         launch { refreshUsage() }
         // 表示中の会話を先に復元する。
         visibleSession.value?.let { id ->
