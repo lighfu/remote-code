@@ -8,8 +8,8 @@
     <string name="screen_app_update_item_006">"PC に接続するとチェックします"</string>
     <string name="screen_app_update_item_007">"最新です（押すと再チェック）"</string>
     <string name="screen_app_update_item_008">"配布用の APK をまだ取得できません"</string>
-    <string name="screen_app_update_item_009">"新しい版%1$sがあります。タップして更新"</string>
-    <string name="screen_app_update_item_010">"新しい版%1$sがあります（いまは %2$s・%3$.1f MB）。押すと更新します"</string>
+    <string name="screen_app_update_item_009">"新しいバージョン%1$s（タップして更新）"</string>
+    <string name="screen_app_update_item_010">"新しいバージョン%1$s（現在 %2$s・%3$.1f MB）。タップして更新"</string>
     <string name="screen_app_update_item_011">"ダウンロード中… %1$s%%"</string>
     <string name="screen_app_update_item_012">"インストールの確認画面を開きます…"</string>
     <string name="screen_app_update_item_013">"%1$s（タップして再確認）"</string>

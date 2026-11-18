@@ -59,7 +59,7 @@ internal class NativeCodeEditorState(initialText: String = "") {
     val selectionStart: Int get() = attached?.editor?.selectionStart?.coerceAtLeast(0) ?: savedSelectionStart
     val selectionEnd: Int get() = attached?.editor?.selectionEnd?.coerceAtLeast(0) ?: savedSelectionEnd
 
-    /** 変更版ごとに一度だけ文字列化する。 */
+    /** 内容が変わるたびに一度だけ文字列化する。 */
     fun snapshot(): String {
         if (cachedRevision != contentRevision) {
             attached?.editor?.text?.let { cached = it.toString(); cachedRevision = contentRevision }

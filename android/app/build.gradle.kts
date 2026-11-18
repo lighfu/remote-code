@@ -29,7 +29,7 @@ android {
         applicationId = "net.ajisaiflow.remotecode"
         minSdk = 29
         targetSdk = 36
-        // 更新時は両方の版を上げる。
+        // 更新時はバージョン番号とビルド番号を両方上げる。
         versionCode = 63
         versionName = "0.18.4"
     }
