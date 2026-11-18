@@ -50,6 +50,7 @@ internal data class DesktopFrame(
     val image: DesktopImage, val headers: FrameHeaders, val codec: String, val decodeMs: Long,
     // Stream total (including skipped frames), or this response's body size when polling.
     val receivedPayloadBytes: Long,
+    val decodeColor: DesktopDecodeColor,
 ) {
     val layout get() = headers.layout
     val captureMethod get() = headers.capture
@@ -111,13 +112,14 @@ internal fun <T> allocateDesktopFrame(strings: AppStringResolver, block: () -> T
 internal fun decodeDesktopFrame(
     bytes: ByteArray, headers: FrameHeaders, codec: String, resolution: DesktopResolution, strings: AppStringResolver,
     regions: List<DesktopRegion> = emptyList(), previous: DesktopImage? = null, receivedPayloadBytes: Long = bytes.size.toLong(),
+    decodeColor: DesktopDecodeColor = DesktopDecodeColor.Auto,
 ): DesktopFrame {
     val start = System.nanoTime()
     val options = BitmapFactory.Options().apply { inJustDecodeBounds = true }
     BitmapFactory.decodeByteArray(bytes, 0, bytes.size, options)
     if (options.outMimeType != "image/$codec" || options.outWidth <= 0 || options.outHeight <= 0)
         throw ApiException(strings.text(R.string.desktop_invalid_frame))
-    val highColor = codec == "png" || resolution != DesktopResolution.Standard
+    val highColor = decodeColor.uses32Bit(codec, resolution)
     val pixelBytes = options.outWidth.toLong() * options.outHeight * if (highColor) 4 else 2
     if (!supportsFrameDimensions(options.outWidth, options.outHeight, resolution == DesktopResolution.Native) ||
         pixelBytes > Runtime.getRuntime().maxMemory() / 2)
@@ -132,7 +134,7 @@ internal fun decodeDesktopFrame(
         val bitmap = BitmapFactory.decodeByteArray(bytes, 0, bytes.size, options) ?: throw IOException("Invalid desktop image")
         if (regions.isEmpty()) DesktopImage.full(bitmap) else checkNotNull(previous).patch(regions, bitmap)
     }
-    return DesktopFrame(image, headers, codec, (System.nanoTime() - start) / 1_000_000, receivedPayloadBytes)
+    return DesktopFrame(image, headers, codec, (System.nanoTime() - start) / 1_000_000, receivedPayloadBytes, decodeColor)
 }
 
 /** A keyframe, an ordered region update, or a fresh validation of the last image. */

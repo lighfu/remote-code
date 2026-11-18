@@ -46,6 +46,8 @@
     <string name="desktop_graph_network">受信ビットレート</string>
     <string name="desktop_graph_timing">処理時間</string>
     <string name="desktop_bitrate_target">映像の目標ビットレート</string>
+    <string name="desktop_bitrate_manual">手動</string>
+    <string name="desktop_bitrate_mode">ビットレート調整</string>
     <string name="desktop_bitrate_unlimited">制限なし</string>
     <string name="desktop_bitrate_hint">自動では映像の到着が遅れると通信量を抑えます。受信グラフは映像データの実測値です。</string>
     <string name="desktop_auto_bitrate">自動（%1$.1f Mbps）</string>
@@ -93,6 +95,14 @@
     <string name="desktop_codec">映像コーデック</string>
     <string name="desktop_codec_jpeg">各フレームを JPEG で圧縮します。通信量を抑えたいときに適しています。</string>
     <string name="desktop_codec_png">各フレームを PNG で可逆圧縮します。文字や図の輪郭を正確に保ちます。</string>
+    <string name="desktop_decode_color">デコード時の色深度</string>
+    <string name="desktop_decode_full">32 ビット</string>
+    <string name="desktop_decode_compact">16 ビット</string>
+    <string name="desktop_decode_color_hint">JPEG では 32 ビットにすると色の階調を保ち、16 ビットにすると画像メモリを節約できます。PNG は常に元の色と透明度を保ちます。</string>
+    <string name="desktop_decode_latest">最新のフレームを優先</string>
+    <string name="desktop_decode_latest_hint">オンにすると、新しい画像で完全に置き換わる未処理の画像を飛ばし、表示の遅れを抑えます。オフにすると受信した画像を順にデコードします。</string>
+    <string name="desktop_pixelated">拡大時にピクセルをくっきり表示</string>
+    <string name="desktop_pixelated_hint">拡大すると、受信画像の各ピクセルが四角く見えます。PC の画面と同じピクセルを確認するには、フル解像度と PNG を選んでください。</string>
     <string name="desktop_clipboard">クリップボードを同期</string>
     <string name="desktop_clipboard_hint">操作画面を開いている間、次にコピーしたテキストを PC とスマートフォンの間で共有します。</string>
     <string name="desktop_clipboard_too_large">64 KiB を超えるテキストはクリップボードで同期できません。</string>

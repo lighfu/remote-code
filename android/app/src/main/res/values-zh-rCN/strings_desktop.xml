@@ -97,4 +97,14 @@
     <string name="desktop_log_manual">手动重试</string>
     <string name="desktop_log_ended">视频流已结束</string>
     <string name="desktop_log_auto_target">自动调整 · %1$.1f Mbps</string>
+    <string name="desktop_bitrate_manual">手动</string>
+    <string name="desktop_bitrate_mode">比特率调整</string>
+    <string name="desktop_decode_color">解码色彩深度</string>
+    <string name="desktop_decode_full">32 位</string>
+    <string name="desktop_decode_compact">16 位</string>
+    <string name="desktop_decode_color_hint">使用 JPEG 时，32 位可保留色彩层次，16 位可节省图像内存。PNG 始终保留原始色彩和透明度。</string>
+    <string name="desktop_decode_latest">最新帧优先</string>
+    <string name="desktop_decode_latest_hint">开启时，会跳过被新图像完全替换的未处理图像，以降低显示延迟。关闭时，会按顺序解码接收到的图像。</string>
+    <string name="desktop_pixelated">放大时清晰显示像素</string>
+    <string name="desktop_pixelated_hint">放大时，接收图像的每个像素会呈方形显示。要查看与 PC 屏幕相同的像素，请选择全分辨率和 PNG。</string>
 </resources>

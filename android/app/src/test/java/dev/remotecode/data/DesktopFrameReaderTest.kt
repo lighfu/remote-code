@@ -191,4 +191,13 @@ class DesktopFrameReaderTest {
         assertEquals(DesktopResolution.Standard, DesktopResolution.restore(null, false))
         assertEquals(DesktopResolution.Native, DesktopResolution.restore("native", true))
     }
+
+    @Test fun decodeColorPreservesPngAndSelectsJpegPrecisionAtEveryResolution() {
+        for (resolution in DesktopResolution.entries) {
+            for (mode in DesktopDecodeColor.entries) assertTrue(mode.uses32Bit("png", resolution))
+            assertTrue(DesktopDecodeColor.Full.uses32Bit("jpeg", resolution))
+            assertFalse(DesktopDecodeColor.Compact.uses32Bit("jpeg", resolution))
+            assertEquals(resolution != DesktopResolution.Standard, DesktopDecodeColor.Auto.uses32Bit("jpeg", resolution))
+        }
+    }
 }

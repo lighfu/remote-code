@@ -50,12 +50,15 @@ data class DesktopPreferences(
     val clipboard: Boolean = false,
     val bitrateMbps: Int = 0,
     val graphMask: Int = 3,
+    val manualBitrateMbps: Int = 32,
+    val decodeColor: DesktopDecodeColor = DesktopDecodeColor.Auto,
+    val decodeLatest: Boolean = true,
+    val pixelated: Boolean = false,
 ) {
     companion object {
-        val frameRates = listOf(1, 5, 10, 15, 30, 60)
+        val frameRates = 1..60
+        val manualBitrates = 1..150
         val pointerSpeeds = listOf(0.5f, 1f, 1.5f, 2f)
-        // Zero selects automatic tuning; -1 keeps the original uncapped stream.
-        val bitrateOptions = listOf(0, 4, 8, 16, 32, 64, -1)
     }
 }
 
@@ -109,6 +112,10 @@ class SettingsStore(private val context: Context) {
         val desktopResolution = stringPreferencesKey("desktop_resolution")
         val desktopDebugOverlay = booleanPreferencesKey("desktop_debug_overlay")
         val desktopBitrateMbps = intPreferencesKey("desktop_bitrate_mbps")
+        val desktopManualBitrateMbps = intPreferencesKey("desktop_manual_bitrate_mbps")
+        val desktopDecodeColor = stringPreferencesKey("desktop_decode_color")
+        val desktopDecodeLatest = booleanPreferencesKey("desktop_decode_latest")
+        val desktopPixelated = booleanPreferencesKey("desktop_pixelated")
         val desktopGraphMask = intPreferencesKey("desktop_graph_mask")
         val desktopCapture = stringPreferencesKey("desktop_capture")
         val desktopCodec = stringPreferencesKey("desktop_codec")
@@ -137,7 +144,12 @@ class SettingsStore(private val context: Context) {
                 fps = p[Keys.desktopFps]?.takeIf { it in DesktopPreferences.frameRates } ?: 10,
                 resolution = DesktopResolution.restore(p[Keys.desktopResolution], p[Keys.desktopHighDetail] ?: false),
                 debugOverlay = p[Keys.desktopDebugOverlay] ?: false,
-                bitrateMbps = p[Keys.desktopBitrateMbps]?.takeIf { it in DesktopPreferences.bitrateOptions } ?: 0,
+                bitrateMbps = p[Keys.desktopBitrateMbps]?.takeIf { it in -1..DesktopPreferences.manualBitrates.last } ?: 0,
+                manualBitrateMbps = (p[Keys.desktopManualBitrateMbps] ?: p[Keys.desktopBitrateMbps])
+                    ?.takeIf { it in DesktopPreferences.manualBitrates } ?: 32,
+                decodeColor = DesktopDecodeColor.entries.find { it.name.equals(p[Keys.desktopDecodeColor], ignoreCase = true) } ?: DesktopDecodeColor.Auto,
+                decodeLatest = p[Keys.desktopDecodeLatest] ?: true,
+                pixelated = p[Keys.desktopPixelated] ?: false,
                 graphMask = p[Keys.desktopGraphMask]?.and(7) ?: 3,
                 capture = p[Keys.desktopCapture] ?: "auto",
                 codec = p[Keys.desktopCodec] ?: "jpeg",
@@ -241,6 +253,10 @@ class SettingsStore(private val context: Context) {
             it[Keys.desktopResolution] = prefs.resolution.wire
             it[Keys.desktopDebugOverlay] = prefs.debugOverlay
             it[Keys.desktopBitrateMbps] = prefs.bitrateMbps
+            it[Keys.desktopManualBitrateMbps] = prefs.manualBitrateMbps
+            it[Keys.desktopDecodeColor] = prefs.decodeColor.name.lowercase()
+            it[Keys.desktopDecodeLatest] = prefs.decodeLatest
+            it[Keys.desktopPixelated] = prefs.pixelated
             it[Keys.desktopGraphMask] = prefs.graphMask
             it[Keys.desktopCapture] = prefs.capture
             it[Keys.desktopCodec] = prefs.codec

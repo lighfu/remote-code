@@ -4,10 +4,21 @@ import dev.remotecode.data.DesktopDisplay
 import dev.remotecode.data.DesktopPoint
 import dev.remotecode.data.defaultScrollPoint
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class DesktopViewportTest {
+    @Test fun pixelGridUsesSourcePixelsAndCanToggleOnTheSameZoomedFrame() {
+        val fit = DesktopViewport.fit(720, 1280, 5760, 2160)
+        assertTrue(fit.filterBitmap(true, 5760, 2160))
+        val zoomed = fit.copy(width = fit.width * 16, height = fit.height * 16)
+        assertTrue(zoomed.filterBitmap(false, 5760, 2160))
+        assertFalse(zoomed.filterBitmap(true, 5760, 2160))
+        assertTrue(zoomed.filterBitmap(false, 5760, 2160))
+    }
+
     @Test fun mapsTouchesThroughTheImageRectangleOnly() {
         val fit = DesktopViewport.fit(300, 800, 1600, 800)
         assertEquals(DesktopViewport(0f, 325f, 300f, 150f), fit)

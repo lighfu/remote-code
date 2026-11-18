@@ -11,15 +11,21 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.unit.dp
 import dev.remotecode.R
+import dev.remotecode.data.DesktopDecodeColor
 import dev.remotecode.data.DesktopDisplay
 import dev.remotecode.data.DesktopPreferences
 import dev.remotecode.data.DesktopResolution
 import java.text.NumberFormat
+import kotlin.math.roundToInt
 
 @Composable
 internal fun DesktopOptionsSheet(onDismiss: () -> Unit, content: @Composable ColumnScope.() -> Unit) {
@@ -160,22 +166,53 @@ internal fun DesktopDisplayOptions(
 }
 
 @Composable
+private fun VideoSlider(@StringRes title: Int, value: Int, range: IntRange, unit: String, change: (Int) -> Unit) {
+    val label = stringResource(title)
+    var draft by remember(value) { mutableIntStateOf(value) }
+    val amount = "${NumberFormat.getIntegerInstance().format(draft)} $unit"
+    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+        Text(label, Modifier.weight(1f), style = MaterialTheme.typography.labelLarge)
+        Text(amount, style = MaterialTheme.typography.labelLarge)
+    }
+    Slider(
+        value = draft.toFloat(),
+        onValueChange = { draft = it.roundToInt() },
+        onValueChangeFinished = { if (draft != value) change(draft) },
+        valueRange = range.first.toFloat()..range.last.toFloat(),
+        steps = range.last - range.first - 1,
+        modifier = Modifier.fillMaxWidth().semantics {
+            contentDescription = label
+            stateDescription = amount
+        },
+        colors = SliderDefaults.colors(activeTickColor = Color.Transparent, inactiveTickColor = Color.Transparent),
+    )
+}
+
+@Composable
 internal fun DesktopVideoOptions(
     prefs: DesktopPreferences, change: (DesktopPreferences) -> Unit, width: Int?, height: Int?, receivedFps: Float?,
     captures: List<String>, capture: String, activeCapture: String?, codecs: List<String>, codec: String,
     resolution: DesktopResolution, supportsNative: Boolean, supportsBitrate: Boolean, autoKbps: Int,
 ) {
     OptionGroup(R.string.desktop_video_options, Icons.Rounded.Videocam) {
-        Choices(R.string.desktop_refresh_rate, DesktopPreferences.frameRates, prefs.fps, { "$it FPS" }) { change(prefs.copy(fps = it)) }
+        VideoSlider(R.string.desktop_refresh_rate, prefs.fps, DesktopPreferences.frameRates, "FPS") {
+            change(prefs.copy(fps = it))
+        }
         Detail(if (receivedFps == null) stringResource(R.string.desktop_fps_warmup) else stringResource(R.string.desktop_received_fps, receivedFps))
-        Choices(R.string.desktop_bitrate_target, DesktopPreferences.bitrateOptions, prefs.bitrateMbps, {
+        val manualMbps = prefs.manualBitrateMbps
+        Choices(R.string.desktop_bitrate_mode, listOf(0, manualMbps, -1), prefs.bitrateMbps, {
             when (it) {
                 0 -> if (supportsBitrate && prefs.bitrateMbps == 0) stringResource(R.string.desktop_auto_bitrate, autoKbps / 1000f)
                     else stringResource(R.string.desktop_automatic)
                 -1 -> stringResource(R.string.desktop_bitrate_unlimited)
-                else -> "$it Mbps"
+                else -> stringResource(R.string.desktop_bitrate_manual)
             }
         }, enabled = supportsBitrate) { change(prefs.copy(bitrateMbps = it)) }
+        if (supportsBitrate && prefs.bitrateMbps > 0) {
+            VideoSlider(R.string.desktop_bitrate_target, prefs.bitrateMbps, DesktopPreferences.manualBitrates, "Mbps") {
+                change(prefs.copy(bitrateMbps = it, manualBitrateMbps = it))
+            }
+        }
         Detail(stringResource(if (supportsBitrate) R.string.desktop_bitrate_hint else R.string.desktop_upgrade_options))
         OptionSwitch(R.string.desktop_debug_overlay, Icons.Rounded.Speed, prefs.debugOverlay) { change(prefs.copy(debugOverlay = it)) }
         Detail(stringResource(R.string.desktop_debug_hint))
@@ -213,5 +250,16 @@ internal fun DesktopVideoOptions(
         HorizontalDivider()
         Choices(R.string.desktop_codec, codecs, codec, { it.uppercase() }) { change(prefs.copy(codec = it)) }
         Detail(stringResource(if (codec == "png") R.string.desktop_codec_png else R.string.desktop_codec_jpeg))
+        HorizontalDivider()
+        Choices(R.string.desktop_decode_color, DesktopDecodeColor.entries, prefs.decodeColor, { stringResource(when (it) {
+            DesktopDecodeColor.Auto -> R.string.desktop_automatic
+            DesktopDecodeColor.Full -> R.string.desktop_decode_full
+            DesktopDecodeColor.Compact -> R.string.desktop_decode_compact
+        }) }) { change(prefs.copy(decodeColor = it)) }
+        Detail(stringResource(R.string.desktop_decode_color_hint))
+        OptionSwitch(R.string.desktop_decode_latest, Icons.Rounded.Speed, prefs.decodeLatest) { change(prefs.copy(decodeLatest = it)) }
+        Detail(stringResource(R.string.desktop_decode_latest_hint))
+        OptionSwitch(R.string.desktop_pixelated, Icons.Rounded.ZoomIn, prefs.pixelated) { change(prefs.copy(pixelated = it)) }
+        Detail(stringResource(R.string.desktop_pixelated_hint))
     }
 }

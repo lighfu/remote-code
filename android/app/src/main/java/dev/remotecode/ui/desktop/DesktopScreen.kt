@@ -198,8 +198,10 @@ internal fun DesktopScreen(onBack: () -> Unit) {
     val separateCursor = capabilities?.cursorMetadata == true
     val regions = capabilities?.regionFrames == true
     val ready = capabilities != null || displayError != null
-    LaunchedEffect(target, active, display, resolution, refresh, capture, codec, streaming, conditional, separateCursor, regions, ready, prefs.fps, bitrateKbps, autoBitrate) {
+    LaunchedEffect(target, active, display, resolution, refresh, capture, codec, streaming, conditional, separateCursor, regions, ready,
+        prefs.fps, bitrateKbps, autoBitrate, prefs.decodeColor, prefs.decodeLatest) {
         if (target == null || !active || !ready) return@LaunchedEffect
+        val decodeColor = prefs.decodeColor
         fun receive(image: DesktopFrame, validatedAt: Long) {
             if (seenLayout != image.layout) {
                 if (layoutNeedsMonitorRefresh(seenLayout, image.layout, capabilities?.layout)) {
@@ -234,7 +236,8 @@ internal fun DesktopScreen(onBack: () -> Unit) {
                     try {
                         autoBitrate.newStream()
                         desktop.stream(target, display, resolution, capture, codec, separateCursor, prefs.fps, regions,
-                            bitrateKbps, onPayloadBytes = { telemetry.addBytes(it.toLong()) })
+                            bitrateKbps, decodeColor = decodeColor, decodeLatest = prefs.decodeLatest,
+                            onPayloadBytes = { telemetry.addBytes(it.toLong()) })
                             .collect { (at, image) ->
                                 if (!streamReady) {
                                     log.add(appString(R.string.desktop_log_ready, image.image.width, image.image.height))
@@ -264,7 +267,7 @@ internal fun DesktopScreen(onBack: () -> Unit) {
                 val started = SystemClock.elapsedRealtime()
                 try {
                     val previous = frame?.image?.takeIf { conditional }
-                    val image = desktop.frame(target, display, resolution, capture, codec, separateCursor, previous)
+                    val image = desktop.frame(target, display, resolution, capture, codec, separateCursor, previous, decodeColor = decodeColor)
                     telemetry.addBytes(image.receivedPayloadBytes)
                     receive(image, started)
                     if (!pollReady) {
@@ -390,6 +393,7 @@ internal fun DesktopScreen(onBack: () -> Unit) {
                         val latestSend by rememberUpdatedState<(DesktopInput) -> Boolean> { control && send(it) }
                         AndroidView(factory = { context -> DesktopSurface(context).also { surface = it } }, modifier = Modifier.fillMaxSize(), update = {
                             it.contentDescription = description
+                            it.pixelated = prefs.pixelated
                             it.touchpad = touchpad
                             it.pointerSpeed = prefs.pointerSpeed
                             it.onZoomChanged = { factor -> zoom = factor }

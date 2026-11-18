@@ -97,4 +97,14 @@
     <string name="desktop_log_manual">Retry manually</string>
     <string name="desktop_log_ended">Video stream ended</string>
     <string name="desktop_log_auto_target">Auto · %1$.1f Mbps</string>
+    <string name="desktop_bitrate_manual">Manual</string>
+    <string name="desktop_bitrate_mode">Bitrate adjustment</string>
+    <string name="desktop_decode_color">Decode color depth</string>
+    <string name="desktop_decode_full">32-bit</string>
+    <string name="desktop_decode_compact">16-bit</string>
+    <string name="desktop_decode_color_hint">For JPEG, 32-bit preserves color gradations, while 16-bit saves image memory. PNG always preserves the original colors and transparency.</string>
+    <string name="desktop_decode_latest">Prioritize latest frame</string>
+    <string name="desktop_decode_latest_hint">When on, skips unprocessed images that are completely replaced by a newer image, reducing display lag. When off, decodes received images in order.</string>
+    <string name="desktop_pixelated">Show crisp pixels when zoomed in</string>
+    <string name="desktop_pixelated_hint">When zoomed in, each pixel of the received image appears as a square. To see the same pixels as on the PC screen, select full resolution and PNG.</string>
 </resources>

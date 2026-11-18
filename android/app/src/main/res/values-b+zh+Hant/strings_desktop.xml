@@ -97,4 +97,14 @@
     <string name="desktop_log_manual">手動重試</string>
     <string name="desktop_log_ended">視訊串流已結束</string>
     <string name="desktop_log_auto_target">自動調整 · %1$.1f Mbps</string>
+    <string name="desktop_bitrate_manual">手動</string>
+    <string name="desktop_bitrate_mode">位元率調整</string>
+    <string name="desktop_decode_color">解碼色彩深度</string>
+    <string name="desktop_decode_full">32 位元</string>
+    <string name="desktop_decode_compact">16 位元</string>
+    <string name="desktop_decode_color_hint">使用 JPEG 時，32 位元可保留色彩階調，16 位元可節省影像記憶體。PNG 一律保留原始色彩與透明度。</string>
+    <string name="desktop_decode_latest">最新影格優先</string>
+    <string name="desktop_decode_latest_hint">開啟時，會略過被新影像完全取代的未處理影像，以降低顯示延遲。關閉時，會依序解碼接收到的影像。</string>
+    <string name="desktop_pixelated">放大時清晰顯示像素</string>
+    <string name="desktop_pixelated_hint">放大時，接收影像的每個像素會呈方形顯示。若要查看與 PC 螢幕相同的像素，請選擇完整解析度與 PNG。</string>
 </resources>

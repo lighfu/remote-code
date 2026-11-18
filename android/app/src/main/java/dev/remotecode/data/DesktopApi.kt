@@ -161,13 +161,15 @@ internal class DesktopApi(client: OkHttpClient, private val strings: AppStringRe
     }
 
     suspend fun frame(server: ServerConfig, display: String, resolution: DesktopResolution, capture: String = "auto",
-                      codec: String = "jpeg", separateCursor: Boolean = false, previous: DesktopFrame? = null): DesktopFrame {
+                      codec: String = "jpeg", separateCursor: Boolean = false, previous: DesktopFrame? = null,
+                      decodeColor: DesktopDecodeColor = DesktopDecodeColor.Auto): DesktopFrame {
         val req = frameRequest(server, display, resolution, capture, codec, separateCursor)
-        previous?.headers?.etag?.let { req.header("If-None-Match", it) }
-        val next = execute(server, req.build(), allowNotModified = previous?.headers?.etag != null, client = frameHttp) { response ->
+        val reusable = previous?.takeIf { it.codec == codec && it.decodeColor == decodeColor }
+        reusable?.headers?.etag?.let { req.header("If-None-Match", it) }
+        val next = execute(server, req.build(), allowNotModified = reusable?.headers?.etag != null, client = frameHttp) { response ->
             if (response.code == 304) {
                 val headers = try { FrameHeaders.read(response.headers) } catch (_: IOException) { return@execute null }
-                return@execute previous?.takeIf { headers.validates(it.headers) }?.copy(headers = headers, receivedPayloadBytes = 0)
+                return@execute reusable?.takeIf { headers.validates(it.headers) }?.copy(headers = headers, receivedPayloadBytes = 0)
             }
             val headers = FrameHeaders.read(response.headers)
             val body = response.body
@@ -185,16 +187,18 @@ internal class DesktopApi(client: OkHttpClient, private val strings: AppStringRe
                     ByteArray(size.toInt()).also { source.readFully(it) }
                 }
             }
-            decodeDesktopFrame(bytes, headers, codec, resolution, strings)
+            decodeDesktopFrame(bytes, headers, codec, resolution, strings, decodeColor = decodeColor)
         }
         // Intermediaries may omit custom headers on a 304. Request a complete frame before reusing its layout.
-        return next ?: frame(server, display, resolution, capture, codec, separateCursor)
+        return next ?: frame(server, display, resolution, capture, codec, separateCursor, decodeColor = decodeColor)
     }
 
     fun stream(server: ServerConfig, display: String, resolution: DesktopResolution, capture: String, codec: String,
                separateCursor: Boolean, fps: Int, regions: Boolean = false, bitrateKbps: Int? = null,
+               decodeColor: DesktopDecodeColor = DesktopDecodeColor.Auto, decodeLatest: Boolean = true,
                onPayloadBytes: (Int) -> Unit = {}): Flow<Pair<Long, DesktopFrame>> {
         val request = frameRequest(server, display, resolution, capture, codec, separateCursor, fps, regions, bitrateKbps).build()
+        val needsOrderedDelivery = regions || !decodeLatest
         val packets = callbackFlow {
             checkTarget(server)
             val call = streamHttp.newCall(request)
@@ -216,9 +220,9 @@ internal class DesktopApi(client: OkHttpClient, private val strings: AppStringRe
                             while (!call.isCanceled()) {
                                 val packet = allocateDesktopFrame(strings) { reader.next(SystemClock::elapsedRealtime) }
                                 checkTarget(server)
-                                if (pending?.replace(packet) == true) continue
+                                if (decodeLatest && pending?.replace(packet) == true) continue
                                 val slot = DesktopPacketSlot(packet)
-                                val sent = if (regions) trySendBlocking(slot) else trySend(slot)
+                                val sent = if (needsOrderedDelivery) trySendBlocking(slot) else trySend(slot)
                                 if (sent.isClosed) break
                                 pending = slot
                             }
@@ -228,7 +232,7 @@ internal class DesktopApi(client: OkHttpClient, private val strings: AppStringRe
                 }
             })
             awaitClose { call.cancel() }
-        }.buffer(if (regions) 1 else Channel.CONFLATED)
+        }.buffer(if (needsOrderedDelivery) 1 else Channel.CONFLATED)
         return flow {
             var bytes: ByteArray? = null
             var last: DesktopFrame? = null
@@ -241,7 +245,7 @@ internal class DesktopApi(client: OkHttpClient, private val strings: AppStringRe
                     if (packet.regions.isNotEmpty() && (old?.headers?.etag != packet.baseETag || old?.layout != packet.headers.layout))
                         throw IOException("Missing decoded desktop patch base")
                     decodeDesktopFrame(packet.bytes, packet.headers, codec, resolution, strings, packet.regions, old?.image,
-                        packet.receivedPayloadBytes)
+                        packet.receivedPayloadBytes, decodeColor)
                 }
                 bytes = packet.bytes
                 last = next

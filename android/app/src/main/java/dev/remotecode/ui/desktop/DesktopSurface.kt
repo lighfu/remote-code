@@ -22,6 +22,9 @@ import kotlin.math.min
 
 /** The same rectangle is used for rendering and hit testing, including the letterbox. */
 internal data class DesktopViewport(val left: Float, val top: Float, val width: Float, val height: Float) {
+    fun filterBitmap(pixelated: Boolean, sourceWidth: Int, sourceHeight: Int): Boolean =
+        !pixelated || (width < sourceWidth && height < sourceHeight)
+
     fun point(x: Float, y: Float): DesktopPoint? {
         if (width <= 0f || height <= 0f || x < left || y < top || x > left + width || y > top + height) return null
         return DesktopPoint(((x - left) / width).toDouble(), ((y - top) / height).toDouble())
@@ -284,6 +287,12 @@ internal class DesktopSurface(context: Context) : View(context) {
     private var image: DesktopImage? = null
     private var reportFrame = false
     private val paint = Paint(Paint.FILTER_BITMAP_FLAG)
+    var pixelated: Boolean = false
+        set(value) {
+            if (value == field) return
+            field = value
+            postInvalidateOnAnimation()
+        }
     private val destination = RectF()
     private val pointer = DesktopPointerPreview()
     private val pointerPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { strokeJoin = Paint.Join.ROUND }
@@ -435,6 +444,7 @@ internal class DesktopSurface(context: Context) : View(context) {
         val frame = image ?: return
         val box = viewport()
         destination.set(box.left, box.top, box.left + box.width, box.top + box.height)
+        paint.isFilterBitmap = box.filterBitmap(pixelated, frame.width, frame.height)
         frame.draw(canvas, destination, paint)
         (dragPosition ?: pointer.position)?.let { drawPointer(canvas, box, it) }
         if (reportFrame) {
