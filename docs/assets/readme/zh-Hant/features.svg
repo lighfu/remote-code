@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="290" viewBox="0 0 1200 290" role="img" aria-labelledby="title description">
+  <title id="title">對話、程式碼與 Git</title>
+  <desc id="description">對話與執行、程式碼編輯及 Git 操作。</desc>
+  <g font-family="'Segoe UI','PingFang TC','Microsoft JhengHei','Noto Sans TC',sans-serif">
+    <g transform="translate(0 0)">
+      <rect width="384" height="290" rx="42" fill="#D4ED9B"/>
+      <circle cx="70" cy="72" r="37" fill="#FFFFFF" fill-opacity=".45"/>
+      <g transform="translate(70 72) scale(.86)"><g fill="none" stroke="#263322" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round"><path d="M-20-18h40a8 8 0 0 1 8 8v21a8 8 0 0 1-8 8H-5l-15 12V19a8 8 0 0 1-8-8v-21a8 8 0 0 1 8-8Z"/><path d="M-14-4h28M-14 7H5"/></g></g>
+      <text x="345" y="58" text-anchor="end" font-size="18" font-weight="600" fill="#59634F">01</text>
+      <text x="32" y="147" font-size="16" font-weight="700" letter-spacing="2" fill="#46503D">CHAT</text>
+      <text x="30" y="199" font-size="37" font-weight="700" fill="#263322">對話與執行</text>
+      <text x="32" y="244" font-size="20" fill="#46503D">對話 · 核准 · 子代理</text>
+    </g>
+    <g transform="translate(408 0)">
+      <rect width="384" height="290" rx="42" fill="#DED8F8"/>
+      <circle cx="70" cy="72" r="37" fill="#FFFFFF" fill-opacity=".45"/>
+      <g transform="translate(70 72) scale(.86)"><g fill="none" stroke="#263322" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round"><path d="m-13-17-18 17 18 17M13-17l18 17-18 17M6-24-6 24"/></g></g>
+      <text x="345" y="58" text-anchor="end" font-size="18" font-weight="600" fill="#59634F">02</text>
+      <text x="32" y="147" font-size="16" font-weight="700" letter-spacing="2" fill="#46503D">CODE</text>
+      <text x="30" y="199" font-size="37" font-weight="700" fill="#263322">編輯程式碼</text>
+      <text x="32" y="244" font-size="20" fill="#46503D">檔案 · 引用 · Markdown</text>
+    </g>
+    <g transform="translate(816 0)">
+      <rect width="384" height="290" rx="42" fill="#F5BD9F"/>
+      <circle cx="70" cy="72" r="37" fill="#FFFFFF" fill-opacity=".45"/>
+      <g transform="translate(70 72) scale(.86)"><g fill="none" stroke="#263322" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round"><path d="M-13-20v36a9 9 0 0 0 9 9h14M-13 3h12a14 14 0 0 0 14-14v-9"/><circle cx="-13" cy="-22" r="7"/><circle cx="13" cy="-22" r="7"/><circle cx="17" cy="25" r="7"/></g></g>
+      <text x="345" y="58" text-anchor="end" font-size="18" font-weight="600" fill="#59634F">03</text>
+      <text x="32" y="147" font-size="16" font-weight="700" letter-spacing="2" fill="#46503D">GIT</text>
+      <text x="30" y="199" font-size="37" font-weight="700" fill="#263322">整理變更</text>
+      <text x="32" y="244" font-size="20" fill="#46503D">差異 · 提交 · 推送</text>
+    </g>
+  </g>
+</svg>

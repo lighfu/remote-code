@@ -17,6 +17,7 @@ LOCALES = {
     "README.md": ("en", "", "ZIP · Node.js bundled", "Go · Portable ZIP"),
     "README.ja.md": ("", "ja", "ZIP · Node.js 同梱", "Go · ポータブル ZIP"),
     "README.zh-CN.md": ("zh-CN", "zh-CN", "ZIP · 内置 Node.js", "Go · 便携版 ZIP"),
+    "README.zh-Hant.md": ("zh-Hant", "", "ZIP · 內含 Node.js", "Go · 可攜式 ZIP"),
     "README.ko.md": ("ko", "ko", "ZIP · Node.js 포함", "Go · 포터블 ZIP"),
 }
 NOTE_LOCALES = {
