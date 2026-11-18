@@ -90,7 +90,7 @@ func runServerGeneration(parent context.Context, data string, args []string, gen
 		return false, err
 	}
 	_ = atomicJSON(filepath.Join(data, "runtime.json"), M{"publicUrl": a.Config.PublicURL, "updatedAt": time.Now().UTC().Format(time.RFC3339)})
-	server := &http.Server{Addr: fmt.Sprintf(":%d", a.Config.Port), Handler: a.Handler(), ReadHeaderTimeout: 10 * time.Second, IdleTimeout: 90 * time.Second, MaxHeaderBytes: 32 << 10}
+	server := &http.Server{Addr: fmt.Sprintf(":%d", a.Config.Port), Handler: a.handler(ctx.Done()), ReadHeaderTimeout: 10 * time.Second, IdleTimeout: 90 * time.Second, MaxHeaderBytes: 32 << 10}
 	server.ErrorLog = log.New(consoleLogWriter{}, "[http] ", 0)
 	listener, err := net.Listen("tcp", server.Addr)
 	if err != nil {

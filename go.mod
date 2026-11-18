@@ -10,6 +10,7 @@ require (
 	github.com/gdamore/tcell/v2 v2.8.1
 	github.com/gorilla/websocket v1.5.3
 	github.com/hinshun/vt10x v0.0.0-20220301184237-5011da428d02
+	github.com/kirides/go-d3d v1.0.1
 	github.com/mattn/go-runewidth v0.0.16
 	github.com/pelletier/go-toml/v2 v2.2.4
 	github.com/skip2/go-qrcode v0.0.0-20200617195104-da1b6568686e

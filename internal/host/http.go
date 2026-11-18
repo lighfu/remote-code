@@ -75,6 +75,10 @@ func (a *App) do(ctx context.Context, action string, rec *Record, body M) (any, 
 	return p.Do(ctx, action, rec, body)
 }
 func (a *App) Handler() http.Handler {
+	return a.handler(a.closed)
+}
+
+func (a *App) handler(serverDone <-chan struct{}) http.Handler {
 	mux := http.NewServeMux()
 	route(mux, "GET /api/dependencies", func(r *http.Request, b M) (any, error) { return a.dependencyState(), nil })
 	mux.HandleFunc("POST /api/dependencies/{target}/install", func(w http.ResponseWriter, r *http.Request) {
@@ -381,6 +385,8 @@ func (a *App) Handler() http.Handler {
 		return nil, os.WriteFile(filepath.Join(dir, time.Now().UTC().Format("2006-01-02T15-04-05.000Z")+".txt"), []byte(text), 0600)
 	})
 	mux.HandleFunc("GET /api/events", a.events)
+	registerDesktopClipboard(mux, desktopSupported(), desktopClipboardRead, desktopClipboardWrite)
+	registerDesktop(mux, desktopBackend{desktopSupported(), listDesktopDisplays, desktopCaptureMethods, captureDesktopFrame, applyDesktopInput}, serverDone)
 	a.registerBtw(mux)
 	a.registerFolders(mux)
 	a.registerManage(mux)
@@ -673,7 +679,7 @@ func (a *App) middleware(next http.Handler) http.Handler {
 		}
 		defer a.requests.Done()
 		w = &timedWriter{ResponseWriter: w, started: started}
-		if strings.Contains(r.Header.Get("Accept-Encoding"), "gzip") && r.Method != "HEAD" && !strings.Contains(r.URL.Path, "/media/") && !strings.HasSuffix(r.URL.Path, "/raw") && !strings.HasSuffix(r.URL.Path, ".apk") && !strings.HasSuffix(r.URL.Path, "/apk") {
+		if strings.Contains(r.Header.Get("Accept-Encoding"), "gzip") && r.Method != "HEAD" && !strings.HasPrefix(r.URL.Path, "/api/desktop/") && !strings.Contains(r.URL.Path, "/media/") && !strings.HasSuffix(r.URL.Path, "/raw") && !strings.HasSuffix(r.URL.Path, ".apk") && !strings.HasSuffix(r.URL.Path, "/apk") {
 			w.Header().Set("Content-Encoding", "gzip")
 			w.Header().Set("Vary", "Accept-Encoding")
 			gz := gzip.NewWriter(w)
@@ -695,6 +701,8 @@ type timedWriter struct {
 	started time.Time
 	written bool
 }
+
+func (w *timedWriter) Unwrap() http.ResponseWriter { return w.ResponseWriter }
 
 func (w *timedWriter) WriteHeader(code int) {
 	if w.written {
