@@ -127,6 +127,7 @@ import dev.remotecode.data.CommandInfo
 import dev.remotecode.data.ImagePayload
 import dev.remotecode.data.ThinkingModes
 import dev.remotecode.ui.common.ModelPicker
+import dev.remotecode.ui.common.concreteModel
 import dev.remotecode.ui.common.modelLabel
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.heightIn
@@ -464,7 +465,7 @@ fun ChatScreen(sessionId: String, onBack: () -> Unit, onTerminals: (String) -> U
     val modes = meta?.providers?.get(session?.provider ?: "")?.modes.orEmpty()
     val defaults = dev.remotecode.ui.common.pcDefaults(session?.provider)
     val currentModelOptions = session?.provider?.let { modelOptions[it] }.orEmpty()
-    val currentModelOption = dev.remotecode.ui.common.resolveModelOption(session?.model ?: defaults?.model, currentModelOptions)
+    val currentModelOption = dev.remotecode.ui.common.resolveModelOption(session?.model.concreteModel() ?: defaults?.model, currentModelOptions)
     val fastSupported = currentModelOption?.supportsFastMode != false
     val pcMode = defaults?.mode
     val effectiveMode = session?.mode?.ifBlank { null } ?: pcMode
@@ -817,7 +818,7 @@ fun ChatScreen(sessionId: String, onBack: () -> Unit, onTerminals: (String) -> U
 
     if (pickingModel && session != null) {
         ModelPicker(
-            session.provider, session.model, session.effort,
+            session.provider, session.model.concreteModel(), session.effort,
             onDismiss = { pickingModel = false },
             ultra = if (session.provider == "claude") session.ultra else null,
             fastMode = session.fastMode,
@@ -1189,7 +1190,7 @@ private fun Composer(
                             color = pillColor,
                         ) {
                             val def = dev.remotecode.ui.common.pcDefaults(session?.provider)
-                            val m = session?.model?.let { prettyModel(it) } ?: def?.model ?: prettyModel(null)
+                            val m = session?.model.concreteModel()?.let { prettyModel(it) } ?: def?.model ?: prettyModel(null)
                             val e = session?.effort ?: def?.effort
                             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(horizontal = 14.dp, vertical = 9.dp)) {
                                 if (session?.fastModeActive == true) {

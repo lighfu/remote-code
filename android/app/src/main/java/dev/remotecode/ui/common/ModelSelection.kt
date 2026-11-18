@@ -2,6 +2,8 @@ package dev.remotecode.ui.common
 
 import dev.remotecode.data.ModelOption
 
+internal fun String?.concreteModel(): String? = this?.takeUnless { it.isBlank() || it.equals("default", ignoreCase = true) }
+
 private fun normalizeModel(s: String): String =
     s.lowercase()
         .replace(Regex("""\[.*]$"""), "")

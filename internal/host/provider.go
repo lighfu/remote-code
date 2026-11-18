@@ -148,6 +148,9 @@ func (p *nativeProvider) Do(ctx context.Context, action string, rec *Record, bod
 	switch action {
 	case "send":
 		return nil, p.send(ctx, rec, body)
+	case "initialize":
+		_, err := p.ensure(ctx, rec)
+		return nil, err
 	case "respond":
 		return nil, p.respond(rec, body)
 	case "importHistory":

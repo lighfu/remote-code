@@ -351,7 +351,7 @@ private fun ModelRow(title: String, sub: String, selected: Boolean, onClick: () 
 }
 
 fun modelLabel(model: String?, effort: String?, defaults: dev.remotecode.data.ProviderDefaults? = null): String {
-    val m = model ?: defaults?.model?.let { "$it（PC）" } ?: appString(R.string.screen_model_picker_018)
+    val m = model.concreteModel() ?: defaults?.model?.let { "$it（PC）" } ?: appString(R.string.screen_model_picker_018)
     val e = effort ?: defaults?.effort
     return if (e != null) "$m · ${effortLabel(e)}" else m
 }

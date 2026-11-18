@@ -573,7 +573,7 @@ func (p *nativeProvider) agyModels(ctx context.Context) ([]M, error) {
 		} else {
 			groups[base] = append(groups[base], "")
 		}
-		labels[base] = label
+		labels[base], _ = splitAgyModel(label)
 	}
 	for _, base := range ids {
 		efforts := groups[base]

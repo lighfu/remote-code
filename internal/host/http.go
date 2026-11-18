@@ -162,6 +162,10 @@ func (a *App) handler(serverDone <-chan struct{}) http.Handler {
 			if _, err = p.Do(r.Context(), "send", rec, body); err != nil {
 				return nil, err
 			}
+		} else if S(init, "provider") == "antigravity" && agyModelUnset(S(init, "model")) && agyModelUnset(S(agyPCDefaults(), "model")) {
+			// With no PC preference, only the new ACP session knows the account's default.
+			// The empty draft remains usable if the CLI is temporarily offline.
+			_, _ = p.Do(r.Context(), "initialize", rec, nil)
 		}
 		return a.Store.Get(S(rec.Info, "id")).Info, nil
 	})
@@ -868,5 +872,5 @@ func pcDefaults(dataDir string) M {
 	case sandbox == "read-only":
 		codex["mode"] = "read-only"
 	}
-	return M{"claude": claude, "codex": codex}
+	return M{"claude": claude, "codex": codex, "antigravity": agyPCDefaults()}
 }
