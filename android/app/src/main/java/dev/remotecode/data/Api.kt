@@ -904,11 +904,11 @@ class Api(private val client: OkHttpClient, private val strings: AppStringResolv
     }
 
     /** scope: command はコマンド、terminal はシェルを終了。 */
-    suspend fun terminalKill(id: String, scope: String = "terminal"): Int =
-        call("POST", "/api/terminals/$id/kill", buildJsonObject { put("scope", scope) }).jsonObject["killed"]?.jsonPrimitive?.intOrNull ?: 0
+    suspend fun terminalKill(id: String, scope: String = "terminal", expectedServer: ServerConfig? = null): Int =
+        call("POST", "/api/terminals/$id/kill", buildJsonObject { put("scope", scope) }, cfg = updateTarget(expectedServer)).jsonObject["killed"]?.jsonPrimitive?.intOrNull ?: 0
 
-    suspend fun terminalRemove(id: String) {
-        call("POST", "/api/terminals/$id/remove")
+    suspend fun terminalRemove(id: String, expectedServer: ServerConfig? = null) {
+        call("POST", "/api/terminals/$id/remove", cfg = updateTarget(expectedServer))
     }
 
     fun terminalSocket(id: String, listener: okhttp3.WebSocketListener): okhttp3.WebSocket {

@@ -69,11 +69,13 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -87,6 +89,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import dev.remotecode.RemoteCodeApp
 import dev.remotecode.data.TerminalInfo
+import dev.remotecode.data.connectionIdentity
 import dev.remotecode.ui.common.hapticArea
 import dev.remotecode.ui.common.rememberHaptics
 import kotlinx.coroutines.delay
@@ -119,19 +122,33 @@ private fun ago(ms: Long): String {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun TerminalsScreen(cwd: String, onBack: () -> Unit, onOpen: (String) -> Unit) {
-    val api = RemoteCodeApp.instance.repository.api
+    val repo = RemoteCodeApp.instance.repository
+    val api = repo.api
+    val identity by repo.activeServerIdentity.collectAsState()
+    val target = api.server?.takeIf { it.connectionIdentity() == identity }
     val scope = rememberCoroutineScope()
     val haptics = rememberHaptics()
     val snackbar = remember { SnackbarHostState() }
-    var list by remember { mutableStateOf<List<TerminalInfo>?>(null) }
-    var error by remember { mutableStateOf<String?>(null) }
-    var closing by remember { mutableStateOf<TerminalInfo?>(null) }
+    var list by remember(identity) { mutableStateOf<List<TerminalInfo>?>(null) }
+    var error by remember(identity) { mutableStateOf<String?>(null) }
+    var closing by remember(identity) { mutableStateOf<TerminalInfo?>(null) }
+    var stopping by remember(identity) { mutableStateOf(emptySet<String>()) }
     var creating by remember { mutableStateOf(false) }
     var tick by remember { mutableIntStateOf(0) }
 
-    LaunchedEffect(tick) {
+    LaunchedEffect(identity, tick) {
+        if (target == null) return@LaunchedEffect
         while (true) {
-            runCatching { api.terminals() }.onSuccess { list = it; error = null }.onFailure { error = it.message }
+            try {
+                val rows = api.terminals()
+                stopping = stopping.intersect(rows.map { it.id }.toSet())
+                list = rows
+                error = null
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                error = e.message
+            }
             delay(3000)
         }
     }
@@ -192,11 +209,15 @@ fun TerminalsScreen(cwd: String, onBack: () -> Unit, onOpen: (String) -> Unit) {
             val own = l.orEmpty().filter { it.kind != "external" }
             if (others.isNotEmpty()) {
                 item { SectionTitle(appString(R.string.screen_terminals_014)) }
-                items(others, key = { it.id }) { t -> TermCard(t, onOpen = { haptics.tick(); onOpen(t.id) }, onClose = null) }
+                items(others, key = { it.id }) { t ->
+                    TermCard(t, onOpen = { haptics.tick(); onOpen(t.id) }, closeEnabled = !t.self && t.id !in stopping, onClose = { closing = t })
+                }
             }
             if (own.isNotEmpty()) {
                 item { SectionTitle(appString(R.string.screen_terminals_015)) }
-                items(own, key = { it.id }) { t -> TermCard(t, onOpen = { haptics.tick(); onOpen(t.id) }, onClose = { closing = t }) }
+                items(own, key = { it.id }) { t ->
+                    TermCard(t, onOpen = { haptics.tick(); onOpen(t.id) }, closeEnabled = t.id !in stopping, onClose = { closing = t })
+                }
             }
         }
     }
@@ -205,14 +226,24 @@ fun TerminalsScreen(cwd: String, onBack: () -> Unit, onOpen: (String) -> Unit) {
         AlertDialog(
             modifier = hapticArea(),
             onDismissRequest = { closing = null },
-            title = { Text(stringResource(R.string.screen_terminals_016, t.title)) },
-            text = { Text(if (t.alive) appString(R.string.screen_terminals_017) else appString(R.string.screen_terminals_018)) },
+            title = { Text(stringResource(R.string.screen_terminals_016, t.title), maxLines = 3, overflow = TextOverflow.Ellipsis) },
+            text = { Text(if (t.kind == "external") appString(R.string.screen_terminal_031) else if (t.alive) appString(R.string.screen_terminals_017) else appString(R.string.screen_terminals_018)) },
             confirmButton = {
                 Button(onClick = {
                     closing = null
+                    if (target == null || t.id in stopping) return@Button
+                    stopping = stopping + t.id
                     scope.launch {
-                        runCatching { api.terminalRemove(t.id) }.onFailure { snackbar.showSnackbar(it.message ?: appString(R.string.screen_terminals_019)) }
-                        tick++
+                        try {
+                            if (t.kind == "external") api.terminalKill(t.id, expectedServer = target)
+                            else api.terminalRemove(t.id, expectedServer = target)
+                            tick++
+                        } catch (e: kotlinx.coroutines.CancellationException) {
+                            throw e
+                        } catch (e: Exception) {
+                            stopping = stopping - t.id
+                            snackbar.showSnackbar(e.message ?: appString(R.string.screen_terminals_019))
+                        }
                     }
                 }) { Text(stringResource(R.string.screen_terminals_020)) }
             },
@@ -227,16 +258,18 @@ private fun SectionTitle(text: String) {
     Text(text, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(start = 4.dp, top = 8.dp))
 }
 
-/** 外部端末には閉じる操作を出さない。 */
 @Composable
-private fun TermCard(t: TerminalInfo, onOpen: () -> Unit, onClose: (() -> Unit)?) {
+private fun TermCard(t: TerminalInfo, onOpen: () -> Unit, closeEnabled: Boolean, onClose: () -> Unit) {
     val external = t.kind == "external"
+    val title = t.running.ifBlank { t.title }
+    var expanded by rememberSaveable(t.id) { mutableStateOf(false) }
+    var truncated by remember(title) { mutableStateOf(false) }
     Card(
         onClick = onOpen,
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
         modifier = Modifier.fillMaxWidth(),
     ) {
-        Row(Modifier.padding(start = 16.dp, top = 12.dp, bottom = 12.dp, end = if (onClose != null) 4.dp else 16.dp), verticalAlignment = Alignment.CenterVertically) {
+        Row(Modifier.padding(start = 16.dp, top = 12.dp, bottom = 12.dp, end = 4.dp), verticalAlignment = Alignment.CenterVertically) {
             if (external) {
                 dev.remotecode.ui.common.BrandIcon(t.source.lowercase(), 28.dp)
                 Spacer(Modifier.width(12.dp))
@@ -244,18 +277,25 @@ private fun TermCard(t: TerminalInfo, onOpen: () -> Unit, onClose: (() -> Unit)?
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     if (!external) Box(Modifier.size(8.dp).background(if (t.alive) Color(0xFF3FB950) else MaterialTheme.colorScheme.outline, CircleShape))
-                    Text(t.title, style = MaterialTheme.typography.titleSmall, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
+                    Text(title, style = MaterialTheme.typography.titleSmall, maxLines = if (expanded) Int.MAX_VALUE else 3,
+                        overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false),
+                        onTextLayout = { if (!expanded) truncated = it.hasVisualOverflow })
                     val time = if (!t.alive) appString(R.string.screen_terminals_022, t.exitCode ?: "?") else ago(t.lastOutputAt)
                     if (time.isNotEmpty()) Text(time, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                if (expanded || truncated) {
+                    TextButton(onClick = { expanded = !expanded }) {
+                        Text(stringResource(if (expanded) R.string.cross_session_collapse else R.string.cross_session_expand))
+                    }
                 }
                 val sub = if (external) "${t.source} · ${t.shell.removeSuffix(".exe")}" else t.cwd
                 Text(sub, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.StartEllipsis)
                 if (t.self) Text(stringResource(R.string.screen_terminals_023), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.tertiary)
                 if (t.lastLine.isNotBlank()) {
-                    Text(t.lastLine, fontFamily = FontFamily.Monospace, style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Text(t.lastLine, fontFamily = FontFamily.Monospace, style = MaterialTheme.typography.bodySmall)
                 }
             }
-            if (onClose != null) IconButton(onClick = onClose) { Icon(Icons.Rounded.Close, stringResource(R.string.screen_terminals_020)) }
+            IconButton(onClick = onClose, enabled = closeEnabled) { Icon(Icons.Rounded.Close, stringResource(R.string.screen_terminal_030)) }
         }
     }
 }

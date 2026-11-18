@@ -493,6 +493,7 @@ data class TerminalInfo(
     /** own / external */
     val kind: String = "own",
     val source: String = "Remote Code",
+    val running: String = "",
     /** このターミナル内でサーバーが動作中。 */
     val self: Boolean = false,
     val cols: Int = 0,
