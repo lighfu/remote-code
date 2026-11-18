@@ -19,7 +19,7 @@
 <h2><img src="docs/assets/readme/heading-download.svg" width="360" height="66" alt="ダウンロード"></h2>
 
 <p align="center">
-  <a href="https://github.com/lighfu/remote-code/releases/download/v0.18.8/remote-code-v0.18.8-win32-x64.zip"><img src="docs/assets/readme/download-windows.svg" width="400" height="180" alt="Windows x64 用 ZIP を取得（0.18.8）"></a>
+  <a href="https://github.com/lighfu/remote-code/releases/download/v0.18.9/remote-code-v0.18.9-win32-x64.zip"><img src="docs/assets/readme/download-windows.svg" width="400" height="180" alt="Windows x64 用 ZIP を取得（0.18.9）"></a>
 </p>
 
 Windows 用の配布版は [GitHub Releases](https://github.com/lighfu/remote-code/releases) から取得できます。
@@ -96,5 +96,5 @@ APK は `android/app/build/outputs/apk/release/app-release.apk` に生成され�
 <h2><img src="docs/assets/readme/heading-docs.svg" width="360" height="66" alt="ドキュメント"></h2>
 
 <p>
-  <a href="docs/releases/ja/0.18.8.md"><img src="docs/assets/readme/card-notes.svg" width="360" height="128" alt="0.18.8 リリースノート"></a>
+  <a href="docs/releases/ja/0.18.9.md"><img src="docs/assets/readme/card-notes.svg" width="360" height="128" alt="0.18.9 リリースノート"></a>
 </p>

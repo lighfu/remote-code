@@ -19,7 +19,7 @@
 <h2><img src="docs/assets/readme/en/heading-download.svg" width="360" height="66" alt="Download"></h2>
 
 <p align="center">
-  <a href="https://github.com/lighfu/remote-code/releases/download/v0.18.8/remote-code-v0.18.8-win32-x64.zip"><img src="docs/assets/readme/en/download-windows.svg" width="400" height="180" alt="Get ZIP for Windows x64 (0.18.8)"></a>
+  <a href="https://github.com/lighfu/remote-code/releases/download/v0.18.9/remote-code-v0.18.9-win32-x64.zip"><img src="docs/assets/readme/en/download-windows.svg" width="400" height="180" alt="Get ZIP for Windows x64 (0.18.9)"></a>
 </p>
 
 Windows packages are available on [GitHub Releases](https://github.com/lighfu/remote-code/releases).
@@ -94,5 +94,5 @@ The APK is generated at `android/app/build/outputs/apk/release/app-release.apk`.
 <h2><img src="docs/assets/readme/en/heading-docs.svg" width="360" height="66" alt="Docs"></h2>
 
 <p>
-  <a href="docs/releases/0.18.8.md"><img src="docs/assets/readme/en/card-notes.svg" width="360" height="128" alt="0.18.8 Release Notes"></a>
+  <a href="docs/releases/0.18.9.md"><img src="docs/assets/readme/en/card-notes.svg" width="360" height="128" alt="0.18.9 Release Notes"></a>
 </p>
