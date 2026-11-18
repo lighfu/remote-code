@@ -68,6 +68,7 @@ data class DesktopPreferences(
     val fixedJpegQuality: Boolean = false,
     val jpegQuality: Int = defaultJpegQuality,
     val pngCompression: DesktopCompression.Png? = null,
+    val audio: Boolean = false,
 ) {
     fun compressionFor(codec: String, supported: Boolean): DesktopCompression? = when {
         !supported -> null
@@ -151,6 +152,7 @@ class SettingsStore(private val context: Context) {
         val desktopPointerSpeed = floatPreferencesKey("desktop_pointer_speed")
         val desktopControl = booleanPreferencesKey("desktop_control")
         val desktopClipboard = booleanPreferencesKey("desktop_clipboard")
+        val desktopAudio = booleanPreferencesKey("desktop_audio")
     }
 
     val settings: Flow<AppSettings> = context.dataStore.data.map { p ->
@@ -193,6 +195,7 @@ class SettingsStore(private val context: Context) {
                 pointerSpeed = p[Keys.desktopPointerSpeed]?.takeIf { it in DesktopPreferences.pointerSpeeds } ?: 1f,
                 control = p[Keys.desktopControl] ?: true,
                 clipboard = p[Keys.desktopClipboard] ?: false,
+                audio = p[Keys.desktopAudio] ?: false,
             ),
             footerDisplay = ChatFooterDisplay(
                 context = p[Keys.footerContext] ?: true,
@@ -219,7 +222,10 @@ class SettingsStore(private val context: Context) {
 
     suspend fun saveServer(cfg: ServerConfig?) {
         context.dataStore.edit {
-            if (cfg?.token != it[Keys.token]) it.remove(Keys.desktopClipboard)
+            if (cfg?.token != it[Keys.token]) {
+                it.remove(Keys.desktopClipboard)
+                it.remove(Keys.desktopAudio)
+            }
             if (cfg == null) {
                 it.remove(Keys.url); it.remove(Keys.token); it.remove(Keys.name)
                 it.remove(Keys.accessId); it.remove(Keys.accessSecret); it.remove(Keys.publicUrl)
@@ -311,7 +317,10 @@ class SettingsStore(private val context: Context) {
             it[Keys.desktopTouchpad] = prefs.touchpad
             it[Keys.desktopPointerSpeed] = prefs.pointerSpeed
             it[Keys.desktopControl] = prefs.control
-            if (pairedToken != null && it[Keys.token] == pairedToken) it[Keys.desktopClipboard] = prefs.clipboard
+            if (pairedToken != null && it[Keys.token] == pairedToken) {
+                it[Keys.desktopClipboard] = prefs.clipboard
+                it[Keys.desktopAudio] = prefs.audio
+            }
         }
     }
 

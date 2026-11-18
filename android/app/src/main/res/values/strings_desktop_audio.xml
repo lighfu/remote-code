@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="desktop_audio">音声</string>
+    <string name="desktop_audio_play">PC の再生音を聞く</string>
+    <string name="desktop_audio_hint">リモートデスクトップを開いている間、PC の既定の出力デバイスで再生される音をこの端末で聞けます。</string>
+    <string name="desktop_audio_error">PC の音声を再生できません。PC の出力デバイスと接続を確認してください。</string>
+    <string name="desktop_audio_http_error">PC の音声を受信できません（HTTP %1$d）。</string>
+    <string name="desktop_audio_focus">ほかのアプリが音声を使用しているため、再生を一時停止しています。</string>
+</resources>

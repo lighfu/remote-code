@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="desktop_audio">Audio</string>
+    <string name="desktop_audio_error">Unable to play PC audio. Check the PC\'s output device and connection.</string>
+    <string name="desktop_audio_focus">Playback is paused because another app is using audio.</string>
+    <string name="desktop_audio_hint">While remote desktop is open, you can hear audio played on the PC\'s default output device on this device.</string>
+    <string name="desktop_audio_http_error">Cannot receive PC audio (HTTP %1$d).</string>
+    <string name="desktop_audio_play">Play PC audio</string>
+</resources>

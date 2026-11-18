@@ -48,6 +48,7 @@ internal data class DesktopDisplays(
     val streamBitrate: Boolean = false,
     val layout: String? = null,
     val compressionControls: Boolean = false,
+    val audio: Boolean = false,
 )
 
 internal class DesktopStreamUnsupported : IOException()
@@ -146,6 +147,38 @@ internal class DesktopApi(client: OkHttpClient, private val strings: AppStringRe
         }
 
     suspend fun displays(server: ServerConfig): List<DesktopDisplay> = displayInfo(server).displays
+
+    fun audio(server: ServerConfig): Flow<ByteArray> = callbackFlow {
+        checkTarget(server)
+        val call = streamHttp.newCall(request(server, "audio").build())
+        call.enqueue(object : Callback {
+            override fun onFailure(call: Call, e: IOException) { close(e) }
+
+            override fun onResponse(call: Call, response: Response) {
+                try {
+                    response.use {
+                        if (!it.isSuccessful) throw DesktopStreamHttpError(it.code)
+                        val type = it.body.contentType()
+                        if (type?.type != "audio" || type.subtype != "x-raw" ||
+                            type.parameter("format") != "S16LE" || type.parameter("rate") != "48000" ||
+                            type.parameter("channels") != "2") throw DesktopStreamUnsupported()
+                        val source = it.body.source()
+                        while (!call.isCanceled()) {
+                            // The final chunk can be shorter than 20 ms but must contain whole stereo frames.
+                            val size = if (source.request(3840)) 3840L else source.buffer.size
+                            if (size == 0L) break
+                            if (size % 4 != 0L) throw IOException("Incomplete stereo PCM frame")
+                            val pcm = source.readByteArray(size)
+                            checkTarget(server)
+                            if (trySendBlocking(pcm).isClosed) break
+                        }
+                    }
+                    close()
+                } catch (e: Exception) { close(e) }
+            }
+        })
+        awaitClose { call.cancel() }
+    }.buffer(1)
 
     private fun frameRequest(server: ServerConfig, display: String, resolution: DesktopResolution, capture: String,
                              codec: String, separateCursor: Boolean, fps: Int? = null, regions: Boolean = false,

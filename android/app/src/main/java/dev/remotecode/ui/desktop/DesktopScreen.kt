@@ -364,6 +364,7 @@ internal fun DesktopScreen(onBack: () -> Unit) {
     }
 
     DesktopSystemBars(full && active)
+    val audioError = desktopAudioPlayback(desktop, target, prefs.audio && capabilities?.audio == true && active)
     DesktopClipboardSync(api = desktop, target = target, enabled = prefs.clipboard && capabilities?.clipboard == true,
         active = active, onError = { clipboardError = it })
     val selected = displays.firstOrNull { it.id == display }
@@ -432,6 +433,7 @@ internal fun DesktopScreen(onBack: () -> Unit) {
             }
             inputError?.let { message -> Text(message, modifier = Modifier.padding(horizontal = 12.dp), color = MaterialTheme.colorScheme.error) }
             clipboardError?.let { message -> Text(message, modifier = Modifier.padding(horizontal = 12.dp), color = MaterialTheme.colorScheme.error) }
+            audioError?.let { message -> Text(message, modifier = Modifier.padding(horizontal = 12.dp), color = MaterialTheme.colorScheme.error) }
             if (!full) Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
                 IconButton(enabled = canControl, onClick = { scroll(3) }) {
                     Icon(Icons.Rounded.KeyboardArrowUp, stringResource(R.string.desktop_scroll_up))
@@ -472,6 +474,7 @@ internal fun DesktopScreen(onBack: () -> Unit) {
             OptionAction(R.string.desktop_scroll_up, Icons.Rounded.KeyboardArrowUp, canControl) { scroll(3); options = false }
             OptionAction(R.string.desktop_scroll_down, Icons.Rounded.KeyboardArrowDown, canControl) { scroll(-3); options = false }
         }
+        DesktopAudioOptions(prefs.audio, capabilities?.audio == true, audioError) { updatePreferences(prefs.copy(audio = it)) }
         DesktopVideoOptions(prefs, ::updatePreferences, frame?.image?.image?.width, frame?.image?.image?.height, measuredFps,
             captures, capture, frame?.image?.captureMethod, codecs, codec, resolution, supportsNative, supportsBitrate, autoKbps,
             capabilities?.compressionControls)

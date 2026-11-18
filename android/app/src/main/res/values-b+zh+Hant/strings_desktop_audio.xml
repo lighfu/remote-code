@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="desktop_audio">音訊</string>
+    <string name="desktop_audio_error">無法播放電腦音訊。請檢查電腦的輸出裝置與連線。</string>
+    <string name="desktop_audio_focus">其他應用程式正在使用音訊，已暫停播放。</string>
+    <string name="desktop_audio_hint">開啟遠端桌面時，可在此裝置上收聽電腦預設輸出裝置播放的音訊。</string>
+    <string name="desktop_audio_http_error">無法接收電腦音訊（HTTP %1$d）。</string>
+    <string name="desktop_audio_play">播放電腦音訊</string>
+</resources>

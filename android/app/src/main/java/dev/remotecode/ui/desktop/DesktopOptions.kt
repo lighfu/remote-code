@@ -6,6 +6,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.rounded.VolumeUp
 import androidx.compose.material.icons.rounded.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -120,6 +121,15 @@ internal fun DesktopInputOptions(
         Detail(stringResource(R.string.desktop_clipboard_hint))
         clipboardError?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error) }
         if (knownCapabilities && !supportsTouchpad) Detail(stringResource(R.string.desktop_upgrade_options))
+    }
+}
+
+@Composable
+internal fun DesktopAudioOptions(enabled: Boolean, supported: Boolean, error: String?, change: (Boolean) -> Unit) {
+    OptionGroup(R.string.desktop_audio, Icons.AutoMirrored.Rounded.VolumeUp) {
+        OptionSwitch(R.string.desktop_audio_play, Icons.Rounded.Speaker, enabled && supported, supported, change)
+        Detail(stringResource(if (supported) R.string.desktop_audio_hint else R.string.desktop_upgrade_options))
+        error?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error) }
     }
 }
 
