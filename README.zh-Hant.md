@@ -94,5 +94,5 @@ APK 會產生於 `android/app/build/outputs/apk/release/app-release.apk`。設�
 <h2><img src="docs/assets/readme/zh-Hant/heading-docs.svg" width="360" height="66" alt="文件"></h2>
 
 <p>
-  <a href="docs/releases/0.18.9.md"><img src="docs/assets/readme/zh-Hant/card-notes.svg" width="360" height="128" alt="0.18.9 版本說明（英文）"></a>
+  <a href="docs/releases/zh-Hant/0.18.9.md"><img src="docs/assets/readme/zh-Hant/card-notes.svg" width="360" height="128" alt="0.18.9 版本說明"></a>
 </p>

@@ -17,13 +17,14 @@ LOCALES = {
     "README.md": ("en", "", "ZIP · Node.js bundled", "Go · Portable ZIP"),
     "README.ja.md": ("", "ja", "ZIP · Node.js 同梱", "Go · ポータブル ZIP"),
     "README.zh-CN.md": ("zh-CN", "zh-CN", "ZIP · 内置 Node.js", "Go · 便携版 ZIP"),
-    "README.zh-Hant.md": ("zh-Hant", "", "ZIP · 內含 Node.js", "Go · 可攜式 ZIP"),
+    "README.zh-Hant.md": ("zh-Hant", "zh-Hant", "ZIP · 內含 Node.js", "Go · 可攜式 ZIP"),
     "README.ko.md": ("ko", "ko", "ZIP · Node.js 포함", "Go · 포터블 ZIP"),
 }
 NOTE_LOCALES = {
     "": ("English", "The Windows x64 package is `{archive_name}`."),
     "ja": ("日本語", "Windows x64 用の配布ファイルは `{archive_name}` です。"),
     "zh-CN": ("简体中文", "Windows x64 安装包为 `{archive_name}`。"),
+    "zh-Hant": ("繁體中文", "Windows x64 安裝套件為 `{archive_name}`。"),
     "ko": ("한국어", "Windows x64 배포 파일은 `{archive_name}`입니다."),
 }
 
@@ -84,6 +85,13 @@ def note_links(repository_url: str, version: str) -> str:
     return " · ".join(links)
 
 
+def sync_note_links(text: str, repository_url: str, version: str, source: Path) -> str:
+    result, count = re.subn(r"(?m)^\[English\]\([^\r\n]+", lambda _: note_links(repository_url, version), text)
+    if count != 1:
+        raise ValueError(f"Expected one release-note language selector in {source}, found {count}.")
+    return result
+
+
 def generate(version: str, archive_name: str, href: str, repository_url: str) -> dict[Path, bytes]:
     files = {}
     for name, (locale, note_locale, legacy_subtitle, subtitle) in LOCALES.items():
@@ -106,7 +114,8 @@ def generate(version: str, archive_name: str, href: str, repository_url: str) ->
     for locale, (_, summary) in NOTE_LOCALES.items():
         note = Path("docs/releases") / locale / f"{version}.md"
         if (ROOT / note).exists():
-            files[note] = (ROOT / note).read_bytes()
+            text = (ROOT / note).read_bytes().decode("utf-8")
+            files[note] = sync_note_links(text, repository_url, version, note).encode("utf-8")
         else:
             text = f"# {version}\n\n{note_links(repository_url, version)}\n\n{summary.format(archive_name=archive_name)}\n"
             files[note] = text.encode("utf-8")
