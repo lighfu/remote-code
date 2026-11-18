@@ -54,6 +54,7 @@ class Repository(context: Context, private val scope: CoroutineScope) {
     private val reads = SharedRequests<ReadKey>(scope)
     private val timelineSync = TimelineSync()
     private val client = OkHttpClient.Builder()
+        .dns(networkScopedDns(context))
         .connectTimeout(8, TimeUnit.SECONDS)
         .readTimeout(60, TimeUnit.SECONDS)
         .pingInterval(20, TimeUnit.SECONDS)
