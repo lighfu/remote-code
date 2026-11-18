@@ -157,37 +157,41 @@ type Record struct {
 	Entries []M `json:"entries"`
 }
 type App struct {
-	DataDir        string
-	Config         Config
-	Store          *Store
-	Providers      map[string]Provider
-	InstanceID     string
-	StartedAt      int64
-	mu             sync.Mutex
-	usage          M
-	usageLoading   map[string]bool
-	usageAt        map[string]time.Time
-	usageSeenAt    map[string]time.Time
-	folderHistory  map[string][]folderUse
-	folderReadAt   time.Time
-	folderReading  bool
-	btwMu          sync.Mutex
-	btw            map[string][]M
-	btwCancel      map[string]context.CancelFunc
-	closed         chan struct{}
-	closeOnce      sync.Once
-	closers        []func()
-	contextMu      sync.Mutex
-	contexts       map[string]contextCacheValue
-	contextFlights map[contextCacheKey]chan struct{}
-	fx             fxRates
-	analyticsBusy  sync.Map
-	requestMu      sync.Mutex
-	requests       sync.WaitGroup
-	draining       bool
-	taskCtx        context.Context
-	taskCancel     context.CancelFunc
-	tasks          sync.WaitGroup
+	DataDir           string
+	Config            Config
+	Store             *Store
+	Providers         map[string]Provider
+	InstanceID        string
+	StartedAt         int64
+	mu                sync.Mutex
+	usage             M
+	usageLoading      map[string]bool
+	usageAt           map[string]time.Time
+	usageSeenAt       map[string]time.Time
+	folderHistory     map[string][]folderUse
+	folderReadAt      time.Time
+	folderReading     bool
+	btwMu             sync.Mutex
+	btw               map[string][]M
+	btwCancel         map[string]context.CancelFunc
+	closed            chan struct{}
+	closeOnce         sync.Once
+	closers           []func()
+	contextMu         sync.Mutex
+	contexts          map[string]contextCacheValue
+	contextFlights    map[contextCacheKey]chan struct{}
+	fx                fxRates
+	analyticsBusy     sync.Map
+	requestMu         sync.Mutex
+	requests          sync.WaitGroup
+	draining          bool
+	taskCtx           context.Context
+	taskCancel        context.CancelFunc
+	tasks             sync.WaitGroup
+	tunnel            configuredTunnelState
+	dependencies      dependencyInstaller
+	dependencyRun     func(context.Context, string, func(string)) error
+	dependencyResolve func(string) (string, error)
 }
 
 func NewApp(dataDir string) (*App, error) {

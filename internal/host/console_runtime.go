@@ -146,6 +146,8 @@ func (c *consoleRuntime) snapshot() ConsoleSnapshot {
 		set.mu.Unlock()
 	}
 	snapshot := ConsoleSnapshot{Version: Version, Host: host, URL: target, PairLink: platformPair(a, target), Port: a.Config.Port, Providers: providers, Sessions: len(rows), Running: running, Waiting: waiting, Terminals: terminals, Logs: logs}
+	snapshot.InstallerSupported = runtime.GOOS == "windows"
+	snapshot.Dependencies = c.app.dependencySnapshot()
 	if info := platformAPK(a); info != nil {
 		snapshot.APKURL = strings.TrimRight(target, "/") + platformDownloadPath(a.Config.Token)
 		snapshot.APKVersion = S(info, "versionName")

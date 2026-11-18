@@ -18,17 +18,28 @@ type ConsoleSnapshot struct {
 	Providers                                        map[string]bool
 	Sessions, Running, Waiting, Terminals            int
 	Logs                                             []string
+	Dependencies                                     []ConsoleDependency
+	InstallerSupported                               bool
+}
+
+type ConsoleDependency struct {
+	Target, Name, Path, Status, Detail string
+	Installed                          bool
 }
 
 type ConsoleAction string
 
 const (
-	ConsoleRefresh ConsoleAction = "refresh"
-	ConsoleOpen    ConsoleAction = "open"
-	ConsoleCopy    ConsoleAction = "copy"
-	ConsoleCopyAPK ConsoleAction = "copy-apk"
-	ConsoleRestart ConsoleAction = "restart"
-	ConsoleStop    ConsoleAction = "stop"
+	ConsoleRefresh            ConsoleAction = "refresh"
+	ConsoleOpen               ConsoleAction = "open"
+	ConsoleCopy               ConsoleAction = "copy"
+	ConsoleCopyAPK            ConsoleAction = "copy-apk"
+	ConsoleRestart            ConsoleAction = "restart"
+	ConsoleStop               ConsoleAction = "stop"
+	ConsoleInstallClaude      ConsoleAction = "install-claude"
+	ConsoleInstallCodex       ConsoleAction = "install-codex"
+	ConsoleInstallAntigravity ConsoleAction = "install-antigravity"
+	ConsoleInstallCloudflared ConsoleAction = "install-cloudflared"
 )
 
 var consoleBase = tcell.StyleDefault.Background(tcell.NewHexColor(0x101a1c)).Foreground(tcell.NewHexColor(0xe0ece7))
@@ -49,16 +60,18 @@ type consoleResizeAttempt struct {
 }
 
 type consoleModel struct {
-	tab, focus, scroll int
-	confirm            ConsoleAction
-	confirmYes, busy   bool
-	message            string
-	buttons            []consoleHitRect
-	mouseDown          bool
-	qrValue            string
-	qr                 [][]bool
-	resizeWindow       func(columns, rows, neededColumns, neededRows int) bool
-	lastResize         consoleResizeAttempt
+	tab, focus, scroll                  int
+	confirm                             ConsoleAction
+	confirmYes, busy                    bool
+	message                             string
+	buttons                             []consoleHitRect
+	mouseDown                           bool
+	qrValue                             string
+	qr                                  [][]bool
+	resizeWindow                        func(columns, rows, neededColumns, neededRows int) bool
+	lastResize                          consoleResizeAttempt
+	installEnabled                      map[int]bool
+	setupFocus, setupWidth, setupHeight int
 }
 type consoleResult struct {
 	action ConsoleAction
@@ -100,10 +113,17 @@ func runConsoleScreen(ctx context.Context, screen tcell.Screen, snapshot func() 
 	ticker := time.NewTicker(time.Second)
 	defer ticker.Stop()
 	var actionCancel context.CancelFunc
+	var actionDone <-chan struct{}
 	var queued ConsoleAction
 	defer func() {
 		if actionCancel != nil {
 			actionCancel()
+		}
+		if actionDone != nil {
+			select {
+			case <-actionDone:
+			case <-time.After(10 * time.Second):
+			}
 		}
 	}()
 	start := func(a ConsoleAction) {
@@ -121,7 +141,10 @@ func runConsoleScreen(ctx context.Context, screen tcell.Screen, snapshot func() 
 		model.message = "Working..."
 		actionContext, cancel := context.WithCancel(ctx)
 		actionCancel = cancel
+		done := make(chan struct{})
+		actionDone = done
 		go func() {
+			defer close(done)
 			defer cancel()
 			var err error
 			defer func() {
@@ -194,6 +217,9 @@ func consoleActionDone(action ConsoleAction) string {
 	case ConsoleStop:
 		return "Stopping server..."
 	}
+	if target := consoleInstallTarget(action); target != "" {
+		return "Installed " + target + "."
+	}
 	return "Done."
 }
 func (m *consoleModel) activate(id int) ConsoleAction {
@@ -210,18 +236,30 @@ func (m *consoleModel) activate(id int) ConsoleAction {
 		}
 		return ""
 	}
-	if m.busy && id != 8 {
-		return ""
-	}
-	if id < 4 {
-		if m.tab != id {
-			m.message = ""
+	if id >= 0 && id < 4 || id == 9 {
+		tab := id
+		if id == 9 {
+			tab = 4
+		}
+		if m.tab != tab {
+			if !m.busy {
+				m.message = ""
+			}
 			m.lastResize = consoleResizeAttempt{}
 		}
-		m.tab = id
+		m.tab = tab
 		m.focus = id
 		m.scroll = 0
 		return ""
+	}
+	if m.busy && id != 8 {
+		return ""
+	}
+	if id >= 12 && id <= 15 {
+		if m.tab != 4 || !m.installEnabled[id] {
+			return ""
+		}
+		return []ConsoleAction{ConsoleInstallClaude, ConsoleInstallCodex, ConsoleInstallAntigravity, ConsoleInstallCloudflared}[id-12]
 	}
 	if id == 7 || id == 8 {
 		if id == 7 {
@@ -245,6 +283,26 @@ func (m *consoleModel) activate(id int) ConsoleAction {
 	}
 	return ""
 }
+
+func (m *consoleModel) moveFocus(delta int) {
+	order := []int{0, 1, 2, 3, 9}
+	if m.tab == 4 {
+		for id := 12; id <= 15; id++ {
+			if m.installEnabled[id] {
+				order = append(order, id)
+			}
+		}
+	}
+	order = append(order, 4, 5, 6, 7, 8)
+	for i, id := range order {
+		if id == m.focus {
+			m.focus = order[(i+delta+len(order))%len(order)]
+			return
+		}
+	}
+	m.focus = order[0]
+}
+
 func (m *consoleModel) event(event tcell.Event) ConsoleAction {
 	switch ev := event.(type) {
 	case *tcell.EventKey:
@@ -270,32 +328,43 @@ func (m *consoleModel) event(event tcell.Event) ConsoleAction {
 			}
 			return ""
 		}
-		if m.busy && ev.Key() != tcell.KeyCtrlC && !(ev.Key() == tcell.KeyRune && unicode.ToLower(ev.Rune()) == 'q') {
-			return ""
-		}
 		switch ev.Key() {
 		case tcell.KeyCtrlC:
 			return m.activate(8)
 		case tcell.KeyTab, tcell.KeyRight, tcell.KeyDown:
-			m.focus = (m.focus + 1) % 9
+			m.moveFocus(1)
 		case tcell.KeyBacktab, tcell.KeyLeft, tcell.KeyUp:
-			m.focus = (m.focus + 8) % 9
+			m.moveFocus(-1)
 		case tcell.KeyEnter:
 			return m.activate(m.focus)
 		case tcell.KeyF5:
 			return m.activate(4)
 		case tcell.KeyPgUp:
-			m.tab = 3
-			m.scroll += 5
+			if m.tab == 4 {
+				m.scroll = max(0, m.scroll-5)
+			} else {
+				m.tab = 3
+				m.scroll += 5
+			}
 		case tcell.KeyPgDn:
-			m.tab = 3
-			m.scroll = max(0, m.scroll-5)
+			if m.tab == 4 {
+				m.scroll += 5
+			} else {
+				m.tab = 3
+				m.scroll = max(0, m.scroll-5)
+			}
 		case tcell.KeyHome:
 			if m.tab == 3 {
 				m.scroll = 1000000
+			} else if m.tab == 4 {
+				m.scroll = 0
 			}
 		case tcell.KeyEnd:
-			m.scroll = 0
+			if m.tab == 4 {
+				m.scroll = 1000000
+			} else {
+				m.scroll = 0
+			}
 		case tcell.KeyEsc:
 			m.tab = 0
 			m.focus = 0
@@ -303,6 +372,8 @@ func (m *consoleModel) event(event tcell.Event) ConsoleAction {
 			switch unicode.ToLower(ev.Rune()) {
 			case '1', '2', '3', '4':
 				return m.activate(int(ev.Rune() - '1'))
+			case '5':
+				return m.activate(9)
 			case 's':
 				return m.activate(0)
 			case 'p':
@@ -327,12 +398,20 @@ func (m *consoleModel) event(event tcell.Event) ConsoleAction {
 		pressed := down && !m.mouseDown
 		m.mouseDown = down
 		if buttons&tcell.WheelUp != 0 {
-			m.tab = 3
-			m.scroll += 3
+			if m.tab == 4 {
+				m.scroll = max(0, m.scroll-3)
+			} else {
+				m.tab = 3
+				m.scroll += 3
+			}
 		}
 		if buttons&tcell.WheelDown != 0 {
-			m.tab = 3
-			m.scroll = max(0, m.scroll-3)
+			if m.tab == 4 {
+				m.scroll += 3
+			} else {
+				m.tab = 3
+				m.scroll = max(0, m.scroll-3)
+			}
 		}
 		if pressed {
 			x, y := ev.Position()
@@ -432,6 +511,9 @@ func (m *consoleModel) button(screen tcell.Screen, id, x, y int, label string, s
 	if selected {
 		style = consoleSelected
 	}
+	if id >= 12 && id <= 15 && (!m.installEnabled[id] || m.busy) {
+		style = consoleMuted
+	}
 	width := runewidth.StringWidth(label) + 4
 	consoleFill(screen, x, y, width, 1, style)
 	consoleText(screen, x+2, y, width-4, label, style)
@@ -453,19 +535,23 @@ func (m *consoleModel) draw(screen tcell.Screen, s ConsoleSnapshot) {
 		consoleText(screen, 2, 2, w-4, fmt.Sprintf("RUNNING  %s  :%d", s.Host, s.Port), consoleMuted)
 		consoleText(screen, 2, 3, w-4, fmt.Sprintf("Sessions %d   Running %d   Waiting %d   Terminals %d", s.Sessions, s.Running, s.Waiting, s.Terminals), consoleBase)
 	}
-	labels := []string{"1 Status", "2 Pair QR", "3 App QR", "4 Logs"}
+	labels := []string{"1 Status", "2 Pair QR", "3 App QR", "4 Logs", "5 Setup"}
 	x := 2
 	y := 5
 	if compactQR {
 		y = 0
 	}
-	for id, label := range labels {
+	for tab, label := range labels {
+		id := tab
+		if tab == 4 {
+			id = 9
+		}
 		bw := runewidth.StringWidth(label) + 4
 		if x+bw > w-2 {
 			x = 2
 			y++
 		}
-		m.button(screen, id, x, y, label, m.tab == id || m.focus == id)
+		m.button(screen, id, x, y, label, m.tab == tab || m.focus == id)
 		x += bw + 1
 	}
 	contentY := y + 2
@@ -509,7 +595,7 @@ func (m *consoleModel) draw(screen tcell.Screen, s ConsoleSnapshot) {
 			}
 			lines = append(lines, fmt.Sprintf("  %-12s %s", name, status))
 		}
-		lines = append(lines, "", "Use Pair QR to connect Android.", "Use App QR to install or update the Android app.")
+		lines = append(lines, "", "Use Pair QR to connect Android.", "Use App QR to install or update the Android app.", "Use Setup to install missing agents or Cloudflare Tunnel.")
 		for i, line := range lines {
 			if i >= contentH {
 				break
@@ -545,6 +631,8 @@ func (m *consoleModel) draw(screen tcell.Screen, s ConsoleSnapshot) {
 				consoleText(screen, 2, contentY+1+i, w-4, line, consoleMuted)
 			}
 		}
+	case 4:
+		m.drawSetup(screen, s, contentY, contentH)
 	}
 	if m.message != "" {
 		style := consoleAccent
@@ -564,6 +652,112 @@ func (m *consoleModel) draw(screen tcell.Screen, s ConsoleSnapshot) {
 	}
 	screen.Show()
 }
+
+func (m *consoleModel) drawSetup(screen tcell.Screen, s ConsoleSnapshot, y, height int) {
+	w, _ := screen.Size()
+	width := max(1, w-4)
+	type setupRow struct {
+		text, label string
+		style       tcell.Style
+		id          int
+	}
+	rows := []setupRow{{text: "Install missing software  ·  PgUp / PgDn: scroll", style: consoleAccent, id: -1}}
+	intro := "Uses winget when available; otherwise uses the provider installer."
+	if !s.InstallerSupported {
+		intro = "Automatic installation is available on Windows only."
+	}
+	for _, line := range consoleWrapped(intro, width) {
+		rows = append(rows, setupRow{text: line, style: consoleMuted, id: -1})
+	}
+	dependencies := map[string]ConsoleDependency{}
+	anyInstalling := false
+	for _, d := range s.Dependencies {
+		dependencies[d.Target] = d
+		anyInstalling = anyInstalling || strings.HasPrefix(strings.ToLower(d.Status), "installing")
+	}
+	m.installEnabled = map[int]bool{}
+	for i, target := range []string{"claude", "codex", "antigravity", "cloudflared"} {
+		d := dependencies[target]
+		if d.Name == "" {
+			d.Name = []string{"Claude Code", "Codex", "Antigravity", "Cloudflare Tunnel"}[i]
+		}
+		if d.Status == "" {
+			d.Installed = d.Installed || s.Providers[target]
+			d.Status = "Not installed"
+			if d.Installed {
+				d.Status = "Installed"
+			}
+		}
+		id := 12 + i
+		installing := strings.HasPrefix(strings.ToLower(d.Status), "installing")
+		failed := strings.EqualFold(d.Status, "Failed")
+		m.installEnabled[id] = s.InstallerSupported && (!d.Installed || failed) && !anyInstalling
+		label := "Install " + d.Name
+		if failed {
+			label = "Retry " + d.Name
+		} else if d.Installed {
+			label = "Installed"
+		} else if installing {
+			label = "Installing..."
+		}
+		style := consoleBase
+		if failed {
+			style = consoleDanger
+		}
+		row := setupRow{text: d.Name + " · " + d.Status, style: style, id: -1}
+		// Keep status and action on one row when each remains readable.
+		if width >= runewidth.StringWidth(row.text)+runewidth.StringWidth(label)+6 {
+			row.id, row.label = id, label
+			rows = append(rows, row)
+		} else {
+			rows = append(rows, row, setupRow{id: id, label: label, style: consoleBase})
+		}
+		detail := d.Detail
+		if d.Path != "" {
+			if detail != "" {
+				detail += " · "
+			}
+			detail += d.Path
+		}
+		for _, line := range consoleWrapped(detail, width) {
+			rows = append(rows, setupRow{text: line, style: consoleMuted, id: -1})
+		}
+		if i < 3 {
+			rows = append(rows, setupRow{id: -1})
+		}
+	}
+	m.scroll = min(max(0, m.scroll), max(0, len(rows)-height))
+	// Keyboard focus follows an install button even in a small terminal.
+	if m.focus >= 12 && m.focus <= 15 && height > 0 && (m.focus != m.setupFocus || width != m.setupWidth || height != m.setupHeight) {
+		for index, row := range rows {
+			if row.id == m.focus {
+				if index < m.scroll {
+					m.scroll = index
+				} else if index >= m.scroll+height {
+					m.scroll = index - height + 1
+				}
+				break
+			}
+		}
+	}
+	m.setupFocus, m.setupWidth, m.setupHeight = m.focus, width, height
+	for index := m.scroll; index < min(len(rows), m.scroll+height); index++ {
+		row := rows[index]
+		lineY := y + index - m.scroll
+		textWidth := width
+		if row.id >= 0 {
+			buttonWidth := runewidth.StringWidth(row.label) + 4
+			x := 2
+			if row.text != "" {
+				x = max(2, w-2-buttonWidth)
+				textWidth = max(0, x-3)
+			}
+			m.button(screen, row.id, x, lineY, row.label, m.focus == row.id)
+		}
+		consoleText(screen, 2, lineY, textWidth, row.text, row.style)
+	}
+}
+
 func (m *consoleModel) drawQR(screen tcell.Screen, value, caption string, y, height, actionRows int, showLink bool) {
 	w, h := screen.Size()
 	if height > 0 {

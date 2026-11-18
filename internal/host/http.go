@@ -68,6 +68,20 @@ func (a *App) do(ctx context.Context, action string, rec *Record, body M) (any, 
 }
 func (a *App) Handler() http.Handler {
 	mux := http.NewServeMux()
+	route(mux, "GET /api/dependencies", func(r *http.Request, b M) (any, error) { return a.dependencyState(), nil })
+	mux.HandleFunc("POST /api/dependencies/{target}/install", func(w http.ResponseWriter, r *http.Request) {
+		if r.ContentLength != 0 {
+			if _, err := readJSON(w, r); err != nil {
+				apiError(w, err)
+				return
+			}
+		}
+		if err := a.startDependencyInstall(r.PathValue("target")); err != nil {
+			apiError(w, err)
+			return
+		}
+		writeJSON(w, http.StatusAccepted, a.dependencyState())
+	})
 	route(mux, "GET /api/health", func(r *http.Request, b M) (any, error) { return M{"ok": true, "name": "remote-code"}, nil })
 	route(mux, "GET /api/meta", func(r *http.Request, b M) (any, error) {
 		home, _ := os.UserHomeDir()

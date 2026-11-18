@@ -56,6 +56,9 @@ try {
     Copy-Item -LiteralPath $apkPath -Destination (Join-Path $android $app.apk.name)
     Copy-Item -LiteralPath $manifestPath -Destination (Join-Path $android 'remote-code-android.json')
     Copy-Item -LiteralPath (Join-Path $projectRoot 'start.cmd') -Destination (Join-Path $payload 'start.cmd')
+    $installerScripts = Join-Path $application 'scripts'
+    [IO.Directory]::CreateDirectory($installerScripts) | Out-Null
+    Copy-Item -LiteralPath (Join-Path $projectRoot 'scripts/install-dependencies.ps1') -Destination $installerScripts
     @{ schemaVersion=2; repository='lighfu/remote-code'; launcherProtocol=3; runtime='native-go' } | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $payload 'portable.json') -Encoding utf8NoBOM
     @{ schemaVersion=2; version=$Version; highestVersion=$Version; previousVersion=$null; failedVersions=@() } | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $payload 'current.json') -Encoding utf8NoBOM
     @"
@@ -63,11 +66,13 @@ Remote Code $Version - Windows x64
 
 1. Extract into a new folder.
 2. Run start.cmd.
-3. Install the Android APK from its QR, then scan the connection QR in the app.
+3. Open 5 Setup to install the agents you use and cloudflared for Quick Tunnel.
+4. Sign into each installed agent on this PC.
+5. Install the Android APK from its QR, then scan the connection QR in the app.
 
 Node.js, Java and Go are not required on this PC.
-Install and sign into the agents you use: Claude Code, Codex or Antigravity.
-The included native server uses those installations; agent executables are not bundled.
+Setup uses WinGet when available, or each provider's official Windows downloads.
+The installer can also be run manually from releases/$Version/scripts/install-dependencies.ps1.
 Data stays in data/. Keep this folder when updating.
 Server updates are offered at startup and require confirmation. Running servers are never replaced automatically.
 "@ | Set-Content -LiteralPath (Join-Path $payload 'README.txt') -Encoding utf8NoBOM

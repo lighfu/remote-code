@@ -107,6 +107,11 @@ func runServerGeneration(parent context.Context, data string, args []string, gen
 		go func() {
 			defer close(uiDone)
 			err := RunConsole(ctx, console.snapshot, func(actionCtx context.Context, action ConsoleAction) error {
+				if target := consoleInstallTarget(action); target != "" {
+					installCtx, done := context.WithTimeout(actionCtx, 20*time.Minute)
+					defer done()
+					return console.installDependency(installCtx, target)
+				}
 				actionCtx, done := context.WithTimeout(actionCtx, 10*time.Second)
 				defer done()
 				switch action {
@@ -170,9 +175,7 @@ func runServerGeneration(parent context.Context, data string, args []string, gen
 	if a.Config.USBReverse {
 		a.startTask(func() { platformUSB(ctx, a) })
 	}
-	if !platformFlag(args, "--no-tunnel") && (a.Config.QuickTunnel || platformFlag(args, "--tunnel")) {
-		a.startTask(func() { platformTunnel(ctx, a, args) })
-	}
+	a.startConfiguredTunnel(ctx, args)
 	a.startTask(func() { platformAppUpdates(ctx, a) })
 	err = server.Serve(listener)
 	if err != nil && !errors.Is(err, http.ErrServerClosed) {

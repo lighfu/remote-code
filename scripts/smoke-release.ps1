@@ -10,13 +10,18 @@ try {
     Add-Type -AssemblyName System.IO.Compression.FileSystem
     $archive = [IO.Compression.ZipFile]::OpenRead($archives[0].FullName)
     try {
-        $forbidden = @($archive.Entries | Where-Object { $_.FullName -match '(?i)(^|/)(node_modules|runtime)/|(^|/)(node|claude|claudecode)\.exe$|\.(ts|mjs|cjs)$' })
+        $forbidden = @($archive.Entries | Where-Object { $_.FullName -match '(?i)(^|/)(node_modules|runtime)/|(^|/)(node|claude|claudecode|codex|agy|antigravity|cloudflared)\.exe$|\.(ts|mjs|cjs)$' })
         if ($forbidden.Count) { throw 'Distribution contains Node.js, provider binaries or JS/TS sources.' }
     } finally { $archive.Dispose() }
     [IO.Compression.ZipFile]::ExtractToDirectory($archives[0].FullName, $fixture)
     $state = Get-Content -LiteralPath (Join-Path $fixture 'current.json') -Raw | ConvertFrom-Json
     $nativeManifest = Get-Content -LiteralPath (Join-Path $distribution 'remote-code-win32-x64.json') -Raw | ConvertFrom-Json
     $exe = Join-Path $fixture "releases/$($state.version)/remote-code.exe"
+    $installer = Join-Path $fixture "releases/$($state.version)/scripts/install-dependencies.ps1"
+    if (!(Test-Path -LiteralPath $installer -PathType Leaf)) { throw 'Dependency installer is missing from the server archive.' }
+    $scriptErrors = $null
+    [System.Management.Automation.Language.Parser]::ParseFile($installer, [ref]$null, [ref]$scriptErrors) | Out-Null
+    if ($scriptErrors.Count) { throw 'Packaged dependency installer has syntax errors.' }
     if ((Get-FileHash -LiteralPath $exe -Algorithm SHA256).Hash.ToLowerInvariant() -cne $nativeManifest.executable.sha256) { throw 'Native executable digest mismatch.' }
     $env:PATH = Join-Path $env:WINDIR 'System32'
     $help = & (Join-Path $fixture 'remote-code.exe') --help

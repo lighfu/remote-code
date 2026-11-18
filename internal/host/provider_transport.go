@@ -87,6 +87,12 @@ func FindProviderExecutable(name string) (string, error) {
 	if name == "antigravity" {
 		paths = append(paths, filepath.Join(os.Getenv("LOCALAPPDATA"), "agy", "bin", leaf))
 	}
+	if runtime.GOOS == "windows" {
+		paths = append(paths, filepath.Join(os.Getenv("LOCALAPPDATA"), "Microsoft", "WinGet", "Links", leaf), filepath.Join(os.Getenv("LOCALAPPDATA"), "RemoteCode", "dependencies", name, "bin", leaf))
+		if root := os.Getenv("ProgramFiles"); root != "" {
+			paths = append(paths, filepath.Join(root, "WinGet", "Links", leaf))
+		}
+	}
 	if p, err := exec.LookPath(leaf); err == nil {
 		paths = append(paths, p)
 	}

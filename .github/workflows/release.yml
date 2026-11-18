@@ -142,6 +142,9 @@ jobs:
           cache: true
       - run: go test -race ./...
       - run: go vet ./...
+      - name: Test Windows dependency installation methods
+        shell: pwsh
+        run: powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File scripts/test-install-dependencies.ps1
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
         if: env.APK_RELEASE == '' && env.APK_RUN == ''
         with:
@@ -177,7 +180,7 @@ jobs:
           Add-Type -AssemblyName System.IO.Compression.FileSystem
           $zip = [IO.Compression.ZipFile]::OpenRead($archive.FullName)
           try {
-            $forbidden = @($zip.Entries | Where-Object { $_.FullName -match '(?i)(^|/)(node_modules|runtime)/|(^|/)(node|claude|claudecode)\.exe$|\.(ts|mjs|cjs)$' })
+            $forbidden = @($zip.Entries | Where-Object { $_.FullName -match '(?i)(^|/)(node_modules|runtime)/|(^|/)(node|claude|claudecode|codex|agy|antigravity|cloudflared)\.exe$|\.(ts|mjs|cjs)$' })
             if ($forbidden.Count -gt 0) { throw 'Native release contains a runtime or provider binary.' }
             if (@($zip.Entries | Where-Object FullName -CEQ 'remote-code.exe').Count -ne 1) { throw 'Native launcher missing.' }
           } finally { $zip.Dispose() }

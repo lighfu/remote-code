@@ -3,6 +3,7 @@ package host
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -73,7 +74,8 @@ func TestConsoleKeyboardNavigationAndMouseActions(t *testing.T) {
 		t.Fatal(m.tab)
 	}
 	_ = m.event(tcell.NewEventKey(tcell.KeyEsc, 0, 0))
-	for i := 0; i < 6; i++ {
+	// The Setup tab sits after Logs; the existing action IDs stay stable.
+	for i := 0; i < 7; i++ {
 		_ = m.event(tcell.NewEventKey(tcell.KeyTab, 0, 0))
 	}
 	if a := m.event(tcell.NewEventKey(tcell.KeyEnter, 0, 0)); a != ConsoleCopy {
@@ -102,6 +104,199 @@ func TestConsoleKeyboardNavigationAndMouseActions(t *testing.T) {
 	_ = m.event(tcell.NewEventMouse(confirm.x, confirm.y, tcell.ButtonNone, 0))
 	if a := m.event(tcell.NewEventMouse(confirm.x, confirm.y, tcell.Button1, 0)); a != ConsoleStop {
 		t.Fatal(a)
+	}
+}
+
+func consoleSetupSnapshot() ConsoleSnapshot {
+	s := consoleTestSnapshot()
+	s.InstallerSupported = true
+	s.Dependencies = []ConsoleDependency{
+		{Target: "claude", Name: "Claude Code", Installed: true, Status: "Installed", Path: `C:\Tools\claude.exe`},
+		{Target: "codex", Name: "Codex", Status: "Not installed", Detail: "Ready to install."},
+		{Target: "antigravity", Name: "Antigravity", Status: "Failed", Detail: "Package download failed; try again."},
+		{Target: "cloudflared", Name: "Cloudflare Tunnel", Status: "Not installed", Detail: "Downloading with winget."},
+	}
+	return s
+}
+
+func TestConsoleSetupShowsDependencyStateAndDispatchesOnlyEligibleInstalls(t *testing.T) {
+	s := consoleTestScreen(t, 100, 35)
+	m := consoleModel{}
+	m.event(tcell.NewEventKey(tcell.KeyRune, '5', 0))
+	m.draw(s, consoleSetupSnapshot())
+	text := consoleScreenText(s)
+	for _, want := range []string{"5 Setup", "Claude Code", `C:\Tools\claude.exe`, "Install Codex", "Failed", "Package download failed", "Downloading with winget"} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("Setup omitted %q:\n%s", want, text)
+		}
+	}
+	if m.tab != 4 || m.focus != 9 || m.activate(12) != "" {
+		t.Fatal("Setup tab or disabled install eligibility is wrong")
+	}
+	m.event(tcell.NewEventKey(tcell.KeyTab, 0, 0))
+	if m.focus != 13 {
+		t.Fatalf("focus must skip the installed provider, got %d", m.focus)
+	}
+	if a := m.event(tcell.NewEventKey(tcell.KeyEnter, 0, 0)); a != ConsoleInstallCodex {
+		t.Fatalf("Codex install not dispatched: %q", a)
+	}
+	var retry consoleHitRect
+	for _, rect := range m.buttons {
+		if rect.id == 14 {
+			retry = rect
+		}
+	}
+	if retry.w == 0 {
+		t.Fatal("failed dependency has no retry control")
+	}
+	if a := m.event(tcell.NewEventMouse(retry.x+1, retry.y, tcell.Button1, 0)); a != ConsoleInstallAntigravity {
+		t.Fatalf("retry click did not select the correct installer: %q", a)
+	}
+	m.event(tcell.NewEventMouse(retry.x+1, retry.y, tcell.ButtonNone, 0))
+	snapshot := consoleSetupSnapshot()
+	// An executable can exist after a partial install but still fail verification.
+	snapshot.Dependencies[0].Status = "Failed"
+	snapshot.Dependencies[0].Detail = "The executable failed its version check."
+	m.draw(s, snapshot)
+	if a := m.activate(12); a != ConsoleInstallClaude || !strings.Contains(consoleScreenText(s), "Retry Claude Code") {
+		t.Fatal("failed existing executable cannot be repaired", a)
+	}
+	snapshot.InstallerSupported = false
+	m.draw(s, snapshot)
+	if a := m.activate(13); a != "" || !strings.Contains(consoleScreenText(s), "Windows only") {
+		t.Fatal("unsupported installer remained executable", a)
+	}
+}
+
+func TestConsoleSetupPreventsDuplicateInstallWhileAppRequestIsRunning(t *testing.T) {
+	s := consoleTestScreen(t, 100, 35)
+	m := consoleModel{tab: 4, focus: 9}
+	snapshot := consoleSetupSnapshot()
+	snapshot.Dependencies[3].Status = "Installing..."
+	m.draw(s, snapshot)
+	for id := 12; id <= 15; id++ {
+		if action := m.activate(id); action != "" {
+			t.Fatal("App installation allowed duplicate console action", action)
+		}
+	}
+	if !strings.Contains(consoleScreenText(s), "Downloading with winget.") {
+		t.Fatal("App install progress was not visible in console")
+	}
+}
+
+func TestConsoleSetupSmallScreenFollowsInstallFocusAndPreservesExistingActions(t *testing.T) {
+	s := consoleTestScreen(t, 50, 20)
+	m := consoleModel{}
+	m.activate(9)
+	snapshot := consoleSetupSnapshot()
+	snapshot.Dependencies[3].Status = "Not installed"
+	m.draw(s, snapshot)
+	for _, want := range []int{13, 14, 15} {
+		m.event(tcell.NewEventKey(tcell.KeyTab, 0, 0))
+		m.draw(s, snapshot)
+		if m.focus != want {
+			t.Fatalf("wrong install focus: %d, want %d", m.focus, want)
+		}
+		visible := false
+		for _, rect := range m.buttons {
+			if rect.id == want && rect.y >= 0 && rect.y < 18 {
+				visible = true
+			}
+		}
+		if !visible {
+			t.Fatalf("keyboard-focused install %d was clipped", want)
+		}
+	}
+	if m.scroll == 0 {
+		t.Fatal("small Setup view did not scroll to Cloudflare Tunnel")
+	}
+	if a := m.event(tcell.NewEventKey(tcell.KeyEnter, 0, 0)); a != ConsoleInstallCloudflared {
+		t.Fatal(a)
+	}
+	m.event(tcell.NewEventKey(tcell.KeyTab, 0, 0))
+	if m.focus != 4 || m.event(tcell.NewEventKey(tcell.KeyEnter, 0, 0)) != ConsoleRefresh {
+		t.Fatal("Setup changed the existing refresh action")
+	}
+}
+
+func TestConsoleSetupManualScrollDoesNotSnapBackToFocusedButton(t *testing.T) {
+	s := consoleTestScreen(t, 50, 20)
+	m := consoleModel{tab: 4, focus: 9}
+	snapshot := consoleSetupSnapshot()
+	snapshot.Dependencies[1].Detail = strings.Repeat("Installer output with troubleshooting details. ", 12)
+	m.draw(s, snapshot)
+	m.event(tcell.NewEventKey(tcell.KeyTab, 0, 0))
+	m.draw(s, snapshot)
+	if m.focus != 13 {
+		t.Fatal("Codex install button did not get focus")
+	}
+	before := m.scroll
+	m.event(tcell.NewEventKey(tcell.KeyPgDn, 0, 0))
+	m.draw(s, snapshot)
+	if m.scroll <= before {
+		t.Fatalf("manual scroll snapped back to focus: %d -> %d", before, m.scroll)
+	}
+	after := m.scroll
+	m.draw(s, snapshot)
+	if m.scroll != after {
+		t.Fatal("live status refresh moved the manually scrolled view")
+	}
+	m.event(tcell.NewEventKey(tcell.KeyHome, 0, 0))
+	m.draw(s, snapshot)
+	if m.scroll != 0 {
+		t.Fatal("Home could not return to the beginning while an install has focus")
+	}
+}
+
+func TestConsoleSetupRendersAllDependenciesAtCommonDashboardSizes(t *testing.T) {
+	for _, size := range [][2]int{{120, 40}, {80, 25}} {
+		t.Run(fmt.Sprintf("%dx%d", size[0], size[1]), func(t *testing.T) {
+			s := consoleTestScreen(t, size[0], size[1])
+			m := consoleModel{tab: 4, focus: 9}
+			m.draw(s, consoleSetupSnapshot())
+			text := consoleScreenText(s)
+			for _, name := range []string{"Claude Code", "Codex", "Antigravity", "Cloudflare Tunnel", "Ready to install.", "Package download failed", "Downloading with winget."} {
+				if !strings.Contains(text, name) {
+					t.Fatalf("Setup clipped %q at %dx%d:\n%s", name, size[0], size[1], text)
+				}
+			}
+			found := map[int]bool{}
+			for _, rect := range m.buttons {
+				if rect.id >= 12 && rect.id <= 15 {
+					if rect.x < 0 || rect.x+rect.w > size[0] || rect.y >= size[1]-3 {
+						t.Fatalf("install button overlaps the footer: %+v", rect)
+					}
+					found[rect.id] = true
+				}
+			}
+			if len(found) != 4 {
+				t.Fatalf("only %d dependency controls fit", len(found))
+			}
+		})
+	}
+}
+
+func TestConsoleBusyInstallAllowsViewingTabsAndLogsWithoutAnotherMutation(t *testing.T) {
+	s := consoleTestScreen(t, 100, 35)
+	m := consoleModel{busy: true, message: "Working..."}
+	m.activate(9)
+	m.draw(s, consoleSetupSnapshot())
+	if m.activate(13) != "" || m.activate(7) != "" || m.confirm != "" {
+		t.Fatal("busy install admitted a duplicate installer or restart")
+	}
+	m.event(tcell.NewEventKey(tcell.KeyRune, '1', 0))
+	if m.tab != 0 || m.message != "Working..." {
+		t.Fatal("busy install prevented viewing Status or cleared progress")
+	}
+	m.event(tcell.NewEventKey(tcell.KeyRune, '4', 0))
+	m.event(tcell.NewEventKey(tcell.KeyPgUp, 0, 0))
+	if m.tab != 3 || m.scroll == 0 {
+		t.Fatal("busy install prevented reading earlier logs")
+	}
+	m.event(tcell.NewEventKey(tcell.KeyRune, '5', 0))
+	m.draw(s, consoleSetupSnapshot())
+	if m.tab != 4 || !strings.Contains(consoleScreenText(s), "Downloading with winget") {
+		t.Fatal("busy install hid its live progress")
 	}
 }
 func TestConsoleQRUsesAvailableSpaceAndKeepsPairingTextPrivate(t *testing.T) {
@@ -347,6 +542,59 @@ func TestConsoleStopCanCancelBusyAction(t *testing.T) {
 		t.Fatal(ctx.Err())
 	}
 }
+
+func TestConsoleShutdownWaitsForInstallerCleanup(t *testing.T) {
+	s := &consoleLifecycleScreen{SimulationScreen: tcell.NewSimulationScreen("UTF-8"), ready: make(chan struct{})}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	started, cancelled, release := make(chan struct{}), make(chan struct{}), make(chan struct{})
+	done := make(chan error, 1)
+	go func() {
+		done <- RunConsoleScreen(ctx, s, consoleSetupSnapshot, func(actionContext context.Context, action ConsoleAction) error {
+			if action != ConsoleInstallCodex {
+				return nil
+			}
+			close(started)
+			<-actionContext.Done()
+			close(cancelled)
+			<-release
+			return actionContext.Err()
+		})
+	}()
+	<-s.ready
+	s.InjectKey(tcell.KeyRune, '5', 0)
+	s.InjectKey(tcell.KeyTab, 0, 0)
+	s.InjectKey(tcell.KeyEnter, 0, 0)
+	select {
+	case <-started:
+	case <-time.After(3 * time.Second):
+		t.Fatal("installer did not start")
+	}
+	cancel()
+	select {
+	case <-cancelled:
+	case <-time.After(3 * time.Second):
+		t.Fatal("shutdown did not cancel installer")
+	}
+	select {
+	case <-done:
+		t.Fatal("console returned before installer cleanup finished")
+	case <-time.After(20 * time.Millisecond):
+	}
+	close(release)
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatal(err)
+		}
+	case <-time.After(3 * time.Second):
+		t.Fatal("console did not finish after installer cleanup")
+	}
+	if s.finished.Load() != 1 {
+		t.Fatal("cleanup did not restore the terminal exactly once")
+	}
+}
+
 func TestConsoleStartupConfirmationDefaultsCancelAndSupportsMouse(t *testing.T) {
 	for _, confirm := range []bool{false, true} {
 		s := &consoleLifecycleScreen{SimulationScreen: tcell.NewSimulationScreen("UTF-8"), ready: make(chan struct{})}

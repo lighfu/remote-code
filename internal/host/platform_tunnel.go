@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"runtime"
+	"sync"
 	"time"
 )
 
@@ -21,6 +22,65 @@ type quickTunnelState struct {
 	Port      int       `json:"port"`
 	URL       string    `json:"url"`
 	StartedAt time.Time `json:"startedAt"`
+}
+
+// Each App belongs to one server generation. Keep its requested tunnel armed
+// when cloudflared is missing so a later installation can start it in place.
+type configuredTunnelState struct {
+	mu      sync.Mutex
+	ctx     context.Context
+	args    []string
+	enabled bool
+	running bool
+}
+
+func quickTunnelRequested(config Config, args []string) bool {
+	return !platformFlag(args, "--no-tunnel") && (config.QuickTunnel || platformFlag(args, "--tunnel"))
+}
+
+func (s *configuredTunnelState) configure(ctx context.Context, args []string, enabled bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.ctx == nil {
+		s.ctx, s.args, s.enabled = ctx, append([]string{}, args...), enabled
+	}
+}
+
+func (s *configuredTunnelState) retry(available func() bool, start func(func()) bool, worker func(context.Context, []string)) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.ctx == nil || !s.enabled || s.running || s.ctx.Err() != nil || !available() {
+		return false
+	}
+	ctx, args := s.ctx, append([]string{}, s.args...)
+	s.running = true
+	if !start(func() {
+		defer func() {
+			s.mu.Lock()
+			s.running = false
+			s.mu.Unlock()
+		}()
+		worker(ctx, args)
+	}) {
+		s.running = false
+		return false
+	}
+	return true
+}
+
+func (a *App) startConfiguredTunnel(ctx context.Context, args []string) {
+	a.tunnel.configure(ctx, args, quickTunnelRequested(a.Config, args))
+	a.retryConfiguredTunnel()
+}
+
+func (a *App) retryConfiguredTunnel() {
+	a.tunnel.retry(func() bool {
+		if cloudflaredPath() == "" {
+			consoleLogf("[cloudflared] Not installed.")
+			return false
+		}
+		return true
+	}, a.startTask, func(ctx context.Context, args []string) { platformTunnel(ctx, a, args) })
 }
 
 func readQuickTunnel(path string) (quickTunnelState, error) {
@@ -39,7 +99,22 @@ func cloudflaredPath() string {
 	if bin := os.Getenv("CLOUDFLARED_BIN"); bin != "" {
 		return bin
 	}
-	return platformFind("cloudflared", `C:\Program Files\cloudflared\cloudflared.exe`, `C:\Program Files (x86)\cloudflared\cloudflared.exe`)
+	return platformFind("cloudflared", cloudflaredInstallPaths()...)
+}
+
+func cloudflaredInstallPaths() []string {
+	var paths []string
+	if local := os.Getenv("LOCALAPPDATA"); local != "" {
+		paths = append(paths,
+			filepath.Join(local, "RemoteCode", "dependencies", "cloudflared", "bin", "cloudflared.exe"),
+			filepath.Join(local, "Microsoft", "WinGet", "Links", "cloudflared.exe"))
+	}
+	for _, root := range []string{os.Getenv("ProgramFiles"), os.Getenv("ProgramFiles(x86)")} {
+		if root != "" {
+			paths = append(paths, filepath.Join(root, "WinGet", "Links", "cloudflared.exe"), filepath.Join(root, "cloudflared", "cloudflared.exe"))
+		}
+	}
+	return append(paths, `C:\Program Files\cloudflared\cloudflared.exe`, `C:\Program Files (x86)\cloudflared\cloudflared.exe`)
 }
 
 func cloudflaredName(bin string) string {
