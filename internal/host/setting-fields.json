@@ -1,0 +1,288 @@
+{
+  "CODEX_FIELDS": [
+    {
+      "key": "model",
+      "label": "Model",
+      "description": "Model used in new threads",
+      "type": "text",
+      "options": []
+    },
+    {
+      "key": "model_reasoning_effort",
+      "label": "Reasoning Effort",
+      "description": "Thinking depth. Higher values are slower and consume more resources",
+      "type": "choice",
+      "options": [
+        {
+          "id": "minimal",
+          "label": "minimal"
+        },
+        {
+          "id": "low",
+          "label": "low"
+        },
+        {
+          "id": "medium",
+          "label": "medium"
+        },
+        {
+          "id": "high",
+          "label": "high"
+        },
+        {
+          "id": "xhigh",
+          "label": "xhigh"
+        },
+        {
+          "id": "ultra",
+          "label": "ultra"
+        }
+      ]
+    },
+    {
+      "key": "model_reasoning_summary",
+      "label": "Thinking Summary",
+      "description": "Whether to display intermediate thinking summaries",
+      "type": "choice",
+      "options": [
+        {
+          "id": "auto",
+          "label": "Auto"
+        },
+        {
+          "id": "concise",
+          "label": "Brief"
+        },
+        {
+          "id": "detailed",
+          "label": "Detailed"
+        },
+        {
+          "id": "none",
+          "label": "Do not show"
+        }
+      ]
+    },
+    {
+      "key": "model_verbosity",
+      "label": "Response Length",
+      "description": "How detailed responses should be",
+      "type": "choice",
+      "options": [
+        {
+          "id": "low",
+          "label": "Shorter"
+        },
+        {
+          "id": "medium",
+          "label": "Normal"
+        },
+        {
+          "id": "high",
+          "label": "Detailed"
+        }
+      ]
+    },
+    {
+      "key": "approval_policy",
+      "label": "Approval Prompting",
+      "description": "Whether to confirm before running commands",
+      "type": "choice",
+      "options": [
+        {
+          "id": "untrusted",
+          "label": "Confirm untrusted"
+        },
+        {
+          "id": "on-request",
+          "label": "Confirm when needed"
+        },
+        {
+          "id": "never",
+          "label": "Do not confirm"
+        }
+      ]
+    },
+    {
+      "key": "sandbox_mode",
+      "label": "Sandbox",
+      "description": "Scope of file and network access",
+      "type": "choice",
+      "options": [
+        {
+          "id": "read-only",
+          "label": "Read-only"
+        },
+        {
+          "id": "workspace-write",
+          "label": "Writable in workspace"
+        },
+        {
+          "id": "danger-full-access",
+          "label": "Unrestricted"
+        }
+      ]
+    },
+    {
+      "key": "service_tier",
+      "label": "Processing Speed",
+      "description": "fast mode is quicker but increases resource usage",
+      "type": "choice",
+      "options": [
+        {
+          "id": "fast",
+          "label": "fast"
+        },
+        {
+          "id": "flex",
+          "label": "flex"
+        }
+      ]
+    },
+    {
+      "key": "web_search",
+      "label": "Web Search",
+      "description": "How web search is used",
+      "type": "choice",
+      "options": [
+        {
+          "id": "cached",
+          "label": "Cache only"
+        },
+        {
+          "id": "live",
+          "label": "Search on demand"
+        },
+        {
+          "id": "disabled",
+          "label": "Do not use"
+        }
+      ]
+    }
+  ],
+  "CLAUDE_FIELDS": [
+    {
+      "key": "model",
+      "label": "Model",
+      "description": "Default model (e.g. opus, sonnet, claude-opus-5-5)",
+      "type": "text",
+      "options": []
+    },
+    {
+      "key": "effortLevel",
+      "label": "Thinking Strength",
+      "description": "Higher strength thinks deeper, taking more time and resources",
+      "type": "choice",
+      "options": [
+        {
+          "id": "low",
+          "label": "low"
+        },
+        {
+          "id": "medium",
+          "label": "medium"
+        },
+        {
+          "id": "high",
+          "label": "high"
+        },
+        {
+          "id": "xhigh",
+          "label": "xhigh"
+        },
+        {
+          "id": "max",
+          "label": "max"
+        }
+      ]
+    },
+    {
+      "key": "permissions.defaultMode",
+      "label": "Permission Mode",
+      "description": "Whether to confirm before editing files or running commands",
+      "type": "choice",
+      "options": [
+        {
+          "id": "default",
+          "label": "Confirm every time"
+        },
+        {
+          "id": "acceptEdits",
+          "label": "Do not confirm edits"
+        },
+        {
+          "id": "plan",
+          "label": "Plan only"
+        },
+        {
+          "id": "auto",
+          "label": "Decide automatically"
+        },
+        {
+          "id": "bypassPermissions",
+          "label": "Do not confirm"
+        }
+      ]
+    },
+    {
+      "key": "alwaysThinkingEnabled",
+      "label": "Always think before answering",
+      "description": "Enable extended thinking by default",
+      "type": "bool",
+      "options": []
+    },
+    {
+      "key": "language",
+      "label": "Response Language",
+      "description": "e.g. Japanese",
+      "type": "text",
+      "options": []
+    },
+    {
+      "key": "outputStyle",
+      "label": "Output Style",
+      "description": "e.g. Explanatory, Learning",
+      "type": "text",
+      "options": []
+    },
+    {
+      "key": "autoCompactEnabled",
+      "label": "Auto Compact Conversations",
+      "description": "Automatically summarizes conversations when they become long",
+      "type": "bool",
+      "options": []
+    },
+    {
+      "key": "autoUpdatesChannel",
+      "label": "Update Channel",
+      "description": "Claude Code application updates",
+      "type": "choice",
+      "options": [
+        {
+          "id": "latest",
+          "label": "Latest"
+        },
+        {
+          "id": "stable",
+          "label": "Stable"
+        }
+      ]
+    }
+  ],
+  "AGY_FIELDS": [
+    {
+      "key": "model",
+      "label": "Model",
+      "description": "CLI default model (e.g. Gemini 4 Argon (Medium))",
+      "type": "text",
+      "options": []
+    },
+    {
+      "key": "allowNonWorkspaceAccess",
+      "label": "Access outside workspace",
+      "description": "Allows reading and writing files outside the workspace folder",
+      "type": "bool",
+      "options": []
+    }
+  ]
+}

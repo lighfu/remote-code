@@ -1,0 +1,607 @@
+package host
+
+import (
+	"bufio"
+	_ "embed"
+	"encoding/json"
+	"errors"
+	"io"
+	"os"
+	"path/filepath"
+	"sort"
+	"strings"
+	"sync"
+	"time"
+)
+
+//go:embed prices.json
+var analyticsPricesJSON []byte
+var analyticsPrices M
+
+const codexCacheTTL = 5 * time.Minute
+
+func init() { _ = json.Unmarshal(analyticsPricesJSON, &analyticsPrices) }
+
+type analyticsUsage struct {
+	At                                  int64
+	Model, ID                           string
+	Read, Write5, Write1, Fresh, Output float64
+}
+type analyticsSeries struct {
+	requests                                           []analyticsUsage
+	seen                                               map[string]analyticsUsage
+	count                                              int
+	input, cached, write5, write1, output, cost, saved float64
+	priced, unpriced                                   bool
+	last                                               analyticsUsage
+	cacheBeforeRecent                                  analyticsCacheHistory
+	provider                                           string
+}
+
+type analyticsCacheHistory struct {
+	at, ttl int64
+	expired int
+}
+
+func (h *analyticsCacheHistory) observe(provider string, u analyticsUsage) any {
+	if h.ttl == 0 {
+		h.ttl = codexCacheTTL.Milliseconds()
+	}
+	var gap any
+	if h.at > 0 {
+		gap = u.At - h.at
+		miss := u.Read < (u.Fresh+u.Read+u.Write5+u.Write1)*0.5
+		if provider == "claude" {
+			miss = u.Read == 0 && u.Write5+u.Write1 > 0
+		}
+		if u.At-h.at > h.ttl && miss {
+			h.expired++
+		}
+	}
+	if u.Write1 > 0 {
+		h.ttl = time.Hour.Milliseconds()
+	} else if u.Write5 > 0 {
+		h.ttl = codexCacheTTL.Milliseconds()
+	}
+	h.at = u.At
+	return gap
+}
+
+type analyticsState struct {
+	mu     sync.Mutex
+	offset int64
+	rest   []byte
+	model  string
+	analyticsSeries
+	codexCounts  analyticsSeries
+	codexTotal   analyticsUsage
+	codexContext codexContextWeights
+	agyContext   agyContextWeights
+	claudePlan   claudePlanState
+	used, window float64
+	file         os.FileInfo
+}
+
+var analyticsFiles sync.Map
+var analyticsPaths sync.Map
+
+func analyticsPath(provider, id string) string {
+	if id == "" || filepath.Base(id) != id {
+		return ""
+	}
+	key := provider + ":" + id
+	if value, ok := analyticsPaths.Load(key); ok {
+		p := value.(string)
+		if provider != "antigravity" || filepath.Base(p) == "transcript_full.jsonl" {
+			if _, err := os.Stat(p); err == nil {
+				return p
+			}
+		}
+	}
+	root := providerHome(provider)
+	if provider == "codex" {
+		for _, dir := range []string{"sessions", "archived_sessions"} {
+			base := filepath.Join(root, dir)
+			var found string
+			_ = filepath.WalkDir(base, func(path string, d os.DirEntry, err error) error {
+				if err != nil {
+					return nil
+				}
+				if !d.IsDir() && strings.HasSuffix(d.Name(), "-"+id+".jsonl") {
+					found = path
+					return filepath.SkipAll
+				}
+				return nil
+			})
+			if found != "" {
+				analyticsPaths.Store(key, found)
+				return found
+			}
+		}
+		return ""
+	}
+	if provider == "claude" {
+		dirs, _ := os.ReadDir(filepath.Join(root, "projects"))
+		for _, dir := range dirs {
+			p := filepath.Join(root, "projects", dir.Name(), id+".jsonl")
+			if _, err := os.Stat(p); err == nil {
+				analyticsPaths.Store(key, p)
+				return p
+			}
+		}
+		return ""
+	}
+	for _, name := range []string{"transcript_full.jsonl", "transcript.jsonl"} {
+		for _, folder := range []string{"antigravity", "antigravity-ide", "antigravity-cli"} {
+			p := filepath.Join(root, folder, "brain", id, ".system_generated", "logs", name)
+			if _, err := os.Stat(p); err == nil {
+				analyticsPaths.Store(key, p)
+				return p
+			}
+		}
+	}
+	return ""
+}
+func analyticsPrice(provider, model string, raw M) M {
+	if provider != "claude" {
+		custom := providerMap(raw[provider+"Prices"])
+		if val := providerMap(custom[model]); len(val) > 0 {
+			return val
+		}
+		if provider == "antigravity" {
+			base := model
+			for _, s := range []string{"-none", "-minimal", "-low", "-medium", "-high", "-xhigh", "-max"} {
+				base = strings.TrimSuffix(base, s)
+			}
+			if val := providerMap(custom[base]); len(val) > 0 {
+				return val
+			}
+			if strings.HasPrefix(base, "claude-") {
+				price := analyticsPrice("claude", base, raw)
+				if len(price) > 0 {
+					return M{"input": N(price, "input"), "cachedInput": N(price, "cache_read"), "output": N(price, "output")}
+				}
+			}
+		}
+	}
+	models := providerMap(analyticsPrices[provider])
+	model = strings.Split(model, "[")[0]
+	if len(model) > 9 && model[len(model)-9] == '-' {
+		tail := model[len(model)-8:]
+		digits := true
+		for _, c := range tail {
+			if c < '0' || c > '9' {
+				digits = false
+			}
+		}
+		if digits {
+			model = model[:len(model)-9]
+		}
+	}
+	return providerMap(models[model])
+}
+func analyticsCharge(provider string, u analyticsUsage, config M) (float64, float64, bool) {
+	p := analyticsPrice(provider, u.Model, config)
+	if len(p) == 0 {
+		return 0, 0, false
+	}
+	if provider == "claude" {
+		long := providerMap(p["long_prompt"])
+		if len(long) > 0 && u.Fresh+u.Read+u.Write1+u.Write5 > N(long, "above_prompt_tokens") {
+			p = long
+		}
+		cost := (u.Fresh*N(p, "input") + u.Read*N(p, "cache_read") + u.Write5*N(p, "cache_write_5m") + u.Write1*N(p, "cache_write_1h") + u.Output*N(p, "output")) / 1e6
+		saved := (u.Read*(N(p, "input")-N(p, "cache_read")) - u.Write5*(N(p, "cache_write_5m")-N(p, "input")) - u.Write1*(N(p, "cache_write_1h")-N(p, "input"))) / 1e6
+		return cost, saved, true
+	}
+	cost := (u.Fresh*N(p, "input") + u.Read*N(p, "cachedInput") + u.Output*N(p, "output")) / 1e6
+	return cost, u.Read * (N(p, "input") - N(p, "cachedInput")) / 1e6, true
+}
+func (s *analyticsSeries) add(provider, id string, u analyticsUsage, config M) {
+	s.provider = provider
+	u.ID = id
+	old, updated := s.seen[id]
+	if updated {
+		if old.At > 0 {
+			u.At = old.At
+		}
+		if old == u {
+			return
+		}
+		s.input -= old.Fresh + old.Read + old.Write5 + old.Write1
+		s.cached -= old.Read
+		s.write5 -= old.Write5
+		s.write1 -= old.Write1
+		s.output -= old.Output
+		cost, saved, _ := analyticsCharge(provider, old, config)
+		s.cost -= cost
+		s.saved -= saved
+	}
+	if id != "" {
+		if s.seen == nil {
+			s.seen = map[string]analyticsUsage{}
+		}
+		s.seen[id] = u
+	}
+	s.input += u.Fresh + u.Read + u.Write5 + u.Write1
+	s.cached += u.Read
+	s.write5 += u.Write5
+	s.write1 += u.Write1
+	s.output += u.Output
+	cost, saved, known := analyticsCharge(provider, u, config)
+	s.cost += cost
+	s.saved += saved
+	if known {
+		s.priced = true
+	} else {
+		s.unpriced = true
+	}
+	if updated {
+		for i := len(s.requests) - 1; i >= 0; i-- {
+			if s.requests[i].ID == id {
+				s.requests[i] = u
+				break
+			}
+		}
+		if s.last.ID == id {
+			s.last = u
+		}
+		return
+	}
+	s.last = u
+	s.requests = append(s.requests, u)
+	if len(s.requests) > 200 {
+		s.cacheBeforeRecent.observe(provider, s.requests[0])
+		s.requests = s.requests[1:]
+	}
+	s.count++
+}
+
+func codexCountUsage(value M) analyticsUsage {
+	input := max(0, N(value, "input_tokens"))
+	read := min(input, max(0, N(value, "cached_input_tokens")))
+	return analyticsUsage{Read: read, Fresh: input - read, Output: max(0, N(value, "output_tokens"))}
+}
+
+func (s *analyticsState) codexTokenCount(record, info M, config M) {
+	last := providerMap(info["last_token_usage"])
+	if window := N(info, "model_context_window"); len(last) > 0 && window > 0 {
+		s.used = N(last, "input_tokens") + N(last, "output_tokens")
+		s.window = window
+	}
+
+	// A token_count can be emitted repeatedly for the same completed request.
+	// Its cumulative totals distinguish that from separate requests of equal size.
+	total := codexCountUsage(providerMap(info["total_token_usage"]))
+	usage := codexCountUsage(last)
+	if total == (analyticsUsage{}) || total == s.codexTotal || usage == (analyticsUsage{}) {
+		return
+	}
+	previous := s.codexTotal
+	s.codexTotal = total
+	usage.Model = s.model
+	usage.At = s.codexCounts.last.At
+	if at, err := time.Parse(time.RFC3339Nano, S(record, "timestamp")); err == nil {
+		usage.At = at.UnixMilli()
+	}
+	s.codexCounts.add("codex", "", usage, config)
+
+	// If the rollout starts with an existing cumulative total or misses a
+	// report, keep the known token counts without inventing request details or costs.
+	fresh := total.Fresh - previous.Fresh - usage.Fresh
+	read := total.Read - previous.Read - usage.Read
+	output := total.Output - previous.Output - usage.Output
+	if fresh >= 0 && read >= 0 && output >= 0 && fresh+read+output > 0 {
+		s.codexCounts.input += fresh + read
+		s.codexCounts.cached += read
+		s.codexCounts.output += output
+		s.codexCounts.unpriced = true
+	}
+}
+func (s *analyticsState) line(provider string, line []byte, config M) {
+	var r M
+	if json.Unmarshal(line, &r) != nil {
+		return
+	}
+	kind := S(r, "type")
+	var u analyticsUsage
+	var id string
+	switch provider {
+	case "claude":
+		s.claudePlan.observe(r)
+		if kind != "assistant" {
+			return
+		}
+		message := providerMap(r["message"])
+		usage := providerMap(message["usage"])
+		if len(usage) == 0 {
+			return
+		}
+		u.Model = S(message, "model")
+		u.At = providerStamp(r["timestamp"])
+		u.Fresh = N(usage, "input_tokens")
+		u.Read = N(usage, "cache_read_input_tokens")
+		write := N(usage, "cache_creation_input_tokens")
+		u.Write1 = min(write, N(providerMap(usage["cache_creation"]), "ephemeral_1h_input_tokens"))
+		u.Write5 = write - u.Write1
+		u.Output = N(usage, "output_tokens")
+		id = S(message, "id")
+		if id == "" {
+			id = S(r, "uuid")
+		}
+		s.used = u.Fresh + u.Read + u.Write5 + u.Write1 + u.Output
+	case "codex":
+		payload := providerMap(r["payload"])
+		s.codexContext.record(kind, payload, int64(len(line)))
+		if kind == "turn_context" {
+			s.model = S(payload, "model")
+			return
+		}
+		if S(payload, "type") == "token_count" {
+			s.codexTokenCount(r, providerMap(payload["info"]), config)
+			return
+		}
+		if kind != "token_usage_record" && S(payload, "type") != "token_usage_record" {
+			return
+		}
+		usage := providerMap(payload["usage"])
+		if len(usage) == 0 {
+			return
+		}
+		u.Model = s.model
+		u.At = providerStamp(r["timestamp"])
+		u.Read = N(usage, "cached_input_tokens")
+		u.Write5 = N(usage, "cache_write_input_tokens")
+		u.Fresh = max(0, N(usage, "input_tokens")-u.Read-u.Write5)
+		u.Output = N(usage, "output_tokens")
+		id = S(payload, "response_id")
+		if id == "" {
+			id = S(payload, "id")
+		}
+	case "antigravity":
+		s.agyContext.record(kind, r)
+		if kind != "PLANNER_RESPONSE" {
+			return
+		}
+		if r["input_tokens"] == nil && r["cache_read_tokens"] == nil && r["output_tokens"] == nil {
+			return
+		}
+		u.Model = s.agyContext.model
+		u.At = providerStamp(r["created_at"])
+		u.Fresh = N(r, "input_tokens")
+		u.Read = N(r, "cache_read_tokens")
+		u.Output = N(r, "output_tokens")
+		if used := u.Fresh + u.Read + u.Output; used > 0 {
+			s.used = used
+		}
+		id = S(r, "id")
+	default:
+		return
+	}
+	if u.At <= 0 {
+		u.At = s.last.At
+	}
+	s.add(provider, id, u, config)
+}
+func analyticsStateFor(path string) *analyticsState {
+	value, _ := analyticsFiles.LoadOrStore(path, &analyticsState{})
+	return value.(*analyticsState)
+}
+
+func analyticsRead(provider, path string, config M) (M, M, error) {
+	s := analyticsStateFor(path)
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	size, err := s.read(provider, path, config)
+	if err != nil {
+		return nil, nil, err
+	}
+	series := &s.analyticsSeries
+	if provider == "codex" {
+		counts := &s.codexCounts
+		// Keep explicit cache writes when both sources cover the same usage.
+		if series.count == 0 || counts.last.At >= series.last.At &&
+			counts.input >= series.input && counts.output >= series.output &&
+			(counts.input > series.input || counts.output > series.output) {
+			series = counts
+		}
+	}
+	stats, detail := series.result(size)
+	return stats, detail, nil
+}
+
+// read updates the shared file cursor with the state mutex held by the caller.
+func (s *analyticsState) read(provider, path string, config M) (int64, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return 0, err
+	}
+	defer f.Close()
+	info, err := f.Stat()
+	if err != nil {
+		return 0, err
+	}
+	if s.file != nil && (!os.SameFile(s.file, info) || info.Size() < s.offset || info.Size() == s.offset && !info.ModTime().Equal(s.file.ModTime())) {
+		s.offset = 0
+		s.rest = nil
+		s.model = ""
+		s.analyticsSeries = analyticsSeries{}
+		s.codexCounts = analyticsSeries{}
+		s.codexTotal = analyticsUsage{}
+		s.codexContext = codexContextWeights{}
+		s.agyContext = agyContextWeights{}
+		s.claudePlan = claudePlanState{}
+		s.used, s.window = 0, 0
+	}
+	s.file = info
+	if _, err = f.Seek(s.offset, 0); err != nil {
+		return 0, err
+	}
+	reader := bufio.NewReaderSize(f, 64<<10)
+	for s.offset < info.Size() {
+		chunk := make([]byte, min(info.Size()-s.offset, 8<<20))
+		n, e := io.ReadFull(reader, chunk)
+		s.offset += int64(n)
+		data := append(s.rest, chunk[:n]...)
+		start := 0
+		for i, c := range data {
+			if c == '\n' {
+				s.line(provider, data[start:i], config)
+				start = i + 1
+			}
+		}
+		s.rest = append([]byte{}, data[start:]...)
+		if len(s.rest) > 32<<20 {
+			return 0, errors.New("Transcript line exceeds 32 MB")
+		}
+		if e != nil && e != io.ErrUnexpectedEOF && e != io.EOF {
+			return 0, e
+		}
+	}
+	return info.Size(), nil
+}
+
+func (s *analyticsSeries) result(size int64) (M, M) {
+	cache := s.cacheBeforeRecent
+	recent := []M{}
+	for _, u := range s.requests {
+		gap := cache.observe(s.provider, u)
+		recent = append(recent, M{"at": u.At, "model": u.Model, "read": u.Read, "write5m": u.Write5, "write1h": u.Write1, "uncached": u.Fresh, "output": u.Output, "gapMs": gap})
+	}
+	sort.SliceStable(recent, func(i, j int) bool { return N(recent[i], "at") > N(recent[j], "at") })
+	var summary any
+	if s.count > 0 {
+		lastInput := s.last.Fresh + s.last.Read + s.last.Write5 + s.last.Write1
+		hit := float64(0)
+		if lastInput > 0 {
+			hit = s.last.Read / lastInput
+		}
+		summary = M{"lastAt": s.last.At, "ttlMs": cache.ttl, "lastHit": hit}
+	}
+	var cost any
+	if s.priced {
+		cost = s.cost
+	}
+	stats := M{"costUsd": cost, "partial": s.unpriced, "bytes": size, "cache": summary, "tokens": M{"input": s.input, "cached": s.cached, "output": s.output}}
+	hit := float64(0)
+	if s.input > 0 {
+		hit = s.cached / s.input
+	}
+	detail := M{"summary": summary, "totals": M{"read": s.cached, "write5m": s.write5, "write1h": s.write1, "uncached": max(0, s.input-s.cached-s.write5-s.write1), "requests": s.count, "hitRate": hit}, "savedUsd": s.saved, "expiredCount": cache.expired, "recent": recent}
+	return stats, detail
+}
+func (a *App) analytics(rec *Record) (M, M, error) {
+	p, id := S(rec.Info, "provider"), S(rec.Info, "externalId")
+	path := analyticsPath(p, id)
+	if path == "" {
+		return nil, nil, os.ErrNotExist
+	}
+	stats, detail, err := analyticsRead(p, path, a.Config.Raw)
+	if err != nil {
+		return nil, nil, err
+	}
+	if p == "claude" {
+		dir := filepath.Join(strings.TrimSuffix(path, ".jsonl"), "subagents")
+		children, _ := os.ReadDir(dir)
+		for _, child := range children {
+			if !strings.HasSuffix(child.Name(), ".jsonl") {
+				continue
+			}
+			childStats, _, e := analyticsRead(p, filepath.Join(dir, child.Name()), a.Config.Raw)
+			if e != nil {
+				continue
+			}
+			stats["bytes"] = N(stats, "bytes") + N(childStats, "bytes")
+			if childStats["costUsd"] != nil {
+				stats["costUsd"] = N(stats, "costUsd") + N(childStats, "costUsd")
+			}
+			stats["partial"] = B(stats, "partial") || B(childStats, "partial")
+			t := providerMap(stats["tokens"])
+			c := providerMap(childStats["tokens"])
+			for _, k := range []string{"input", "cached", "output"} {
+				t[k] = N(t, k) + N(c, k)
+			}
+		}
+	}
+	return stats, detail, nil
+}
+func (a *App) refreshAnalytics(rec *Record) {
+	id := S(rec.Info, "id")
+	if _, refreshing := a.analyticsBusy.LoadOrStore(id, struct{}{}); refreshing {
+		return
+	}
+	defer a.analyticsBusy.Delete(id)
+	stats, detail, err := a.analytics(rec)
+	if err == nil {
+		a.Store.applyAnalyticsStats(rec, stats)
+		if S(rec.Info, "provider") == "antigravity" && agyModelUnset(S(rec.Info, "model")) {
+			for _, request := range providerRows(detail["recent"]) {
+				if model := S(request, "model"); !agyModelUnset(model) {
+					a.Store.fillAgyConfig(rec, M{"model": model})
+					break
+				}
+			}
+		}
+	}
+}
+
+func (a *App) refreshClaudePlan(rec *Record) {
+	path := analyticsPath("claude", S(rec.Info, "externalId"))
+	if path == "" {
+		return
+	}
+	state := analyticsStateFor(path)
+	state.mu.Lock()
+	defer state.mu.Unlock()
+	if _, err := state.read("claude", path, a.Config.Raw); err != nil || !state.claudePlan.touched {
+		return
+	}
+	plan := state.claudePlan.snapshot()
+	if a.Store.applyClaudePlan(rec, plan) {
+		rec.Info["plan"] = plan
+	}
+}
+
+func (s *Store) applyClaudePlan(source *Record, plan M) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	id := S(source.Info, "id")
+	current := s.records[id]
+	if s.closed || current == nil || S(current.Info, "provider") != "claude" ||
+		S(current.Info, "externalId") != S(source.Info, "externalId") || S(current.Info, "resumeAt") != S(source.Info, "resumeAt") {
+		return false
+	}
+	old, _ := json.Marshal(current.Info["plan"])
+	next, _ := json.Marshal(plan)
+	if string(old) != string(next) {
+		current.Info["plan"] = clone(plan)
+		s.dirty[id] = true
+		s.emitLocked(M{"type": "session", "session": current.Info})
+	}
+	return true
+}
+
+func (s *Store) applyAnalyticsStats(source *Record, stats M) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	id := S(source.Info, "id")
+	current := s.records[id]
+	provider := S(source.Info, "provider")
+	if s.closed || current == nil || S(current.Info, "provider") != provider || S(current.Info, "externalId") != S(source.Info, "externalId") {
+		return
+	}
+	previous := providerMap(current.Info["stats"])
+	if provider == "codex" && stats["cache"] == nil && len(previous) > 0 {
+		// No usage samples in this read. Keep the last cache and totals snapshot.
+		bytes := stats["bytes"]
+		stats = clone(previous)
+		stats["bytes"] = bytes
+	}
+	old, _ := json.Marshal(previous)
+	next, _ := json.Marshal(stats)
+	if string(old) != string(next) {
+		current.Info["stats"] = clone(stats)
+		s.dirty[id] = true
+		s.emitLocked(M{"type": "session", "session": current.Info})
+	}
+}

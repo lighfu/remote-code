@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="480" height="88" viewBox="0 0 480 88" role="img" aria-labelledby="title">
+  <title id="title">ダウンロード</title>
+  <g font-family="'Segoe UI','Noto Sans JP','Yu Gothic UI',sans-serif">
+    <path d="M44 0h410q26 0 26 26v36q0 26-26 26H44a44 44 0 0 1 0-88Z" fill="#F5BD9F"/>
+    <circle cx="44" cy="44" r="29" fill="#FFFFFF" fill-opacity=".5"/>
+    <path d="M44 27v27m-11-11 11 11 11-11M31 61h26" fill="none" stroke="#263322" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"/>
+    <text x="90" y="56" fill="#263322" font-size="31" font-weight="700">ダウンロード</text>
+    <text x="445" y="54" text-anchor="end" fill="#536047" font-size="23" font-weight="600">01</text>
+  </g>
+</svg>

@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="480" height="88" viewBox="0 0 480 88" role="img" aria-labelledby="title description">
+  <title id="title">기능</title>
+  <desc id="description">기능 섹션 제목.</desc>
+  <g font-family="'Segoe UI','Malgun Gothic','Apple SD Gothic Neo','Noto Sans KR',sans-serif">
+    <path d="M44 0h410q26 0 26 26v36q0 26-26 26H44a44 44 0 0 1 0-88Z" fill="#D4ED9B"/>
+    <circle cx="44" cy="44" r="29" fill="#FFFFFF" fill-opacity=".5"/>
+    <g transform="translate(44 44) scale(.5)"><g fill="none" stroke="#263322" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round"><path d="M-20-18h40a8 8 0 0 1 8 8v21a8 8 0 0 1-8 8H-5l-15 12V19a8 8 0 0 1-8-8v-21a8 8 0 0 1 8-8Z"/><path d="M-14-4h28M-14 7H5"/></g></g>
+    <text x="90" y="56" fill="#263322" font-size="31" font-weight="700">기능</text>
+    <text x="445" y="54" text-anchor="end" fill="#536047" font-size="23" font-weight="600">02</text>
+  </g>
+</svg>

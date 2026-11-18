@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="300" height="32" viewBox="0 0 300 32" role="img" aria-labelledby="title">
+  <title id="title">Windows x64 / Android 10+</title>
+  <rect width="146" height="32" rx="16" fill="#E6E9DF"/>
+  <rect x="154" width="146" height="32" rx="16" fill="#D4ED9B"/>
+  <g fill="#263322" font-family="'Segoe UI',sans-serif" font-size="13" font-weight="600" text-anchor="middle">
+    <text x="73" y="21">Windows x64</text>
+    <text x="227" y="21">Android 10+</text>
+  </g>
+</svg>

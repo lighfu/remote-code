@@ -1,0 +1,736 @@
+{
+  "schemaVersion": 1,
+  "at": 1794916435985,
+  "providers": [
+    {
+      "id": "claude",
+      "label": "Claude",
+      "modes": [
+        {
+          "id": "app",
+          "label": "Execute from App",
+          "activeSessions": 0,
+          "availability": "supported",
+          "description": "The native PC server launches the installed Claude Code CLI."
+        },
+        {
+          "id": "pc",
+          "label": "View and Control PC Conversations",
+          "activeSessions": 0,
+          "availability": "requiresSetup",
+          "description": "Display is sourced from conversation transcripts. Counts represent conversations marked watching. Sending to PC conversations requires enabling Remote Control."
+        }
+      ],
+      "routes": [
+        {
+          "id": "app-chat",
+          "modeId": "app",
+          "purpose": "operate",
+          "title": "Instructions, Approvals, Model Changes",
+          "summary": "App → PC Server → Installed CLI → Claude Code CLI",
+          "steps": [
+            {
+              "id": "app",
+              "label": "Android App",
+              "description": "Sends instructions, approvals, and configuration changes, and displays results.",
+              "kind": "app"
+            },
+            {
+              "id": "host",
+              "label": "PC Remote Code",
+              "description": "Receives requests from the app and routes them to integrations on the PC.",
+              "kind": "host",
+              "protocol": "HTTP(S) / WebSocket"
+            },
+            {
+              "id": "sdk",
+              "label": "Installed Claude Code",
+              "description": "Starts conversation via query() and receives output, tool usage, and approvals.",
+              "kind": "cli",
+              "protocol": "Installed CLI"
+            },
+            {
+              "id": "cli",
+              "label": "Claude Code CLI",
+              "description": "Executes conversations using PC settings and credentials.",
+              "kind": "cli"
+            },
+            {
+              "id": "cloud",
+              "label": "Anthropic",
+              "description": "Claude Code connects to the service.",
+              "kind": "cloud",
+              "protocol": "HTTPS"
+            }
+          ],
+          "notes": [
+            "Configures models, reasoning effort, Fast mode, etc., via CLI control messages."
+          ]
+        },
+        {
+          "id": "pc-history",
+          "modeId": "pc",
+          "purpose": "history",
+          "title": "PC Messages, Tools, Subagents",
+          "summary": "PC Local Transcripts → PC Server → App",
+          "steps": [
+            {
+              "id": "transcript",
+              "label": "Claude Transcripts",
+              "description": "Reads local JSONL and child agent transcripts.",
+              "kind": "file",
+              "protocol": "JSONL"
+            },
+            {
+              "id": "host",
+              "label": "PC Remote Code",
+              "description": "Watches transcript appends and converts them into display data.",
+              "kind": "host",
+              "protocol": "HTTP(S) / WebSocket"
+            },
+            {
+              "id": "app",
+              "label": "Android App",
+              "description": "Sends instructions, approvals, and configuration changes, and displays results.",
+              "kind": "app"
+            }
+          ],
+          "notes": [
+            "This read-only process cannot control PC conversations.",
+            "Aggregates details such as costs, log sizes, and cache status from local transcripts."
+          ]
+        },
+        {
+          "id": "pc-control",
+          "modeId": "pc",
+          "purpose": "operate",
+          "title": "Send to PC Conversations and Approve",
+          "summary": "App → PC Server → Remote Control → PC Claude Code",
+          "steps": [
+            {
+              "id": "app",
+              "label": "Android App",
+              "description": "Sends instructions, approvals, and configuration changes, and displays results.",
+              "kind": "app"
+            },
+            {
+              "id": "host",
+              "label": "PC Remote Code",
+              "description": "Receives requests from the app and routes them to integrations on the PC.",
+              "kind": "host",
+              "protocol": "HTTP(S) / WebSocket"
+            },
+            {
+              "id": "sdk",
+              "label": "Remote Control Connection",
+              "description": "Connects to the bridge enabled on the PC using existing Claude credentials.",
+              "kind": "cli",
+              "protocol": "HTTPS / SSE"
+            },
+            {
+              "id": "cloud",
+              "label": "Anthropic Remote Control",
+              "description": "Relays instructions and approvals to the PC-side bridge.",
+              "kind": "cloud",
+              "protocol": "HTTPS"
+            },
+            {
+              "id": "cli",
+              "label": "PC Claude Code",
+              "description": "Continues execution on the PC and writes results to conversation transcripts.",
+              "kind": "cli"
+            }
+          ],
+          "notes": [
+            "Requires enabling /remote-control in the target PC session.",
+            "Displayed counts do not guarantee an active Remote Control connection."
+          ]
+        },
+        {
+          "id": "models",
+          "purpose": "history",
+          "title": "Model and Command List",
+          "summary": "Prefers saved list, updating via the installed CLI when necessary",
+          "steps": [
+            {
+              "id": "app",
+              "label": "Android App",
+              "description": "Sends instructions, approvals, and configuration changes, and displays results.",
+              "kind": "app"
+            },
+            {
+              "id": "host",
+              "label": "PC Remote Code",
+              "description": "Returns cached data and updates the list only when necessary.",
+              "kind": "host",
+              "protocol": "HTTP(S) / WebSocket"
+            },
+            {
+              "id": "cache",
+              "label": "PC List Cache",
+              "description": "Caches fetched models and commands for reuse.",
+              "kind": "file"
+            },
+            {
+              "id": "sdk",
+              "label": "Installed CLI",
+              "description": "Fetches the list from a running CLI or via short initialization.",
+              "kind": "cli"
+            }
+          ],
+          "notes": [
+            "Model list cache refreshes roughly every 12 hours. Commands also follow workspace folder settings."
+          ]
+        },
+        {
+          "id": "usage",
+          "purpose": "usage",
+          "title": "Usage Limits and Reset Passes",
+          "summary": "PC Server Fetches Claude Usage API",
+          "steps": [
+            {
+              "id": "app",
+              "label": "Android App",
+              "description": "Sends instructions, approvals, and configuration changes, and displays results.",
+              "kind": "app"
+            },
+            {
+              "id": "host",
+              "label": "PC Remote Code",
+              "description": "Reads PC Claude Code OAuth credentials and queries the usage API directly.",
+              "kind": "host",
+              "protocol": "HTTP(S) / WebSocket"
+            },
+            {
+              "id": "auth",
+              "label": "PC Claude Code Credentials",
+              "description": "Uses OAuth access tokens stored by the CLI locally on the PC.",
+              "kind": "auth",
+              "protocol": "OAuth"
+            },
+            {
+              "id": "cloud",
+              "label": "Anthropic Usage API",
+              "description": "Fetches usage limits, reset times, and reset passes.",
+              "kind": "cloud",
+              "protocol": "HTTPS"
+            }
+          ],
+          "notes": [
+            "Uses PC CLI credentials. Successful results are cached for 5 minutes."
+          ]
+        },
+        {
+          "id": "auth",
+          "purpose": "auth",
+          "title": "Login and Authentication Roles",
+          "summary": "Uses PC Claude Code login. No separate OAuth login in the app.",
+          "steps": [
+            {
+              "id": "auth",
+              "label": "Log in to Claude Code on PC",
+              "description": "Standard conversations follow CLI authentication settings.",
+              "kind": "auth"
+            },
+            {
+              "id": "host",
+              "label": "PC Remote Code",
+              "description": "Usage status and Remote Control use PC CLI OAuth authentication.",
+              "kind": "host",
+              "protocol": "HTTP(S) / WebSocket"
+            },
+            {
+              "id": "cloud",
+              "label": "Anthropic",
+              "description": "Validates authentication on the PC side.",
+              "kind": "cloud",
+              "protocol": "HTTPS"
+            }
+          ],
+          "notes": [
+            "The connection key held by Android for Remote Code is distinct from individual service authentication. Service OAuth tokens and API keys are not sent to Android."
+          ]
+        }
+      ],
+      "notes": [
+        "Counts are aggregated from the live, watching, and desktop flags of saved conversations. They do not confirm process execution, connection, or login status.",
+        "This screen describes implemented pathways. It does not attempt connections or read credentials."
+      ]
+    },
+    {
+      "id": "codex",
+      "label": "Codex",
+      "modes": [
+        {
+          "id": "app",
+          "label": "CLI / App Conversations",
+          "activeSessions": 0,
+          "availability": "supported",
+          "description": "Configured to prefer the shared daemon. Falls back to a dedicated app-server if unavailable."
+        },
+        {
+          "id": "desktop",
+          "label": "Codex Desktop Conversations",
+          "activeSessions": 0,
+          "availability": "supported",
+          "description": "Desktop retains execution ownership while viewing and controlling via local PC IPC. Counts represent conversations marked desktop and live."
+        }
+      ],
+      "routes": [
+        {
+          "id": "app-chat",
+          "modeId": "app",
+          "purpose": "operate",
+          "title": "Instructions, Approvals, Settings Changes",
+          "summary": "App → PC Server → Shared Daemon (Preferred)",
+          "steps": [
+            {
+              "id": "app",
+              "label": "Android App",
+              "description": "Sends instructions, approvals, and configuration changes, and displays results.",
+              "kind": "app"
+            },
+            {
+              "id": "host",
+              "label": "PC Remote Code",
+              "description": "Receives requests from the app and routes them to integrations on the PC.",
+              "kind": "host",
+              "protocol": "HTTP(S) / WebSocket"
+            },
+            {
+              "id": "proxy",
+              "label": "Codex app-server proxy",
+              "description": "Communicates with the local shared daemon via proxy stdio over WebSocket / JSON-RPC.",
+              "kind": "cli",
+              "protocol": "stdio proxy / WebSocket / JSON-RPC"
+            },
+            {
+              "id": "runtime",
+              "label": "Shared Codex Daemon",
+              "description": "Handles execution, notifications, and approvals in the same thread as CLI.",
+              "kind": "cli",
+              "protocol": "app-server"
+            },
+            {
+              "id": "cloud",
+              "label": "OpenAI",
+              "description": "Codex connects to the service using PC-side authentication.",
+              "kind": "cloud",
+              "protocol": "HTTPS"
+            }
+          ],
+          "notes": [
+            "This is a preference setting. If the shared daemon is unavailable, it falls back to dedicated app-server stdio / JSON-RPC.",
+            "This setting does not change the control path for desktop-owned conversations."
+          ]
+        },
+        {
+          "id": "desktop-control",
+          "modeId": "desktop",
+          "purpose": "operate",
+          "title": "Control Desktop Conversations",
+          "summary": "App → PC Server → Local PC IPC → Execution-owning Desktop",
+          "steps": [
+            {
+              "id": "app",
+              "label": "Android App",
+              "description": "Sends instructions, approvals, and configuration changes, and displays results.",
+              "kind": "app"
+            },
+            {
+              "id": "host",
+              "label": "PC Remote Code",
+              "description": "Receives requests from the app and routes them to integrations on the PC.",
+              "kind": "host",
+              "protocol": "HTTP(S) / WebSocket"
+            },
+            {
+              "id": "ipc",
+              "label": "Local PC Codex IPC",
+              "description": "Routes operations exclusively to the peer holding execution ownership via Windows named pipe or Unix socket.",
+              "kind": "desktop",
+              "protocol": "named pipe / Unix socket"
+            },
+            {
+              "id": "desktop",
+              "label": "Codex Desktop",
+              "description": "Executes while preserving existing conversations, models, and settings, returning status updates.",
+              "kind": "desktop"
+            }
+          ],
+          "notes": [
+            "Requires Codex Desktop to have the target conversation open.",
+            "Does not automatically resume on another app-server upon disconnect. The desktop flag alone does not indicate an active IPC connection."
+          ]
+        },
+        {
+          "id": "history",
+          "purpose": "history",
+          "title": "Messages, Execution Details, Subagents",
+          "summary": "Obtained from desktop status notifications or app-server history API",
+          "steps": [
+            {
+              "id": "runtime",
+              "label": "Codex Conversation State",
+              "description": "Reads desktop status and update notifications, or the app-server thread API.",
+              "kind": "desktop",
+              "protocol": "IPC / JSON-RPC"
+            },
+            {
+              "id": "host",
+              "label": "PC Remote Code",
+              "description": "Ingests PC-sent messages and child agent execution details for display.",
+              "kind": "host",
+              "protocol": "HTTP(S) / WebSocket"
+            },
+            {
+              "id": "app",
+              "label": "Android App",
+              "description": "Sends instructions, approvals, and configuration changes, and displays results.",
+              "kind": "app"
+            }
+          ],
+          "notes": [
+            "Subagent history is read via thread/read, thread/turns/list, thread/items/list, etc.",
+            "Child threads are not resumed or executed merely to view history."
+          ]
+        },
+        {
+          "id": "models",
+          "purpose": "history",
+          "title": "Model and Command List",
+          "summary": "Obtained from PC cache and Codex app-server",
+          "steps": [
+            {
+              "id": "app",
+              "label": "Android App",
+              "description": "Sends instructions, approvals, and configuration changes, and displays results.",
+              "kind": "app"
+            },
+            {
+              "id": "host",
+              "label": "PC Remote Code",
+              "description": "Reuses fetched lists, updating as necessary.",
+              "kind": "host",
+              "protocol": "HTTP(S) / WebSocket"
+            },
+            {
+              "id": "runtime",
+              "label": "Codex app-server / CLI",
+              "description": "Fetches models and available features.",
+              "kind": "cli",
+              "protocol": "JSON-RPC"
+            }
+          ],
+          "notes": [
+            "List fetching and desktop-owned conversation control use distinct paths."
+          ]
+        },
+        {
+          "id": "usage",
+          "purpose": "usage",
+          "title": "Usage Limits, Reset Passes, Credits",
+          "summary": "PC Server → Codex app-server Usage API",
+          "steps": [
+            {
+              "id": "app",
+              "label": "Android App",
+              "description": "Sends instructions, approvals, and configuration changes, and displays results.",
+              "kind": "app"
+            },
+            {
+              "id": "host",
+              "label": "PC Remote Code",
+              "description": "Caches usage status and coalesces refetches of details.",
+              "kind": "host",
+              "protocol": "HTTP(S) / WebSocket"
+            },
+            {
+              "id": "runtime",
+              "label": "Codex app-server",
+              "description": "Fetches details via account/rateLimits/read and reflects rateLimits/updated notifications.",
+              "kind": "cli",
+              "protocol": "JSON-RPC"
+            },
+            {
+              "id": "cloud",
+              "label": "OpenAI Account Information",
+              "description": "app-server fetches information for the currently logged-in account.",
+              "kind": "cloud",
+              "protocol": "HTTPS"
+            }
+          ],
+          "notes": [
+            "Prevents rate-only notifications from clearing cached reset passes and credits."
+          ]
+        },
+        {
+          "id": "auth",
+          "purpose": "auth",
+          "title": "Login and Authentication Roles",
+          "summary": "Uses PC Codex login. No separate OAuth login in the app.",
+          "steps": [
+            {
+              "id": "auth",
+              "label": "PC Codex Login",
+              "description": "Uses authentication settings configured in Codex CLI / Desktop.",
+              "kind": "auth"
+            },
+            {
+              "id": "runtime",
+              "label": "Codex Execution Environment",
+              "description": "app-server or execution-owning desktop handles service authentication.",
+              "kind": "cli"
+            },
+            {
+              "id": "cloud",
+              "label": "OpenAI",
+              "description": "Validates authentication on the PC side.",
+              "kind": "cloud",
+              "protocol": "HTTPS"
+            }
+          ],
+          "notes": [
+            "The connection key held by Android for Remote Code is distinct from individual service authentication. Service OAuth tokens and API keys are not sent to Android."
+          ]
+        }
+      ],
+      "notes": [
+        "Counts are aggregated from the live, watching, and desktop flags of saved conversations. They do not confirm process execution, connection, or login status.",
+        "Daemon display shows server configuration values. This screen does not launch processes or establish IPC connections to inspect actual targets."
+      ]
+    },
+    {
+      "id": "antigravity",
+      "label": "Antigravity",
+      "modes": [
+        {
+          "id": "app",
+          "label": "Execute from App",
+          "activeSessions": -1,
+          "availability": "supported",
+          "description": "Launches agy acp and controls conversations via stdio JSON-RPC. Counts for this path cannot be determined solely from saved data."
+        },
+        {
+          "id": "pc",
+          "label": "View PC Conversations",
+          "activeSessions": -1,
+          "availability": "readOnly",
+          "description": "Reads local conversation transcript appends. Counts for this path cannot be determined solely from saved data."
+        }
+      ],
+      "routes": [
+        {
+          "id": "app-chat",
+          "modeId": "app",
+          "purpose": "operate",
+          "title": "Instructions, Approvals, Model Changes",
+          "summary": "App → PC Server → agy acp → Antigravity",
+          "steps": [
+            {
+              "id": "app",
+              "label": "Android App",
+              "description": "Sends instructions, approvals, and configuration changes, and displays results.",
+              "kind": "app"
+            },
+            {
+              "id": "host",
+              "label": "PC Remote Code",
+              "description": "Receives requests from the app and routes them to integrations on the PC.",
+              "kind": "host",
+              "protocol": "HTTP(S) / WebSocket"
+            },
+            {
+              "id": "acp",
+              "label": "agy acp",
+              "description": "Handles conversation creation, sending, cancellation, approvals, and configuration changes.",
+              "kind": "cli",
+              "protocol": "stdio / JSON-RPC (ACP)"
+            },
+            {
+              "id": "cloud",
+              "label": "Antigravity Service",
+              "description": "agy connects using PC-side login settings.",
+              "kind": "cloud",
+              "protocol": "HTTPS"
+            }
+          ],
+          "notes": [
+            "ACP is a protocol for conversation control, serving a different role from service authentication such as OAuth."
+          ]
+        },
+        {
+          "id": "pc-history",
+          "modeId": "pc",
+          "purpose": "history",
+          "title": "PC Messages and Execution Details",
+          "summary": "PC Local Transcripts → PC Server → App",
+          "steps": [
+            {
+              "id": "transcript",
+              "label": "Antigravity Transcripts",
+              "description": "Reads appends to local JSONL approximately every 2 seconds.",
+              "kind": "file",
+              "protocol": "JSONL"
+            },
+            {
+              "id": "host",
+              "label": "PC Remote Code",
+              "description": "Converts messages, tool usage, and child agent information for display.",
+              "kind": "host",
+              "protocol": "HTTP(S) / WebSocket"
+            },
+            {
+              "id": "app",
+              "label": "Android App",
+              "description": "Sends instructions, approvals, and configuration changes, and displays results.",
+              "kind": "app"
+            }
+          ],
+          "notes": [
+            "Active PC execution is estimated from transcript timestamps, not verified process status.",
+            "Does not establish IPC connections to desktop or share execution ownership."
+          ]
+        },
+        {
+          "id": "pc-resume",
+          "modeId": "pc",
+          "purpose": "operate",
+          "title": "Continue Sending to PC Conversations",
+          "summary": "Stops transcript tracking and resumes the same conversation via app-side agy ACP",
+          "steps": [
+            {
+              "id": "app",
+              "label": "Android App",
+              "description": "Sends instructions, approvals, and configuration changes, and displays results.",
+              "kind": "app"
+            },
+            {
+              "id": "host",
+              "label": "PC Remote Code",
+              "description": "Only stops transcript reading within the app. PC-side agy is not stopped.",
+              "kind": "host",
+              "protocol": "HTTP(S) / WebSocket"
+            },
+            {
+              "id": "acp",
+              "label": "App-side agy acp",
+              "description": "Loads conversations via session/resume (or session/load if unsupported) and sends instructions.",
+              "kind": "cli",
+              "protocol": "stdio / JSON-RPC (ACP)"
+            }
+          ],
+          "notes": [
+            "External PC processes do not stop automatically. To avoid concurrent operations between PC and app, stop PC execution before continuing.",
+            "Does not relay operations to an execution-owning peer like Codex Desktop."
+          ]
+        },
+        {
+          "id": "models-history",
+          "purpose": "history",
+          "title": "Model and Conversation Lists",
+          "summary": "Models from agy models; conversations from ACP session/list",
+          "steps": [
+            {
+              "id": "app",
+              "label": "Android App",
+              "description": "Sends instructions, approvals, and configuration changes, and displays results.",
+              "kind": "app"
+            },
+            {
+              "id": "host",
+              "label": "PC Remote Code",
+              "description": "Prefers returning saved lists, updating when necessary.",
+              "kind": "host",
+              "protocol": "HTTP(S) / WebSocket"
+            },
+            {
+              "id": "cli",
+              "label": "agy models / agy acp",
+              "description": "Fetches model list via CLI command and conversation list via ACP.",
+              "kind": "cli",
+              "protocol": "CLI / JSON-RPC (ACP)"
+            }
+          ],
+          "notes": [
+            "Caches model list for 12 hours and conversation list briefly.",
+            "Aggregates costs, transcript size, and cache details from local transcripts; context breakdown includes estimated values."
+          ]
+        },
+        {
+          "id": "usage",
+          "purpose": "usage",
+          "title": "Usage Limits and Reset Times",
+          "summary": "PC Server → agy /usage Command",
+          "steps": [
+            {
+              "id": "app",
+              "label": "Android App",
+              "description": "Sends instructions, approvals, and configuration changes, and displays results.",
+              "kind": "app"
+            },
+            {
+              "id": "host",
+              "label": "PC Remote Code",
+              "description": "Coalesces concurrent requests and caches successful results for 5 minutes.",
+              "kind": "host",
+              "protocol": "HTTP(S) / WebSocket"
+            },
+            {
+              "id": "cli",
+              "label": "agy -p /usage",
+              "description": "Reads usage output from CLI.",
+              "kind": "cli",
+              "protocol": "CLI"
+            },
+            {
+              "id": "cloud",
+              "label": "Antigravity Service",
+              "description": "agy handles queries and authentication to the service.",
+              "kind": "cloud",
+              "protocol": "HTTPS"
+            }
+          ],
+          "notes": [
+            "Remote Code does not query an independent usage API using Google OAuth tokens."
+          ]
+        },
+        {
+          "id": "auth",
+          "purpose": "auth",
+          "title": "Login and Authentication Roles",
+          "summary": "Authentication is delegated to PC agy. No separate OAuth login in the app.",
+          "steps": [
+            {
+              "id": "auth",
+              "label": "PC agy Login",
+              "description": "Follows authentication methods configured in PC agy (OAuth, API keys, etc.).",
+              "kind": "auth"
+            },
+            {
+              "id": "cli",
+              "label": "Antigravity CLI",
+              "description": "Authenticates using existing login state and PC environment.",
+              "kind": "cli"
+            },
+            {
+              "id": "cloud",
+              "label": "Antigravity Service",
+              "description": "Validates authentication from agy.",
+              "kind": "cloud",
+              "protocol": "HTTPS"
+            }
+          ],
+          "notes": [
+            "The connection key held by Android for Remote Code is distinct from individual service authentication. Service OAuth tokens and API keys are not sent to Android.",
+            "This screen does not inspect authentication methods or logged-in accounts."
+          ]
+        }
+      ],
+      "notes": [
+        "Counts are aggregated from the live, watching, and desktop flags of saved conversations. They do not confirm process execution, connection, or login status.",
+        "There are 0 conversations saved as live. Because transcript viewing and ACP execution cannot be distinguished by saved flags alone, exact counts by path cannot be determined."
+      ]
+    }
+  ]
+}

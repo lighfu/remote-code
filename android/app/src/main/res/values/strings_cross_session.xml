@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="cross_session_title">セッション間メッセージ</string>
+    <string name="cross_session_unknown_sender">別の Claude セッション</string>
+    <string name="cross_session_sender_id">送信元: %1$s</string>
+    <string name="cross_session_reply">返信を依頼</string>
+    <string name="cross_session_reply_title">返信内容</string>
+    <string name="cross_session_reply_hint">送信元へ伝える内容</string>
+    <string name="cross_session_add_draft">入力欄に追加</string>
+    <string name="cross_session_cancel">キャンセル</string>
+    <string name="cross_session_reply_draft">「%1$s」へクロスセッションで返信してください。\n宛先: %2$s\n\n%3$s</string>
+    <string name="cross_session_copy_body">本文をコピー</string>
+    <string name="cross_session_copy_sender">送信元情報をコピー</string>
+    <string name="cross_session_expand">全文を表示</string>
+    <string name="cross_session_collapse">折りたたむ</string>
+</resources>

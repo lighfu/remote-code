@@ -1,0 +1,239 @@
+name: Build portable release
+
+on:
+  workflow_dispatch:
+    inputs:
+      apk_release:
+        description: 'Reuse an APK from a public Release tag (for example v0.17.1); leave blank to prebuild it'
+        required: false
+        type: string
+      apk_run:
+        description: 'Reuse a verified Android artifact from a completed release workflow run ID; cannot combine with apk_release'
+        required: false
+        type: string
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: read
+
+jobs:
+  android:
+    if: github.event_name != 'workflow_dispatch' || (inputs.apk_release == '' && inputs.apk_run == '')
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@d1374f8ac74474200d16ef8ecee22c7ae7a51880 # v6
+        with:
+          distribution: microsoft
+          java-version: '21'
+      - name: Validate app translations
+        run: python scripts/i18n.py check
+      - name: Restore Android release signing key
+        shell: pwsh
+        env:
+          ANDROID_RELEASE_KEYSTORE_BASE64: ${{ secrets.ANDROID_RELEASE_KEYSTORE_BASE64 }}
+        run: |
+          if (!$env:ANDROID_RELEASE_KEYSTORE_BASE64) { throw 'Set ANDROID_RELEASE_KEYSTORE_BASE64 before building the release APK.' }
+          $signingFile = Join-Path $env:RUNNER_TEMP 'remote-code-release.p12'
+          [IO.File]::WriteAllBytes($signingFile, [Convert]::FromBase64String($env:ANDROID_RELEASE_KEYSTORE_BASE64))
+          "ANDROID_RELEASE_KEYSTORE_FILE=$signingFile" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+      - name: Prebuild Android app
+        working-directory: android
+        env:
+          ANDROID_RELEASE_STORE_PASSWORD: ${{ secrets.ANDROID_RELEASE_STORE_PASSWORD }}
+          ANDROID_RELEASE_KEY_ALIAS: ${{ secrets.ANDROID_RELEASE_KEY_ALIAS }}
+          ANDROID_RELEASE_KEY_PASSWORD: ${{ secrets.ANDROID_RELEASE_KEY_PASSWORD }}
+        run: .\gradlew.bat :app:testDebugUnitTest :app:lintRelease :app:assembleRelease
+      - name: Prepare signed APK and manifest
+        shell: pwsh
+        run: ./scripts/prepare-apk.ps1 -Output data/prebuilt-apk
+      - name: Verify release APK identity and signature
+        shell: pwsh
+        run: |
+          $metadata = Get-Content 'android/app/build/outputs/apk/release/output-metadata.json' -Raw | ConvertFrom-Json
+          $manifest = Get-Content 'data/prebuilt-apk/remote-code-android.json' -Raw | ConvertFrom-Json
+          $applicationId = 'net.ajisaiflow.remotecode'
+          if ($metadata.applicationId -ne $applicationId -or $manifest.applicationId -ne $applicationId) { throw 'Unexpected APK application ID.' }
+          if ($metadata.elements.Count -ne 1 -or $metadata.elements[0].versionCode -ne $manifest.versionCode -or $metadata.elements[0].versionName -ne $manifest.versionName) { throw 'APK metadata does not match the release manifest.' }
+          $sdkDirectory = if ($env:ANDROID_HOME) { $env:ANDROID_HOME } elseif ($env:ANDROID_SDK_ROOT) { $env:ANDROID_SDK_ROOT } else { throw 'Android SDK was not found.' }
+          $buildTools = Get-ChildItem (Join-Path $sdkDirectory 'build-tools') -Directory |
+            Where-Object { (Test-Path (Join-Path $_.FullName 'apksigner.bat')) -and (Test-Path (Join-Path $_.FullName 'aapt.exe')) } |
+            Sort-Object { [version]($_.Name -replace '-.*$', '') } -Descending | Select-Object -First 1
+          if (!$buildTools) { throw 'Android build-tools were not found.' }
+          $apkFile = Join-Path 'data/prebuilt-apk' $manifest.apk.name
+          Write-Output "Verifying APK with Android build-tools $($buildTools.Name)."
+          $signature = & (Join-Path $buildTools.FullName 'apksigner.bat') verify --verbose --print-certs-pem $apkFile 2>&1
+          if ($LASTEXITCODE -ne 0) { throw 'APK signature verification failed.' }
+          $signature | Write-Output
+          $certificates = [regex]::Matches(($signature -join "`n"), '(?s)-----BEGIN CERTIFICATE-----\s*(.*?)\s*-----END CERTIFICATE-----')
+          $digests = @($certificates | ForEach-Object {
+            $der = [Convert]::FromBase64String(($_.Groups[1].Value -replace '\s', ''))
+            [Convert]::ToHexString([Security.Cryptography.SHA256]::HashData($der)).ToLowerInvariant()
+          } | Sort-Object -Unique)
+          $expectedDigest = '08d5b0c0b4556b573355f990bdc7f724a1009f57607901a4888db3d5fa243000'
+          if ($digests.Count -ne 1 -or $digests[0] -ne $expectedDigest) { throw 'APK was not signed with the release certificate.' }
+          $badging = & (Join-Path $buildTools.FullName 'aapt.exe') dump badging $apkFile 2>&1
+          if ($LASTEXITCODE -ne 0 -or ($badging -join "`n") -notmatch "(?m)^package: name='$([regex]::Escape($applicationId))'") { throw 'APK package does not match its metadata.' }
+          Write-Output "Verified $applicationId ($($manifest.versionName), $($manifest.versionCode)) with the release certificate."
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: remote-code-android
+          path: data/prebuilt-apk/*
+          if-no-files-found: error
+      - name: Remove temporary signing key
+        if: always()
+        shell: pwsh
+        run: |
+          $signingFile = Join-Path $env:RUNNER_TEMP 'remote-code-release.p12'
+          if (Test-Path -LiteralPath $signingFile -PathType Leaf) { Remove-Item -LiteralPath $signingFile -Force }
+  windows:
+    needs: android
+    if: always() && !cancelled() && (needs.android.result == 'success' || needs.android.result == 'skipped')
+    runs-on: windows-latest
+    permissions:
+      contents: read
+      actions: read
+    env:
+      RELEASE_TAG: ${{ github.ref_type == 'tag' && github.ref_name || '' }}
+      APK_RELEASE: ${{ github.event_name == 'workflow_dispatch' && inputs.apk_release || '' }}
+      APK_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.apk_run || '' }}
+    steps:
+      - name: Validate reusable Android artifact
+        if: github.event_name == 'workflow_dispatch'
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if ($env:APK_RELEASE -and $env:APK_RUN) { throw 'Choose either apk_release or apk_run.' }
+          if (!$env:APK_RUN) { exit 0 }
+          [long]$sourceRunId = 0
+          if ($env:APK_RUN -notmatch '\A[1-9][0-9]{0,18}\z' -or ![long]::TryParse($env:APK_RUN, [ref]$sourceRunId)) { throw 'apk_run must be a positive 64-bit run ID.' }
+          $repository = 'lighfu/remote-code'
+          if ($env:GITHUB_REPOSITORY -cne $repository) { throw 'Android artifact reuse is limited to the upstream repository.' }
+          $workflowJson = & gh api "repos/$repository/actions/workflows/release.yml"
+          if ($LASTEXITCODE -ne 0) { throw 'Release workflow could not be read.' }
+          $workflow = $workflowJson | ConvertFrom-Json
+          $runJson = & gh api "repos/$repository/actions/runs/$sourceRunId"
+          if ($LASTEXITCODE -ne 0) { throw 'Source workflow run could not be read.' }
+          $sourceRun = $runJson | ConvertFrom-Json
+          if ($sourceRun.repository.full_name -cne $repository -or $sourceRun.head_repository.full_name -cne $repository -or $sourceRun.repository.id -ne $sourceRun.head_repository.id) { throw 'Source workflow run must belong to the upstream repository, without a fork.' }
+          if ($sourceRun.workflow_id -ne $workflow.id -or $sourceRun.path -cne '.github/workflows/release.yml') { throw 'Source run must use the release workflow.' }
+          if ($sourceRun.status -cne 'completed' -or $sourceRun.event -notin @('push', 'workflow_dispatch')) { throw 'Source release workflow run must be completed.' }
+          $jobsJson = & gh api "repos/$repository/actions/runs/$sourceRunId/jobs?filter=latest&per_page=100"
+          if ($LASTEXITCODE -ne 0) { throw 'Source Android job could not be read.' }
+          $androidJobs = @(($jobsJson | ConvertFrom-Json).jobs | Where-Object { $_.name -ceq 'android' -and $_.status -ceq 'completed' -and $_.conclusion -ceq 'success' })
+          if ($androidJobs.Count -ne 1) { throw 'Source run must have one successful Android job.' }
+          $verification = @($androidJobs[0].steps | Where-Object { $_.name -ceq 'Verify release APK identity and signature' -and $_.conclusion -ceq 'success' })
+          if ($verification.Count -ne 1) { throw 'Source Android job must pass release certificate verification.' }
+          $artifactsJson = & gh api "repos/$repository/actions/runs/$sourceRunId/artifacts?name=remote-code-android&per_page=100"
+          if ($LASTEXITCODE -ne 0) { throw 'Source Android artifact could not be read.' }
+          $artifacts = @(($artifactsJson | ConvertFrom-Json).artifacts | Where-Object { $_.name -ceq 'remote-code-android' -and !$_.expired })
+          if ($artifacts.Count -ne 1) { throw 'Source run must have one available Android artifact.' }
+          Write-Output "Verified Android artifact from release workflow run $sourceRunId."
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
+        with:
+          go-version-file: go.mod
+          cache: true
+      - run: go test -race ./...
+      - run: go vet ./...
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
+        if: env.APK_RELEASE == '' && env.APK_RUN == ''
+        with:
+          name: remote-code-android
+          path: data/prebuilt-apk
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
+        if: env.APK_RUN != ''
+        with:
+          name: remote-code-android
+          path: data/prebuilt-apk
+          github-token: ${{ github.token }}
+          repository: lighfu/remote-code
+          run-id: ${{ env.APK_RUN }}
+      - name: Package Windows server with prebuilt APK
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $releaseArguments = @{ Output='data/releases' }
+          if ($env:RELEASE_TAG) {
+            if ($env:RELEASE_TAG -cnotmatch '\Av[0-9]+\.[0-9]+\.[0-9]+\z') { throw 'Expected a tag in vX.Y.Z format.' }
+            $releaseArguments.Version = $env:RELEASE_TAG.Substring(1)
+          }
+          if ($env:APK_RELEASE) { $releaseArguments.ApkRelease = $env:APK_RELEASE }
+          else { $releaseArguments.ApkManifest = 'data/prebuilt-apk/remote-code-android.json' }
+          ./scripts/build-release.ps1 @releaseArguments
+      - name: Verify native release contents
+        shell: pwsh
+        run: |
+          $archives = @(Get-ChildItem data/releases/*.zip)
+          if ($archives.Count -ne 1) { throw 'Expected one release archive.' }
+          $archive = $archives[0]
+          Add-Type -AssemblyName System.IO.Compression.FileSystem
+          $zip = [IO.Compression.ZipFile]::OpenRead($archive.FullName)
+          try {
+            $forbidden = @($zip.Entries | Where-Object { $_.FullName -match '(?i)(^|/)(node_modules|runtime)/|(^|/)(node|claude|claudecode)\.exe$|\.(ts|mjs|cjs)$' })
+            if ($forbidden.Count -gt 0) { throw 'Native release contains a runtime or provider binary.' }
+            if (@($zip.Entries | Where-Object FullName -CEQ 'remote-code.exe').Count -ne 1) { throw 'Native launcher missing.' }
+          } finally { $zip.Dispose() }
+      - name: Verify native startup without installed runtimes
+        shell: pwsh
+        run: ./scripts/smoke-release.ps1 -Directory data/releases
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        id: windows-package
+        with:
+          name: remote-code-windows
+          path: |
+            data/releases/*.zip
+            data/releases/*.apk
+            data/releases/remote-code-android.json
+            data/releases/remote-code-win32-x64.json
+            data/releases/SHA256SUMS.txt
+          if-no-files-found: error
+      - name: Generate release README and cards
+        shell: pwsh
+        env:
+          DOWNLOAD_ARTIFACT: ${{ github.event_name == 'workflow_dispatch' && steps.windows-package.outputs.artifact-url || '' }}
+        run: |
+          $readmeArguments = @('scripts/sync-readme-release.py', 'data/releases/remote-code-win32-x64.json', '--output', 'data/readme-release')
+          if ($env:GITHUB_EVENT_NAME -eq 'workflow_dispatch') {
+            if (!$env:DOWNLOAD_ARTIFACT) { throw 'The Windows artifact download URL is missing.' }
+            $readmeArguments += @('--download-url', $env:DOWNLOAD_ARTIFACT)
+          }
+          python @readmeArguments
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: remote-code-readme
+          path: data/readme-release/
+          if-no-files-found: error
+      - name: Check README and cards for the published release
+        if: github.event_name == 'push' && github.ref_type == 'tag' && github.repository == 'lighfu/remote-code'
+        run: python scripts/sync-readme-release.py data/releases/remote-code-win32-x64.json --check
+  publish:
+    if: github.event_name == 'push' && github.ref_type == 'tag' && github.repository == 'lighfu/remote-code'
+    needs: windows
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
+        with:
+          name: remote-code-windows
+          path: release
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
+        with:
+          name: remote-code-readme
+          path: release-readme
+      - name: Create the stable GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          version="${RELEASE_TAG#v}"
+          gh release create "$RELEASE_TAG" release/* --repo lighfu/remote-code --verify-tag \
+            --title "Remote Code $RELEASE_TAG" --notes-file "release-readme/docs/releases/$version.md"

@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="120" height="36" viewBox="0 0 120 36" role="img" aria-labelledby="title">
+  <title id="title">简体中文</title>
+  <rect width="120" height="36" rx="18" fill="#F8E8AE"/>
+  <circle cx="18" cy="18" r="4" fill="#B54B35"/>
+  <text x="68" y="24" text-anchor="middle" fill="#6A4C13" font-family="'Segoe UI','Noto Sans','Yu Gothic UI','Microsoft YaHei','Malgun Gothic',sans-serif" font-size="15" font-weight="600">简体中文</text>
+</svg>

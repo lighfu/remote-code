@@ -1,0 +1,32 @@
+# Node
+node_modules/
+*.log
+
+# Go
+/remote-code.exe
+/remote-code
+/coverage.out
+
+# 実行時のデータ（ペアリングのトークンなど）
+/data/
+
+# Android
+android/.gradle/
+android/.kotlin/
+android/.idea/
+android/build/
+android/app/build/
+android/local.properties
+android/signing.properties
+*.apk
+*.aab
+
+# 鍵
+*.jks
+*.keystore
+*.p12
+*.pfx
+
+# ツール
+.codegraph/
+__pycache__/
