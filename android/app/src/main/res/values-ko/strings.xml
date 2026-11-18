@@ -1434,6 +1434,7 @@
     <string name="screen_appearance_ui_sample">"메뉴·버튼·설정 Aa 123"</string>
     <string name="screen_appearance_apply">"적용"</string>
     <string name="screen_appearance_cancel">"취소"</string>
+    <string name="chat_skill_loaded">"로드된 스킬"</string>
     <string name="server_dependencies_changed">"연결된 서버가 변경되었습니다. 새로고침한 후 다시 시도하세요."</string>
     <string name="server_dependencies_connect">"종속 항목을 관리하려면 서버에 연결하세요."</string>
     <string name="server_dependencies_description">"연결된 PC에 Claude Code, Codex, Antigravity, cloudflared를 설치합니다."</string>

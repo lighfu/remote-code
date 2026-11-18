@@ -546,11 +546,26 @@ func (p *nativeProvider) readClaudeTranscript(rec *Record, messages []M, chain, 
 	owners := map[string]string{}
 	lastSaved, lastBeforeSaved := -1, -1
 	repairs := map[string]transcriptUserRepair{}
+	skillEntries := []M{}
 	for _, m := range messages {
 		typ := S(m, "type")
 		uuid := S(m, "uuid")
-		if typ != "user" && typ != "assistant" || B(m, "isMeta") || uuid != "" && len(chain) > 0 && !chain[uuid] {
+		if typ != "user" && typ != "assistant" || uuid != "" && len(chain) > 0 && !chain[uuid] {
 			continue
+		}
+		if typ == "user" {
+			m = p.claudeSkillMessage(sid, m)
+		}
+		if B(m, "isMeta") && !claudeHasInjectedSkill(m) {
+			continue
+		}
+		if typ == "user" {
+			for _, entry := range claudeUserTextEntries(m, true) {
+				if S(entry, "kind") == "skill" {
+					entry["ts"] = providerStamp(m["timestamp"])
+					skillEntries = append(skillEntries, entry)
+				}
+			}
 		}
 		message := providerMap(m["message"])
 		blocks := providerRows(message["content"])
@@ -621,6 +636,7 @@ func (p *nativeProvider) readClaudeTranscript(rec *Record, messages []M, chain, 
 			p.claudeMessage(sid, r, m)
 		}
 	}
+	p.store.repairClaudeSkillEntries(sid, skillEntries)
 }
 
 func (p *nativeProvider) claudeSavedUserRepair(sid string, msg, before M) (transcriptUserRepair, bool) {

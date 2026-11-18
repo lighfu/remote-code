@@ -128,6 +128,7 @@ fun EntryView(
                 if (cross != null) CrossSessionCard(cross) else UserBubble(e)
             }
             "assistant" -> AssistantText(e)
+            "skill" -> SkillContentCard(e)
             "thinking" -> ThinkingView(e, display.thinking)
             "tool" -> when {
                 e.tool == "wrap_up" -> NextStepCard(e)
@@ -141,6 +142,30 @@ fun EntryView(
             "question" -> QuestionCard(e, respond)
             "result" -> ResultChip(e)
             else -> SystemLine(e)
+        }
+    }
+}
+
+@Composable
+private fun SkillContentCard(e: Entry) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
+    ) {
+        Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Icon(Icons.Rounded.Extension, null, Modifier.size(20.dp), tint = MaterialTheme.colorScheme.primary)
+                Column {
+                    Text(stringResource(R.string.chat_skill_loaded), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
+                    e.title?.takeIf { it.isNotBlank() }?.let { title ->
+                        Text(title, style = MaterialTheme.typography.titleSmall)
+                    }
+                }
+            }
+            MarkdownText(e.text.orEmpty())
+            if (!e.media.isNullOrEmpty() || !e.videos.isNullOrEmpty()) {
+                dev.remotecode.ui.common.EntryMedia(e.media, e.videos)
+            }
         }
     }
 }

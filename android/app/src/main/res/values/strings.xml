@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name" translatable="false">Remote Code</string>
+    <string name="chat_skill_loaded">"読み込まれたスキル"</string>
     <string name="server_dependencies_changed">"接続先のサーバーが変更されました。更新してからもう一度お試しください。"</string>
     <string name="server_dependencies_connect">"依存関係を管理するにはサーバーに接続してください。"</string>
     <string name="server_dependencies_description">"接続中のPCに Claude Code、Codex、Antigravity、cloudflared をインストールします。"</string>

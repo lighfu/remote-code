@@ -67,10 +67,12 @@ type nativeProvider struct {
 }
 
 func NewProvider(name string, store *Store, dataDir string) Provider {
+	p := &nativeProvider{name: name, data: dataDir, store: store, sessions: map[string]*nativeSession{}, byExternal: map[string]string{}, pending: map[string]nativePending{}, models: []M{}, commands: []M{}}
 	if name == "claude" {
 		store.repairClaudeWrapUpCards("")
+		p.repairLoadedClaudeSkillHistory()
 	}
-	return &nativeProvider{name: name, data: dataDir, store: store, sessions: map[string]*nativeSession{}, byExternal: map[string]string{}, pending: map[string]nativePending{}, models: []M{}, commands: []M{}}
+	return p
 }
 func (p *nativeProvider) Available() bool {
 	_, err := FindProviderExecutable(p.name)

@@ -1453,4 +1453,5 @@
     <string name="server_dependencies_working">"Another installation is in progress."</string>
     <string name="server_dependencies_status_unknown">"Status unavailable"</string>
     <string name="server_dependencies_login">"After installation, sign in to the provider on the PC. The PowerShell command is shown in the details when available."</string>
+    <string name="chat_skill_loaded">"Loaded skill"</string>
 </resources>

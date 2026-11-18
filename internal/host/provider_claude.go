@@ -294,6 +294,9 @@ func claudeUserTextEntries(msg M, fromPC bool) []M {
 	uuid := S(msg, "uuid")
 	newEntry := func(id, text string) M {
 		entry := M{"id": id, "kind": "user", "text": text, "title": "From PC"}
+		if skill, ok := claudeInjectedSkill(msg, text); ok {
+			providerMerge(entry, skill)
+		}
 		if parent := S(msg, "parent_tool_use_id"); parent != "" {
 			entry["parent"] = parent
 		}
@@ -301,7 +304,7 @@ func claudeUserTextEntries(msg M, fromPC bool) []M {
 	}
 	// A cross-session envelope describes one logical message, even when its
 	// text arrives in several Claude content blocks.
-	if text := providerText(content); strings.Contains(text, "<cross-session-message") {
+	if text := providerText(content); strings.Contains(text, "<cross-session-message") && !claudeHasSkillMetadata(msg, text) {
 		peer := newEntry(uuid, text)
 		providerCrossSession(peer)
 		if S(peer, "messageOrigin") == "peer" {
@@ -318,7 +321,7 @@ func claudeUserTextEntries(msg M, fromPC bool) []M {
 			id = fmt.Sprintf("%s:%d", uuid, index)
 		}
 		entry := newEntry(id, S(block, "text"))
-		if fromPC {
+		if fromPC && S(entry, "kind") == "user" {
 			cleanClaudePCMessage(entry)
 		}
 		if S(entry, "text") != "" {
@@ -348,6 +351,7 @@ func (p *nativeProvider) claudeUserMessage(sid string, fromPC bool, msg M) {
 	if toolResult {
 		p.store.repairClaudeWrapUpCards(sid)
 	}
+	msg = p.claudeSkillMessage(sid, msg)
 	entries := claudeUserTextEntries(msg, fromPC)
 	if media, videos := p.claudeBlockMedia(sid, blocks); len(media) > 0 || len(videos) > 0 {
 		if len(entries) == 0 {

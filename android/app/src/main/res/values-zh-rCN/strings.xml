@@ -1434,6 +1434,7 @@
     <string name="screen_appearance_ui_sample">"菜单·按钮·设置 Aa 123"</string>
     <string name="screen_appearance_apply">"应用"</string>
     <string name="screen_appearance_cancel">"取消"</string>
+    <string name="chat_skill_loaded">"已加载技能"</string>
     <string name="server_dependencies_changed">"连接的服务器已更改。请刷新后重试。"</string>
     <string name="server_dependencies_connect">"连接服务器以管理依赖项。"</string>
     <string name="server_dependencies_description">"在已连接的 PC 上安装 Claude Code、Codex、Antigravity 和 cloudflared。"</string>
