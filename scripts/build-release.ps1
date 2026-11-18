@@ -1,6 +1,6 @@
 param(
     [string]$Output = 'data/releases',
-    [string]$Version = '0.18.9',
+    [string]$Version = '0.19.4',
     [string]$ApkManifest = 'data/prebuilt-apk/remote-code-android.json',
     [string]$ApkRelease = ''
 )
