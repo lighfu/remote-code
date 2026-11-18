@@ -122,6 +122,7 @@ func (p *nativeProvider) claudeMessage(sid string, r *nativeSession, msg M) {
 				id = NewID()
 			}
 			r.SetParent(key, id)
+			r.SetParent(claudeStreamBlockKey(parent, r.Parent(parent+":message"), index), id)
 			entry := M{"id": id}
 			if parent != "" {
 				entry["parent"] = parent
@@ -167,9 +168,14 @@ func (p *nativeProvider) claudeMessage(sid string, r *nativeSession, msg M) {
 		message := providerMap(msg["message"])
 		messageID := S(message, "id")
 		transcriptIDs, _ := msg["_transcript_entry_ids"].([]string)
-		for i, block := range providerRows(message["content"]) {
-			id := messageID + fmt.Sprintf("-%d", i)
-			if v := r.Parent(fmt.Sprintf("%s:block:%d", parent, i)); v != "" {
+		blocks := providerRows(message["content"])
+		offset := claudeAssistantBlockOffset(r, msg, len(blocks))
+		for i, block := range blocks {
+			id := messageID + fmt.Sprintf("-%d", offset+i)
+			if messageID == "" {
+				id = fmt.Sprintf("%s:%d", S(msg, "uuid"), i)
+			}
+			if v := r.Parent(claudeStreamBlockKey(parent, messageID, offset+i)); v != "" {
 				id = v
 			}
 			if S(block, "type") == "tool_use" {

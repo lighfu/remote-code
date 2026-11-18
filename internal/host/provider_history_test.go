@@ -119,7 +119,7 @@ func TestClaudeTranscriptRejoinPreservesExistingTimelineAndCatchesUp(t *testing.
 			{"message-0", "assistant", "Original reply", savedAt},
 			{"next", "user", "Next prompt", stamp},
 			{"repeated-0", "thinking", "Thinking", stamp},
-			{"answer:0", "assistant", "New answer", stamp},
+			{"repeated-1", "assistant", "New answer", stamp},
 			{"command", "system", "Command output", stamp},
 		}
 		if len(current.Entries) != len(want) {

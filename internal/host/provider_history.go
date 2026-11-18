@@ -543,7 +543,8 @@ func (p *nativeProvider) readClaudeTranscript(rec *Record, messages []M, chain, 
 		}
 	}
 	rows := make([]M, 0, len(messages))
-	owners := map[string]string{}
+	identitySession := &nativeSession{}
+	assistantIdentities := []claudeAssistantIdentity{}
 	lastSaved, lastBeforeSaved := -1, -1
 	repairs := map[string]transcriptUserRepair{}
 	skillEntries := []M{}
@@ -583,6 +584,8 @@ func (p *nativeProvider) readClaudeTranscript(rec *Record, messages []M, chain, 
 			}
 		}
 		if typ == "assistant" {
+			offset := claudeAssistantBlockOffset(identitySession, m, len(blocks))
+			m["_transcript_block_offset"] = offset
 			ids := make([]string, len(blocks))
 			for i, block := range blocks {
 				kind, text := claudeTranscriptBlock(block)
@@ -590,20 +593,19 @@ func (p *nativeProvider) readClaudeTranscript(rec *Record, messages []M, chain, 
 					continue
 				}
 				legacyID := fmt.Sprintf("%s:%d", uuid, i)
-				canonicalID := fmt.Sprintf("%s-%d", S(message, "id"), i)
+				canonicalID := fmt.Sprintf("%s-%d", S(message, "id"), offset+i)
 				id := canonicalID
 				if kind == "tool" {
 					id = S(block, "id")
-				} else if uuid != "" {
-					// A transcript can put different blocks from one API message in
-					// separate rows, reusing both its message ID and block index.
-					if S(message, "id") == "" || (owners[id] != "" && owners[id] != uuid) {
-						id = legacyID
-					} else {
-						owners[id] = uuid
-					}
+				} else if S(message, "id") == "" {
+					id = legacyID
 				}
 				ids[i] = id
+				var ts int64
+				if S(m, "timestamp") != "" {
+					ts = providerStamp(m["timestamp"])
+				}
+				assistantIdentities = append(assistantIdentities, claudeAssistantIdentity{messageID: S(message, "id"), id: id, legacyID: legacyID, localID: fmt.Sprintf("%s-%d", S(message, "id"), i), kind: kind, text: text, parent: S(m, "parent_tool_use_id"), ts: ts})
 				entry := saved[id]
 				if kind != "tool" && uuid != "" && saved[legacyID] != nil {
 					matched = true
@@ -637,6 +639,7 @@ func (p *nativeProvider) readClaudeTranscript(rec *Record, messages []M, chain, 
 		}
 	}
 	p.store.repairClaudeSkillEntries(sid, skillEntries)
+	p.store.repairClaudeAssistantEntries(sid, assistantIdentities)
 }
 
 func (p *nativeProvider) claudeSavedUserRepair(sid string, msg, before M) (transcriptUserRepair, bool) {
