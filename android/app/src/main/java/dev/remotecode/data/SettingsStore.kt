@@ -1,6 +1,7 @@
 package dev.remotecode.data
 
 import android.content.Context
+import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.floatPreferencesKey
@@ -36,8 +37,8 @@ enum class DesktopResolution(val wire: String) {
     Standard("normal"), High("high"), Native("native");
 
     companion object {
-        fun restore(value: String?, highDetail: Boolean) =
-            entries.find { it.wire == value } ?: if (highDetail) High else Standard
+        fun restore(value: String?, highDetail: Boolean?) =
+            entries.find { it.wire == value } ?: highDetail?.let { if (it) High else Standard }
     }
 }
 
@@ -50,25 +51,25 @@ sealed interface DesktopCompression {
 }
 
 data class DesktopPreferences(
-    val fps: Int = 10,
-    val resolution: DesktopResolution = DesktopResolution.Standard,
+    val fps: Int = 30,
+    val resolution: DesktopResolution = DesktopResolution.Native,
     val debugOverlay: Boolean = false,
     val capture: String = "auto",
     val codec: String = "jpeg",
     val touchpad: Boolean = true,
     val pointerSpeed: Float = 1f,
     val control: Boolean = true,
-    val clipboard: Boolean = false,
+    val clipboard: Boolean = true,
     val bitrateMbps: Int = 0,
-    val graphMask: Int = 3,
+    val graphMask: Int = 7,
     val manualBitrateMbps: Int = 32,
     val decodeColor: DesktopDecodeColor = DesktopDecodeColor.Auto,
     val decodeLatest: Boolean = true,
-    val pixelated: Boolean = false,
+    val pixelated: Boolean = true,
     val fixedJpegQuality: Boolean = false,
     val jpegQuality: Int = defaultJpegQuality,
     val pngCompression: DesktopCompression.Png? = null,
-    val audio: Boolean = false,
+    val audio: Boolean = true,
 ) {
     fun compressionFor(codec: String, supported: Boolean): DesktopCompression? = when {
         !supported -> null
@@ -155,6 +156,34 @@ class SettingsStore(private val context: Context) {
         val desktopAudio = booleanPreferencesKey("desktop_audio")
     }
 
+    internal companion object {
+        private val defaults = DesktopPreferences()
+
+        fun readDesktopPreferences(p: Preferences) = DesktopPreferences(
+            fps = p[Keys.desktopFps]?.takeIf { it in DesktopPreferences.frameRates } ?: defaults.fps,
+            resolution = DesktopResolution.restore(p[Keys.desktopResolution], p[Keys.desktopHighDetail]) ?: defaults.resolution,
+            debugOverlay = p[Keys.desktopDebugOverlay] ?: defaults.debugOverlay,
+            bitrateMbps = p[Keys.desktopBitrateMbps]?.takeIf { it in -1..DesktopPreferences.manualBitrates.last } ?: defaults.bitrateMbps,
+            manualBitrateMbps = (p[Keys.desktopManualBitrateMbps] ?: p[Keys.desktopBitrateMbps])
+                ?.takeIf { it in DesktopPreferences.manualBitrates } ?: defaults.manualBitrateMbps,
+            decodeColor = DesktopDecodeColor.entries.find { it.name.equals(p[Keys.desktopDecodeColor], ignoreCase = true) } ?: defaults.decodeColor,
+            decodeLatest = p[Keys.desktopDecodeLatest] ?: defaults.decodeLatest,
+            pixelated = p[Keys.desktopPixelated] ?: defaults.pixelated,
+            graphMask = p[Keys.desktopGraphMask]?.and(7) ?: defaults.graphMask,
+            capture = p[Keys.desktopCapture] ?: defaults.capture,
+            codec = p[Keys.desktopCodec] ?: defaults.codec,
+            fixedJpegQuality = p[Keys.desktopFixedJpegQuality] ?: defaults.fixedJpegQuality,
+            jpegQuality = p[Keys.desktopJpegQuality]?.takeIf { it in DesktopPreferences.jpegQualities }
+                ?: defaults.jpegQuality,
+            pngCompression = DesktopCompression.Png.entries.find { it.wire == p[Keys.desktopPngCompression] },
+            touchpad = p[Keys.desktopTouchpad] ?: defaults.touchpad,
+            pointerSpeed = p[Keys.desktopPointerSpeed]?.takeIf { it in DesktopPreferences.pointerSpeeds } ?: defaults.pointerSpeed,
+            control = p[Keys.desktopControl] ?: defaults.control,
+            clipboard = p[Keys.desktopClipboard] ?: defaults.clipboard,
+            audio = p[Keys.desktopAudio] ?: defaults.audio,
+        )
+    }
+
     val settings: Flow<AppSettings> = context.dataStore.data.map { p ->
         val url = p[Keys.url]
         val token = p[Keys.token]
@@ -174,29 +203,7 @@ class SettingsStore(private val context: Context) {
                 input = p[Keys.toolInputWrap] ?: true,
                 output = p[Keys.toolOutputWrap] ?: false,
             ),
-            desktop = DesktopPreferences(
-                fps = p[Keys.desktopFps]?.takeIf { it in DesktopPreferences.frameRates } ?: 10,
-                resolution = DesktopResolution.restore(p[Keys.desktopResolution], p[Keys.desktopHighDetail] ?: false),
-                debugOverlay = p[Keys.desktopDebugOverlay] ?: false,
-                bitrateMbps = p[Keys.desktopBitrateMbps]?.takeIf { it in -1..DesktopPreferences.manualBitrates.last } ?: 0,
-                manualBitrateMbps = (p[Keys.desktopManualBitrateMbps] ?: p[Keys.desktopBitrateMbps])
-                    ?.takeIf { it in DesktopPreferences.manualBitrates } ?: 32,
-                decodeColor = DesktopDecodeColor.entries.find { it.name.equals(p[Keys.desktopDecodeColor], ignoreCase = true) } ?: DesktopDecodeColor.Auto,
-                decodeLatest = p[Keys.desktopDecodeLatest] ?: true,
-                pixelated = p[Keys.desktopPixelated] ?: false,
-                graphMask = p[Keys.desktopGraphMask]?.and(7) ?: 3,
-                capture = p[Keys.desktopCapture] ?: "auto",
-                codec = p[Keys.desktopCodec] ?: "jpeg",
-                fixedJpegQuality = p[Keys.desktopFixedJpegQuality] ?: false,
-                jpegQuality = p[Keys.desktopJpegQuality]?.takeIf { it in DesktopPreferences.jpegQualities }
-                    ?: DesktopPreferences.defaultJpegQuality,
-                pngCompression = DesktopCompression.Png.entries.find { it.wire == p[Keys.desktopPngCompression] },
-                touchpad = p[Keys.desktopTouchpad] ?: true,
-                pointerSpeed = p[Keys.desktopPointerSpeed]?.takeIf { it in DesktopPreferences.pointerSpeeds } ?: 1f,
-                control = p[Keys.desktopControl] ?: true,
-                clipboard = p[Keys.desktopClipboard] ?: false,
-                audio = p[Keys.desktopAudio] ?: false,
-            ),
+            desktop = readDesktopPreferences(p),
             footerDisplay = ChatFooterDisplay(
                 context = p[Keys.footerContext] ?: true,
                 cache = p[Keys.footerCache] ?: true,
