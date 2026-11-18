@@ -5,7 +5,6 @@ import dev.remotecode.R
 import dev.remotecode.i18n.appString
 import androidx.compose.ui.res.stringResource
 
-import android.content.ContentValues
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.os.Environment
@@ -118,27 +117,12 @@ private fun mimeOf(name: String): String = when (name.substringAfterLast('.', ""
     else -> "image/png"
 }
 
-suspend fun saveMediaToDevice(id: String): String {
-    val bytes = RemoteCodeApp.instance.repository.api.media(id, fresh = true)
+suspend fun saveMediaToDevice(id: String, writeOriginal: (suspend (java.io.OutputStream) -> Unit)? = null): String {
     val name = mediaFileName(id)
-    return withContext(Dispatchers.IO) {
-        val resolver = RemoteCodeApp.instance.contentResolver
-        val values = ContentValues().apply {
-            put(MediaStore.MediaColumns.DISPLAY_NAME, name)
-            put(MediaStore.MediaColumns.MIME_TYPE, mimeOf(name))
-            put(MediaStore.MediaColumns.RELATIVE_PATH, Environment.DIRECTORY_PICTURES + "/Remote Code")
-            put(MediaStore.MediaColumns.IS_PENDING, 1)
-        }
-        val uri = resolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values) ?: error(appString(R.string.screen_remote_image_001))
-        try {
-            resolver.openOutputStream(uri)?.use { it.write(bytes) } ?: error(appString(R.string.screen_remote_image_002))
-            resolver.update(uri, ContentValues().apply { put(MediaStore.MediaColumns.IS_PENDING, 0) }, null, null)
-        } catch (e: Exception) {
-            resolver.delete(uri, null, null)
-            throw e
-        }
-        name
+    writeDeviceMedia(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, Environment.DIRECTORY_PICTURES, name, mimeOf(name)) { output ->
+        if (writeOriginal != null) writeOriginal(output) else output.write(RemoteCodeApp.instance.repository.api.media(id, fresh = true))
     }
+    return name
 }
 
 @Composable
@@ -171,7 +155,7 @@ fun RemoteImage(id: String, modifier: Modifier = Modifier, maxSide: Int = 720, c
 }
 
 @Composable
-fun MediaStrip(ids: List<String>, modifier: Modifier = Modifier) {
+fun MediaStrip(ids: List<String>, modifier: Modifier = Modifier, writeOriginal: (suspend (java.io.OutputStream) -> Unit)? = null) {
     var open by remember { mutableStateOf<String?>(null) }
     if (ids.size == 1) {
         RemoteImage(
@@ -194,11 +178,11 @@ fun MediaStrip(ids: List<String>, modifier: Modifier = Modifier) {
             }
         }
     }
-    open?.let { ImageViewer(it) { open = null } }
+    open?.let { ImageViewer(it, writeOriginal) { open = null } }
 }
 
 @Composable
-fun ImageViewer(id: String, onClose: () -> Unit) {
+fun ImageViewer(id: String, writeOriginal: (suspend (java.io.OutputStream) -> Unit)? = null, onClose: () -> Unit) {
     Dialog(onDismissRequest = onClose, properties = DialogProperties(usePlatformDefaultWidth = false)) {
         var scale by remember { mutableFloatStateOf(1f) }
         var offset by remember { mutableStateOf(Offset.Zero) }
@@ -230,7 +214,7 @@ fun ImageViewer(id: String, onClose: () -> Unit) {
                 onClick = {
                     saving = true
                     scope.launch {
-                        val r = runCatching { saveMediaToDevice(id) }
+                        val r = runCatching { saveMediaToDevice(id, writeOriginal) }
                         saving = false
                         val msg = r.fold({ appString(R.string.screen_remote_image_006, it) }, { appString(R.string.screen_remote_image_007, it.message) })
                         Toast.makeText(context, msg, Toast.LENGTH_LONG).show()

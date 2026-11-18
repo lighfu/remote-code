@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="file_view_as_hex">16進数で表示</string>
+    <string name="hex_file_details">ファイルの詳細</string>
+    <string name="hex_empty">このファイルは空です（0 バイト）。</string>
+    <string name="hex_previous">前のページ</string>
+    <string name="hex_next">次のページ</string>
+    <string name="hex_page_range">%1$s ～ %2$s · 全 %3$d バイト</string>
+    <string name="hex_jump">オフセットに移動</string>
+    <string name="hex_offset">オフセット（16進数）</string>
+    <string name="hex_offset_hint">0x0 ～ %1$s</string>
+    <string name="hex_column_offset">位置</string>
+    <string name="hex_column_bytes">バイト列</string>
+    <string name="hex_reload">ファイルを再読み込み</string>
+</resources>

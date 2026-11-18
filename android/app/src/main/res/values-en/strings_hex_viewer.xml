@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="file_view_as_hex">View as hex</string>
+    <string name="hex_column_bytes">Bytes</string>
+    <string name="hex_column_offset">Offset</string>
+    <string name="hex_empty">This file is empty (0 bytes).</string>
+    <string name="hex_file_details">File details</string>
+    <string name="hex_jump">Jump to offset</string>
+    <string name="hex_next">Next page</string>
+    <string name="hex_offset">Offset (hex)</string>
+    <string name="hex_offset_hint">0x0 – %1$s</string>
+    <string name="hex_page_range">%1$s – %2$s · %3$d bytes total</string>
+    <string name="hex_previous">Previous page</string>
+    <string name="hex_reload">Reload file</string>
+</resources>

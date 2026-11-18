@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="file_view_as_hex">以十六進位檢視</string>
+    <string name="hex_column_bytes">位元組</string>
+    <string name="hex_column_offset">位置</string>
+    <string name="hex_empty">此檔案為空（0 位元組）。</string>
+    <string name="hex_file_details">檔案詳細資料</string>
+    <string name="hex_jump">跳至偏移量</string>
+    <string name="hex_next">下一頁</string>
+    <string name="hex_offset">偏移量（十六進位）</string>
+    <string name="hex_offset_hint">0x0 ～ %1$s</string>
+    <string name="hex_page_range">%1$s ～ %2$s · 共 %3$d 位元組</string>
+    <string name="hex_previous">上一頁</string>
+    <string name="hex_reload">重新載入檔案</string>
+</resources>

@@ -40,6 +40,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import dev.remotecode.RemoteCodeApp
 import dev.remotecode.data.LinkFileInfo
+import dev.remotecode.data.ServerConfig
 import dev.remotecode.data.CodeQuote
 import dev.remotecode.data.ConnectionIdentity
 import dev.remotecode.data.connectionIdentity
@@ -62,7 +63,7 @@ internal val LocalCodeQuote = staticCompositionLocalOf<((String, ConnectionIdent
 
 /** 保存時は省略前の原本を取得する。 */
 @Composable
-internal fun CodeViewerContent(info: LinkFileInfo, link: String, sessionId: String, onDismiss: () -> Unit, onEdit: (() -> Unit)? = null, source: ConnectionIdentity? = null) {
+internal fun CodeViewerContent(info: LinkFileInfo, sessionId: String, onDismiss: () -> Unit, sourceServer: ServerConfig, onEdit: (() -> Unit)? = null, onViewHex: (() -> Unit)? = null) {
     val repo = RemoteCodeApp.instance.repository
     val settings by repo.settings.collectAsState()
     val wrapLines = settings?.codeWrap ?: true
@@ -78,10 +79,10 @@ internal fun CodeViewerContent(info: LinkFileInfo, link: String, sessionId: Stri
     var quoteDialog by remember(info) { mutableStateOf(false) }
     var quoteError by remember(info) { mutableStateOf<String?>(null) }
     var markdownPreview by remember(info) { mutableStateOf(false) }
-    val sourceServer = remember(info, source) { RemoteCodeApp.instance.repository.api.server?.takeIf { it.connectionIdentity() == source } }
+    val source = sourceServer.connectionIdentity()
     val changes = rememberFileChanges(info, sessionId, sourceServer)
     var showDiff by remember(info, sessionId, source) { mutableStateOf<Pair<FileChanges, Boolean>?>(null) }
-    val canQuote = source != null && quoteHandler != null && info.text?.isNotEmpty() == true
+    val canQuote = quoteHandler != null && info.text?.isNotEmpty() == true
     fun selectLine(line: Int) {
         selecting = true; quoteError = null
         val from = anchor
@@ -93,7 +94,7 @@ internal fun CodeViewerContent(info: LinkFileInfo, link: String, sessionId: Stri
         if (info.truncated && !shownText.endsWith('\n') && !shownText.endsWith('\r')) {
             require(value.endLine < sourceLines(shownText).size) { appString(R.string.chat_code_viewer_026) }
         }
-        val expected = source ?: error(appString(R.string.chat_code_viewer_025))
+        val expected = source
         if (RemoteCodeApp.instance.repository.api.server?.connectionIdentity() != expected) error(appString(R.string.chat_code_viewer_024))
         val handler = quoteHandler ?: error(appString(R.string.chat_code_viewer_023))
         handler(sessionId, expected, value)
@@ -110,7 +111,7 @@ internal fun CodeViewerContent(info: LinkFileInfo, link: String, sessionId: Stri
                     Text(info.name, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     Text("${language.displayLabel} · ${lines?.size?.let { stringResource(R.string.chat_code_viewer_022, it, if (info.truncated) appString(R.string.chat_code_viewer_021) else "") } ?: stringResource(R.string.chat_loading)}", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
-                if (isProjectMarkdown(info.name) && sourceServer != null) IconButton(onClick = { markdownPreview = !markdownPreview; selecting = false; selected = null; anchor = null }) {
+                if (isProjectMarkdown(info.name)) IconButton(onClick = { markdownPreview = !markdownPreview; selecting = false; selected = null; anchor = null }) {
                     Icon(Icons.Rounded.Visibility, if (markdownPreview) stringResource(R.string.chat_code_viewer_020) else stringResource(R.string.chat_code_viewer_019), tint = if (markdownPreview) MaterialTheme.colorScheme.primary else LocalContentColor.current)
                 }
                 if (!markdownPreview) IconToggleButton(checked = wrapLines, onCheckedChange = { on -> scope.launch { repo.settingsStore.setCodeWrap(on) } }) {
@@ -124,8 +125,7 @@ internal fun CodeViewerContent(info: LinkFileInfo, link: String, sessionId: Stri
                     saving = true
                     scope.launch {
                         val result = runCatching {
-                            val bytes = RemoteCodeApp.instance.repository.api.fileRaw(link, sessionId)
-                            saveToDownloads(info.name, info.mime, bytes)
+                            saveRemoteToDownloads(info, sessionId, sourceServer)
                         }
                         saving = false
                         Toast.makeText(context, result.fold({ appString(R.string.chat_code_viewer_015, info.name) }, { appString(R.string.chat_code_viewer_014, it.message) }), Toast.LENGTH_LONG).show()
@@ -135,7 +135,10 @@ internal fun CodeViewerContent(info: LinkFileInfo, link: String, sessionId: Stri
                     else Icon(Icons.Rounded.Download, stringResource(R.string.chat_code_viewer_013))
                 }
             }
-            Text(info.path, Modifier.padding(horizontal = 16.dp, vertical = 4.dp), style = MaterialTheme.typography.labelSmall, maxLines = 2, overflow = TextOverflow.Ellipsis, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Row(Modifier.fillMaxWidth().padding(start = 16.dp, end = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                Text(info.path, Modifier.weight(1f).padding(vertical = 4.dp), style = MaterialTheme.typography.labelSmall, maxLines = 2, overflow = TextOverflow.Ellipsis, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                if (onViewHex != null) TextButton(onClick = onViewHex) { Text(stringResource(R.string.file_view_as_hex)) }
+            }
             if (changes != null) FileChangeButtons(changes) { staged -> showDiff = changes to staged }
             if (info.truncated) Text(stringResource(R.string.chat_code_viewer_012), Modifier.padding(horizontal = 16.dp, vertical = 4.dp), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.tertiary)
             if (lines?.any { it.text.length > MAX_LINE_CHARS } == true) Text(stringResource(R.string.chat_code_viewer_011, MAX_LINE_CHARS), Modifier.padding(horizontal = 16.dp), style = MaterialTheme.typography.labelSmall)

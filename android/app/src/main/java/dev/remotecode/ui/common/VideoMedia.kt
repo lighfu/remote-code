@@ -5,7 +5,6 @@ import dev.remotecode.R
 import dev.remotecode.i18n.appString
 import androidx.compose.ui.res.stringResource
 
-import android.content.ContentValues
 import android.net.Uri
 import android.os.Environment
 import android.provider.MediaStore
@@ -16,9 +15,11 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.Download
+import androidx.compose.material.icons.rounded.MoreVert
 import androidx.compose.material.icons.rounded.PlayCircle
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -35,9 +36,7 @@ import dev.remotecode.data.connectionIdentity
 import dev.remotecode.data.videoFileName
 import dev.remotecode.data.videoMime
 import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 
 /** 本文やツールの折りたたみに関係なく表示する。 */
 @Composable
@@ -71,7 +70,8 @@ fun VideoViewer(id: String, onClose: () -> Unit) {
 
 /** 認証は MediaPlayer のヘッダーで渡す。 */
 @Composable
-fun VideoPlayerContent(id: String, name: String = videoFileName(id), onClose: () -> Unit) {
+fun VideoPlayerContent(id: String, name: String = videoFileName(id), writeOriginal: (suspend (java.io.OutputStream) -> Unit)? = null,
+                       onViewHex: (() -> Unit)? = null, onClose: () -> Unit) {
     val repo = RemoteCodeApp.instance.repository
     val settings by repo.settings.collectAsState()
     val route by repo.route.collectAsState()
@@ -82,8 +82,9 @@ fun VideoPlayerContent(id: String, name: String = videoFileName(id), onClose: ()
     var attempt by remember(id, identity) { mutableIntStateOf(0) }
     var loading by remember(id, identity, attempt) { mutableStateOf(true) }
     var error by remember(id, identity, attempt) { mutableStateOf<String?>(null) }
-    var position by remember(id, identity) { mutableIntStateOf(0) }
-    var resumePlaying by remember(id, identity) { mutableStateOf(true) }
+    var position by rememberSaveable(id, identity) { mutableIntStateOf(0) }
+    var resumePlaying by rememberSaveable(id, identity) { mutableStateOf(true) }
+    var player by remember(id, identity, attempt) { mutableStateOf<VideoView?>(null) }
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
     var saving by remember(id) { mutableStateOf(false) }
@@ -97,7 +98,7 @@ fun VideoPlayerContent(id: String, name: String = videoFileName(id), onClose: ()
                     saving = true
                     scope.launch {
                         try {
-                            saveVideoToDevice(id, name)
+                            saveVideoToDevice(id, name, writeOriginal)
                             Toast.makeText(context, appString(R.string.screen_video_media_004, name), Toast.LENGTH_LONG).show()
                         } catch (e: CancellationException) {
                             throw e
@@ -108,11 +109,23 @@ fun VideoPlayerContent(id: String, name: String = videoFileName(id), onClose: ()
                 }) {
                     if (saving) CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp) else Icon(Icons.Rounded.Download, stringResource(R.string.screen_video_media_006))
                 }
+                if (onViewHex != null) {
+                    var menu by remember { mutableStateOf(false) }
+                    Box {
+                        IconButton(onClick = { menu = true }) { Icon(Icons.Rounded.MoreVert, stringResource(R.string.chat_more)) }
+                        AppDropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+                            DropdownMenuItem(text = { Text(stringResource(R.string.file_view_as_hex)) }, onClick = {
+                                menu = false
+                                if (!loading) player?.let { position = it.currentPosition; resumePlaying = it.isPlaying }
+                                onViewHex()
+                            })
+                        }
+                    }
+                }
             }
             Box(Modifier.fillMaxWidth().weight(1f), contentAlignment = Alignment.Center) {
                 if (source != null && error == null && lifecycle.isAtLeast(Lifecycle.State.STARTED)) {
                     key(id, identity, attempt) {
-                        var player by remember { mutableStateOf<VideoView?>(null) }
                         var controller by remember { mutableStateOf<MediaController?>(null) }
                         DisposableEffect(owner, player) {
                             val view = player
@@ -179,21 +192,8 @@ fun VideoPlayerContent(id: String, name: String = videoFileName(id), onClose: ()
 }
 
 /** 原本をストリーム保存し、全体をメモリに載せない。 */
-private suspend fun saveVideoToDevice(id: String, name: String): Unit = withContext(Dispatchers.IO) {
-    val app = RemoteCodeApp.instance
-    val resolver = app.contentResolver
-    val values = ContentValues().apply {
-        put(MediaStore.MediaColumns.DISPLAY_NAME, name)
-        put(MediaStore.MediaColumns.MIME_TYPE, videoMime(name))
-        put(MediaStore.MediaColumns.RELATIVE_PATH, Environment.DIRECTORY_MOVIES + "/Remote Code")
-        put(MediaStore.MediaColumns.IS_PENDING, 1)
-    }
-    val uri = resolver.insert(MediaStore.Video.Media.EXTERNAL_CONTENT_URI, values) ?: error(appString(R.string.screen_video_media_010))
-    try {
-        resolver.openOutputStream(uri)?.use { app.repository.api.copyMediaTo(id, it) } ?: error(appString(R.string.screen_video_media_011))
-        resolver.update(uri, ContentValues().apply { put(MediaStore.MediaColumns.IS_PENDING, 0) }, null, null)
-    } catch (e: Exception) {
-        resolver.delete(uri, null, null)
-        throw e
+private suspend fun saveVideoToDevice(id: String, name: String, writeOriginal: (suspend (java.io.OutputStream) -> Unit)?) {
+    writeDeviceMedia(MediaStore.Video.Media.EXTERNAL_CONTENT_URI, Environment.DIRECTORY_MOVIES, name, videoMime(name)) { output ->
+        if (writeOriginal != null) writeOriginal(output) else RemoteCodeApp.instance.repository.api.copyMediaTo(id, output)
     }
 }

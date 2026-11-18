@@ -67,12 +67,12 @@ class Api(private val client: OkHttpClient, private val strings: AppStringResolv
 
     /** 時間のかかる管理操作用。 */
     private val slowClient: OkHttpClient by lazy { client.newBuilder().readTimeout(6, java.util.concurrent.TimeUnit.MINUTES).build() }
-    /** 書き込みは応答を失っても再送しない。 */
-    private val gitMutationClient: OkHttpClient by lazy {
+    /** 接続先を固定し、リダイレクトと自動再送を行わない。 */
+    private val directClient: OkHttpClient by lazy {
         client.newBuilder().retryOnConnectionFailure(false).followRedirects(false).followSslRedirects(false).build()
     }
     private val projectActionClient: OkHttpClient by lazy {
-        gitMutationClient.newBuilder().readTimeout(6, java.util.concurrent.TimeUnit.MINUTES).callTimeout(6, java.util.concurrent.TimeUnit.MINUTES).build()
+        directClient.newBuilder().readTimeout(6, java.util.concurrent.TimeUnit.MINUTES).callTimeout(6, java.util.concurrent.TimeUnit.MINUTES).build()
     }
     private val fileUploadClient: OkHttpClient by lazy {
         client.newBuilder().retryOnConnectionFailure(false).followRedirects(false).followSslRedirects(false)
@@ -89,11 +89,11 @@ class Api(private val client: OkHttpClient, private val strings: AppStringResolv
         return withContext(Dispatchers.IO) {
             trace.dispatched()
             val activeClient = when {
-                method == "POST" && path.startsWith("/api/dependencies/") && path.endsWith("/install") -> gitMutationClient
+                method == "POST" && path.startsWith("/api/dependencies/") && path.endsWith("/install") -> directClient
                 method == "POST" && path.endsWith("/project/action") -> projectActionClient
-                method == "POST" && path.startsWith("/api/sessions/") && (path.contains("/git/") || path.contains("/project/")) -> gitMutationClient
+                method == "POST" && path.startsWith("/api/sessions/") && (path.contains("/git/") || path.contains("/project/")) -> directClient
                 method == "POST" && path.endsWith("/messages") && body is JsonObject && (body["files"] as? JsonArray)?.isNotEmpty() == true -> fileUploadClient
-                method == "POST" && path.endsWith("/messages") && privatePayload -> gitMutationClient
+                method == "POST" && path.endsWith("/messages") && privatePayload -> directClient
                 path.startsWith("/api/claude/") -> slowClient
                 else -> client
             }
@@ -766,6 +766,80 @@ class Api(private val client: OkHttpClient, private val strings: AppStringResolv
     suspend fun fileInfo(link: String, sessionId: String, expectedServer: ServerConfig? = null): LinkFileInfo {
         val q = java.net.URLEncoder.encode(link, "UTF-8")
         return projectGet("/api/file?link=$q&session=$sessionId", LinkFileInfo.serializer(), expectedServer)
+    }
+
+    private fun fileDownloadRequest(target: ServerConfig, link: String, sessionId: String): Request.Builder {
+        val url = (target.url.trimEnd('/') + "/api/file/raw").toHttpUrl().newBuilder()
+            .addQueryParameter("link", link).addQueryParameter("session", sessionId).build()
+        return Request.Builder().url(url).auth(target).header("Accept-Encoding", "identity")
+    }
+
+    internal suspend fun fileHexPage(
+        link: String, sessionId: String, offset: Long, length: Int, size: Long,
+        expectedServer: ServerConfig?, etag: String? = null,
+    ): FileHexPage {
+        val target = projectTarget(expectedServer)
+        require(size >= 0 && offset >= 0 && (offset < size || size == 0L && offset == 0L))
+        if (size == 0L) return FileHexPage(ByteArray(0), etag)
+        require(length in 1..(1024 * 1024))
+        val count = minOf(size - offset, length.toLong())
+        val end = offset + (count - 1)
+        val request = fileDownloadRequest(target, link, sessionId).header("Range", "bytes=$offset-$end")
+            .apply { if (etag != null) header("If-Match", etag) }.build()
+        return directClient.newCall(request).readHexPage(offset, end, size, etag, strings)
+            .also { projectTarget(target) }
+    }
+
+    internal suspend fun downloadFileTo(
+        link: String, sessionId: String, size: Long, expectedServer: ServerConfig, output: java.io.OutputStream,
+    ): Unit = withContext(Dispatchers.IO) {
+        val target = projectTarget(expectedServer)
+        require(size >= 0)
+        if (size > 60L * 1024 * 1024) {
+            var offset = 0L
+            var etag: String? = null
+            while (offset < size) {
+                currentCoroutineContext().ensureActive()
+                val page = fileHexPage(link, sessionId, offset, 1024 * 1024, size, target, etag)
+                // A changed snapshot must never be stitched onto the preceding bytes.
+                etag = page.etag?.takeIf { it.startsWith('"') && it.endsWith('"') }
+                    ?: throw ApiException(localString(R.string.core_file_http_error, 412), 412)
+                output.write(page.bytes)
+                offset += page.bytes.size
+            }
+        } else {
+            val request = fileDownloadRequest(target, link, sessionId).build()
+            val started = System.nanoTime()
+            projectActionClient.newCall(request).execute().use { response ->
+                val headersMs = (System.nanoTime() - started) / 1_000_000
+                if (response.code != 200) {
+                    val detail = runCatching { AppJson.parseToJsonElement(response.peekBody(2048).string()).str("error") }.getOrNull()
+                    val message = detail?.let { localizedServerMessage(it, strings) } ?: localString(R.string.core_file_http_error, response.code)
+                    NetLog.api("GET", "/api/file/raw", response.code, headersMs, null, message)
+                    throw ApiException(message, response.code)
+                }
+                val length = response.body.contentLength()
+                if (length >= 0 && length != size) throw ApiException(localString(R.string.core_file_http_error, 412), 412)
+                val input = response.body.byteStream()
+                val buffer = ByteArray(64 * 1024)
+                var received = 0L
+                while (true) {
+                    currentCoroutineContext().ensureActive()
+                    projectTarget(target)
+                    val count = input.read(buffer)
+                    if (count < 0) break
+                    received += count
+                    if (received > size) throw ApiException(localString(R.string.core_file_http_error, 412), 412)
+                    output.write(buffer, 0, count)
+                }
+                if (received != size) throw ApiException(localString(R.string.core_file_http_error, 412), 412)
+                val elapsed = (System.nanoTime() - started) / 1_000_000
+                NetLog.api("GET", "/api/file/raw", response.code, elapsed, received, timing = NetTiming.fromResponse(response, headersMs, elapsed - headersMs))
+            }
+        }
+        currentCoroutineContext().ensureActive()
+        projectTarget(target)
+        Unit
     }
 
     suspend fun fileRaw(link: String, sessionId: String): ByteArray = withContext(Dispatchers.IO) {

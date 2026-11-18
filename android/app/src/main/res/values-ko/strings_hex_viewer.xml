@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="file_view_as_hex">16진수로 보기</string>
+    <string name="hex_column_bytes">바이트</string>
+    <string name="hex_column_offset">위치</string>
+    <string name="hex_empty">이 파일은 비어 있습니다(0바이트).</string>
+    <string name="hex_file_details">파일 세부정보</string>
+    <string name="hex_jump">오프셋으로 이동</string>
+    <string name="hex_next">다음 페이지</string>
+    <string name="hex_offset">오프셋(16진수)</string>
+    <string name="hex_offset_hint">0x0 ~ %1$s</string>
+    <string name="hex_page_range">%1$s ~ %2$s · 총 %3$d바이트</string>
+    <string name="hex_previous">이전 페이지</string>
+    <string name="hex_reload">파일 다시 로드</string>
+</resources>

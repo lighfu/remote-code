@@ -4,7 +4,6 @@ import dev.remotecode.R
 import dev.remotecode.i18n.appString
 import androidx.compose.ui.res.stringResource
 
-import android.content.ContentValues
 import android.content.Intent
 import android.net.Uri
 import android.os.Environment
@@ -32,6 +31,7 @@ import androidx.compose.material.icons.rounded.Description
 import androidx.compose.material.icons.rounded.Download
 import androidx.compose.material.icons.rounded.Folder
 import androidx.compose.material.icons.rounded.Image
+import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material.icons.rounded.InsertDriveFile
 import androidx.compose.material.icons.rounded.Language
 import androidx.compose.material.icons.rounded.Share
@@ -57,6 +57,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -69,13 +70,13 @@ import androidx.compose.ui.window.DialogProperties
 import dev.remotecode.ui.theme.Mono
 import dev.remotecode.RemoteCodeApp
 import dev.remotecode.data.LinkFileInfo
+import dev.remotecode.data.ServerConfig
 import dev.remotecode.data.connectionIdentity
 import dev.remotecode.data.WebPreview
 import dev.remotecode.ui.common.MediaStrip
 import dev.remotecode.ui.common.VideoPlayerContent
-import kotlinx.coroutines.Dispatchers
+import dev.remotecode.ui.common.writeDeviceMedia
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 
 private fun isWeb(link: String) = link.startsWith("http://", true) || link.startsWith("https://", true)
 
@@ -187,21 +188,25 @@ private fun OtherLink(link: String, onDismiss: () -> Unit) {
 private fun FileViewer(link: String, sessionId: String, onDismiss: () -> Unit) {
     val repo = RemoteCodeApp.instance.repository
     val sessions by repo.sessions.collectAsState()
+    val active by repo.activeServerIdentity.collectAsState()
     val launchEditor = LocalProjectEditor.current
     var info by remember(link, sessionId) { mutableStateOf<LinkFileInfo?>(null) }
-    var source by remember(link, sessionId) { mutableStateOf<dev.remotecode.data.ConnectionIdentity?>(null) }
+    var server by remember(link, sessionId) { mutableStateOf<ServerConfig?>(null) }
+    var manualHex by remember(link, sessionId) { mutableStateOf(false) }
+    var details by remember(link, sessionId) { mutableStateOf(false) }
+    val viewState = rememberSaveableStateHolder()
     var error by remember(link, sessionId) { mutableStateOf<String?>(null) }
     var retry by remember(link, sessionId) { mutableStateOf(0) }
     LaunchedEffect(link, sessionId, retry) {
-        error = null; info = null; source = null
+        error = null; info = null
         try {
             val api = RemoteCodeApp.instance.repository.api
-            val target = api.server
+            val target = server ?: api.server
                 ?: throw IllegalStateException(appString(R.string.chat_link_sheet_014))
+            server = target
             val expected = target.connectionIdentity()
             val result = api.fileInfo(link, sessionId, expectedServer = target)
             if (api.server?.connectionIdentity() != expected) throw IllegalStateException(appString(R.string.chat_code_viewer_024))
-            source = expected
             info = result
         } catch (e: kotlinx.coroutines.CancellationException) {
             throw e
@@ -209,26 +214,60 @@ private fun FileViewer(link: String, sessionId: String, onDismiss: () -> Unit) {
             error = e.message ?: appString(R.string.chat_link_sheet_013)
         }
     }
-    Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)) {
+    fun back() {
+        when {
+            details -> details = false
+            manualHex -> manualHex = false
+            else -> onDismiss()
+        }
+    }
+    Dialog(onDismissRequest = ::back, properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)) {
         val file = info
-        if (file?.kind == "text") {
+        val target = server
+        val hex = file != null && (file.kind == "binary" || manualHex) && !details && target != null
+        if (target != null && active != target.connectionIdentity()) {
+            Surface(Modifier.fillMaxSize()) {
+                Column(Modifier.systemBarsPadding().padding(16.dp)) {
+                    IconButton(onClick = onDismiss) { Icon(Icons.AutoMirrored.Rounded.ArrowBack, stringResource(R.string.chat_close)) }
+                    Text(stringResource(R.string.chat_code_viewer_024), color = MaterialTheme.colorScheme.error)
+                }
+            }
+        } else if (file?.kind == "text" && !hex && !details && target != null) {
             val root = sessions.find { it.id == sessionId }?.cwd?.replace('\\', '/')?.trimEnd('/')
             val path = file.path.replace('\\', '/')
             val windows = root != null && ((root.length >= 2 && root[1] == ':') || root.startsWith("//"))
             val inProject = !root.isNullOrBlank() && (path.equals(root, ignoreCase = windows) || path.startsWith(root + "/", ignoreCase = windows))
-            CodeViewerContent(file, link, sessionId, onDismiss, onEdit = if (inProject && !file.truncated && launchEditor != null) ({ onDismiss(); launchEditor(sessionId, file.path) }) else null, source = source)
-        } else if (file?.kind == "video" && file.mediaId != null) {
-            VideoPlayerContent(file.mediaId, file.name, onDismiss)
+            viewState.SaveableStateProvider("source") {
+                CodeViewerContent(file, sessionId, onDismiss, target, onEdit = if (inProject && !file.truncated && launchEditor != null) ({ onDismiss(); launchEditor(sessionId, file.path) }) else null,
+                    onViewHex = { manualHex = true })
+            }
+        } else if (file?.kind == "video" && file.mediaId != null && target != null && !hex && !details) {
+            viewState.SaveableStateProvider("video:${file.path}:${file.size}:${file.mtime}") {
+                VideoPlayerContent(file.mediaId, file.name, writeOriginal = { output ->
+                    repo.api.downloadFileTo(file.path, sessionId, file.size, target, output)
+                }, onViewHex = { manualHex = true }, onClose = onDismiss)
+            }
         } else {
             Surface(Modifier.fillMaxSize()) {
                 Column(Modifier.fillMaxSize().systemBarsPadding()) {
                     Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-                        IconButton(onClick = onDismiss) { Icon(Icons.AutoMirrored.Rounded.ArrowBack, stringResource(R.string.chat_close)) }
+                        IconButton(onClick = ::back) { Icon(Icons.AutoMirrored.Rounded.ArrowBack, stringResource(R.string.chat_close)) }
                         Text(file?.name ?: link.substringAfterLast('/').substringAfterLast('\\'), modifier = Modifier.weight(1f), style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        if (hex) IconButton(onClick = { details = true }) {
+                            Icon(Icons.Rounded.Info, stringResource(R.string.hex_file_details))
+                        }
                     }
-                    Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(20.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
-                        if (file != null) {
-                            FileDetails(file, link, sessionId)
+                    if (hex && file != null && target != null) {
+                        viewState.SaveableStateProvider("hex:${file.path}:${file.size}:${file.mtime}") {
+                            HexViewer(file, sessionId, target, onReload = { retry++ })
+                        }
+                    } else Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(20.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                        if (file != null && target != null) {
+                            FileDetails(file, sessionId, target)
+                            if (file.exists && file.kind != "dir") OutlinedButton(onClick = {
+                                details = false
+                                manualHex = file.kind != "binary"
+                            }) { Text(stringResource(R.string.file_view_as_hex)) }
                         } else if (error != null) {
                             Text(error!!, color = MaterialTheme.colorScheme.error)
                             Button(onClick = { retry++ }) { Text(stringResource(R.string.chat_link_sheet_012)) }
@@ -247,7 +286,7 @@ private fun FileViewer(link: String, sessionId: String, onDismiss: () -> Unit) {
 }
 
 @Composable
-private fun FileDetails(i: LinkFileInfo, link: String, sessionId: String) {
+private fun FileDetails(i: LinkFileInfo, sessionId: String, server: ServerConfig) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var saving by remember { mutableStateOf(false) }
@@ -263,7 +302,9 @@ private fun FileDetails(i: LinkFileInfo, link: String, sessionId: String) {
         else -> listOfNotNull(sizeText(i.size), i.line?.let { appString(R.string.chat_link_sheet_008, it) }).joinToString(" · ")
     }
     Header(icon, i.name, sub)
-    if (i.kind == "image" && i.mediaId != null) MediaStrip(listOf(i.mediaId))
+    if (i.kind == "image" && i.mediaId != null) MediaStrip(listOf(i.mediaId), writeOriginal = { output ->
+        RemoteCodeApp.instance.repository.api.downloadFileTo(i.path, sessionId, i.size, server, output)
+    })
     Address(i.path)
     val canSave = i.exists && i.kind != "dir"
     Actions(
@@ -273,8 +314,7 @@ private fun FileDetails(i: LinkFileInfo, link: String, sessionId: String) {
             saving = true
             scope.launch {
                 val r = runCatching {
-                    val bytes = RemoteCodeApp.instance.repository.api.fileRaw(link, sessionId)
-                    saveToDownloads(i.name, i.mime, bytes)
+                    saveRemoteToDownloads(i, sessionId, server)
                 }
                 saving = false
                 Toast.makeText(context, r.fold({ appString(R.string.chat_code_viewer_015, i.name) }, { appString(R.string.chat_code_viewer_014, it.message) }), Toast.LENGTH_LONG).show()
@@ -340,20 +380,10 @@ private fun openExternal(ctx: android.content.Context, url: String) {
         .onFailure { Toast.makeText(ctx, appString(R.string.chat_link_sheet_003), Toast.LENGTH_SHORT).show() }
 }
 
-suspend fun saveToDownloads(name: String, mime: String, bytes: ByteArray): Unit = withContext(Dispatchers.IO) {
-    val resolver = RemoteCodeApp.instance.contentResolver
-    val values = ContentValues().apply {
-        put(MediaStore.MediaColumns.DISPLAY_NAME, name)
-        put(MediaStore.MediaColumns.MIME_TYPE, mime)
-        put(MediaStore.MediaColumns.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS + "/Remote Code")
-        put(MediaStore.MediaColumns.IS_PENDING, 1)
+internal suspend fun saveRemoteToDownloads(file: LinkFileInfo, sessionId: String, server: ServerConfig) =
+    writeDeviceMedia(MediaStore.Downloads.EXTERNAL_CONTENT_URI, Environment.DIRECTORY_DOWNLOADS, file.name, file.mime) { output ->
+        RemoteCodeApp.instance.repository.api.downloadFileTo(file.path, sessionId, file.size, server, output)
     }
-    val uri = resolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, values) ?: error(appString(R.string.chat_link_sheet_002))
-    try {
-        resolver.openOutputStream(uri)?.use { it.write(bytes) } ?: error(appString(R.string.chat_link_sheet_001))
-        resolver.update(uri, ContentValues().apply { put(MediaStore.MediaColumns.IS_PENDING, 0) }, null, null)
-    } catch (e: Exception) {
-        resolver.delete(uri, null, null)
-        throw e
-    }
-}
+
+suspend fun saveToDownloads(name: String, mime: String, bytes: ByteArray) =
+    writeDeviceMedia(MediaStore.Downloads.EXTERNAL_CONTENT_URI, Environment.DIRECTORY_DOWNLOADS, name, mime) { it.write(bytes) }
