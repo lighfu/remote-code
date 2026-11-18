@@ -19,7 +19,7 @@
 <h2><img src="docs/assets/readme/zh-Hant/heading-download.svg" width="360" height="66" alt="下載"></h2>
 
 <p align="center">
-  <a href="https://github.com/lighfu/remote-code/releases/download/v0.18.9/remote-code-v0.18.9-win32-x64.zip"><img src="docs/assets/readme/zh-Hant/download-windows.svg" width="400" height="180" alt="取得 Windows x64 版 ZIP（0.18.9）"></a>
+  <a href="https://github.com/lighfu/remote-code/releases/download/v0.19.4/remote-code-v0.19.4-win32-x64.zip"><img src="docs/assets/readme/zh-Hant/download-windows.svg" width="400" height="180" alt="取得 Windows x64 版 ZIP（0.19.4）"></a>
 </p>
 
 Windows 套件可於 [GitHub Releases](https://github.com/lighfu/remote-code/releases) 下載。
@@ -37,6 +37,7 @@ Windows 套件可於 [GitHub Releases](https://github.com/lighfu/remote-code/rel
 - **對話** — 傳送與繼續對話、核准工具呼叫、檢視子代理，並接收背景通知。
 - **檔案** — 附加與檢視圖片、影片及檔案，編輯與引用程式碼，並預覽 Markdown。
 - **Git 與用量** — 檢視差異、歷史記錄與分支，暫存變更、提交與推送。檢查用量、上下文與快取狀態。
+- **遠端桌面** — 點按主畫面上的顯示器圖示，即可同時檢視所有電腦顯示器或選擇其中一個。在預設的觸控板模式下，單指滑動可移動游標，單指輕點可按一下左鍵，雙指輕點可按一下右鍵。雙指縮放最高可放大至 32 倍，也可開啟鍵盤輸入文字。
 
 <a name="安裝"></a>
 
@@ -94,5 +95,5 @@ APK 會產生於 `android/app/build/outputs/apk/release/app-release.apk`。設�
 <h2><img src="docs/assets/readme/zh-Hant/heading-docs.svg" width="360" height="66" alt="文件"></h2>
 
 <p>
-  <a href="docs/releases/zh-Hant/0.18.9.md"><img src="docs/assets/readme/zh-Hant/card-notes.svg" width="360" height="128" alt="0.18.9 版本說明"></a>
+  <a href="docs/releases/zh-Hant/0.19.4.md"><img src="docs/assets/readme/zh-Hant/card-notes.svg" width="360" height="128" alt="0.19.4 版本說明"></a>
 </p>

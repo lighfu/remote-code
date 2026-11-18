@@ -19,10 +19,10 @@
 <h2><img src="docs/assets/readme/heading-download.svg" width="360" height="66" alt="ダウンロード"></h2>
 
 <p align="center">
-  <a href="https://github.com/lighfu/remote-code/releases/download/v0.18.9/remote-code-v0.18.9-win32-x64.zip"><img src="docs/assets/readme/download-windows.svg" width="400" height="180" alt="Windows x64 用 ZIP を取得（0.18.9）"></a>
+  <a href="https://github.com/lighfu/remote-code/releases/download/v0.19.4/remote-code-v0.19.4-win32-x64.zip"><img src="docs/assets/readme/download-windows.svg" width="400" height="180" alt="Windows x64 用 ZIP を取得（0.19.4）"></a>
 </p>
 
-Windows 用の配布版は [GitHub Releases](https://github.com/lighfu/remote-code/releases) から取得できます。
+Windows 用の配布パッケージは [GitHub Releases](https://github.com/lighfu/remote-code/releases) から取得できます。
 
 Android アプリは、PC で `start.cmd` を開き、ターミナルの **App QR** をスマートフォンで読み取ってインストールします。[導入手順](#導入)
 
@@ -37,6 +37,7 @@ Android アプリは、PC で `start.cmd` を開き、ターミナルの **App Q
 - **会話** — 送信・再開、ツールの承認、サブエージェントの確認、バックグラウンド通知。
 - **ファイル** — 画像・動画・ファイルの添付と表示、コード編集・引用、Markdown プレビュー。
 - **Git・使用量** — 差分・履歴・ブランチ、ステージ操作、コミット・プッシュ。利用状況・コンテキスト・キャッシュの表示。
+- **リモートデスクトップ** — ホーム画面のモニターアイコンをタップすると、PCの全ディスプレイをまとめて表示するか、1つを選んで表示できます。標準のタッチパッドモードでは、1本指のスライドでポインターを動かし、1本指のタップで左クリック、2本指のタップで右クリックできます。ピンチ操作で最大32倍まで拡大でき、キーボードを開いて文字入力もできます。
 
 <a name="導入"></a>
 
@@ -96,5 +97,5 @@ APK は `android/app/build/outputs/apk/release/app-release.apk` に生成され�
 <h2><img src="docs/assets/readme/heading-docs.svg" width="360" height="66" alt="ドキュメント"></h2>
 
 <p>
-  <a href="docs/releases/ja/0.18.9.md"><img src="docs/assets/readme/card-notes.svg" width="360" height="128" alt="0.18.9 リリースノート"></a>
+  <a href="docs/releases/ja/0.19.4.md"><img src="docs/assets/readme/card-notes.svg" width="360" height="128" alt="0.19.4 リリースノート"></a>
 </p>

@@ -19,7 +19,7 @@
 <h2><img src="docs/assets/readme/zh-CN/heading-download.svg" width="360" height="66" alt="下载"></h2>
 
 <p align="center">
-  <a href="https://github.com/lighfu/remote-code/releases/download/v0.18.9/remote-code-v0.18.9-win32-x64.zip"><img src="docs/assets/readme/zh-CN/download-windows.svg" width="400" height="180" alt="获取 Windows x64 版 ZIP（0.18.9）"></a>
+  <a href="https://github.com/lighfu/remote-code/releases/download/v0.19.4/remote-code-v0.19.4-win32-x64.zip"><img src="docs/assets/readme/zh-CN/download-windows.svg" width="400" height="180" alt="获取 Windows x64 版 ZIP（0.19.4）"></a>
 </p>
 
 Windows 发行版可从 [GitHub Releases](https://github.com/lighfu/remote-code/releases) 下载。
@@ -37,6 +37,7 @@ Windows 发行版可从 [GitHub Releases](https://github.com/lighfu/remote-code/
 - **对话** — 发送与恢复对话、审批工具调用、查看子智能体、接收后台通知。
 - **文件** — 附加与查看图片、视频及文件，编辑与引用代码，预览 Markdown。
 - **Git 与用量** — 查看差异、历史与分支，暂存变更、提交与推送。显示使用情况、上下文与缓存。
+- **远程桌面** — 点按主屏幕上的显示器图标，即可同时查看所有电脑显示器或选择其中一个。在默认的触控板模式下，单指滑动可移动指针，单指轻点可左键单击，双指轻点可右键单击。双指缩放最高可放大至 32 倍，也可打开键盘输入文字。
 
 <a name="安装"></a>
 
@@ -94,5 +95,5 @@ APK 生成路径为 `android/app/build/outputs/apk/release/app-release.apk`。�
 <h2><img src="docs/assets/readme/zh-CN/heading-docs.svg" width="360" height="66" alt="文档"></h2>
 
 <p>
-  <a href="docs/releases/zh-CN/0.18.9.md"><img src="docs/assets/readme/zh-CN/card-notes.svg" width="360" height="128" alt="0.18.9 发布说明"></a>
+  <a href="docs/releases/zh-CN/0.19.4.md"><img src="docs/assets/readme/zh-CN/card-notes.svg" width="360" height="128" alt="0.19.4 发布说明"></a>
 </p>

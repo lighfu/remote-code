@@ -19,7 +19,7 @@
 <h2><img src="docs/assets/readme/en/heading-download.svg" width="360" height="66" alt="Download"></h2>
 
 <p align="center">
-  <a href="https://github.com/lighfu/remote-code/releases/download/v0.18.9/remote-code-v0.18.9-win32-x64.zip"><img src="docs/assets/readme/en/download-windows.svg" width="400" height="180" alt="Get ZIP for Windows x64 (0.18.9)"></a>
+  <a href="https://github.com/lighfu/remote-code/releases/download/v0.19.4/remote-code-v0.19.4-win32-x64.zip"><img src="docs/assets/readme/en/download-windows.svg" width="400" height="180" alt="Get ZIP for Windows x64 (0.19.4)"></a>
 </p>
 
 Windows packages are available on [GitHub Releases](https://github.com/lighfu/remote-code/releases).
@@ -37,6 +37,7 @@ To install the Android app, open `start.cmd` on your PC and scan the terminal’
 - **Chat** — Send and resume chats, approve tool calls, inspect subagents, and receive background notifications.
 - **Files** — Attach and view images, videos, and files, edit and quote code, and preview Markdown.
 - **Git & Usage** — View diffs, history, and branches, stage changes, commit, and push. Check usage, context, and cache status.
+- **Remote desktop** — Tap the monitor icon on the home screen to view all PC displays together or choose one. In the default touchpad mode, slide one finger to move the pointer, tap to left-click, and tap with two fingers to right-click. Pinch to zoom up to 32× or open the keyboard to type.
 
 <a name="setup"></a>
 
@@ -94,5 +95,5 @@ The APK is generated at `android/app/build/outputs/apk/release/app-release.apk`.
 <h2><img src="docs/assets/readme/en/heading-docs.svg" width="360" height="66" alt="Docs"></h2>
 
 <p>
-  <a href="docs/releases/0.18.9.md"><img src="docs/assets/readme/en/card-notes.svg" width="360" height="128" alt="0.18.9 Release Notes"></a>
+  <a href="docs/releases/0.19.4.md"><img src="docs/assets/readme/en/card-notes.svg" width="360" height="128" alt="0.19.4 Release Notes"></a>
 </p>

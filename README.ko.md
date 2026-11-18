@@ -19,7 +19,7 @@
 <h2><img src="docs/assets/readme/ko/heading-download.svg" width="360" height="66" alt="다운로드"></h2>
 
 <p align="center">
-  <a href="https://github.com/lighfu/remote-code/releases/download/v0.18.9/remote-code-v0.18.9-win32-x64.zip"><img src="docs/assets/readme/ko/download-windows.svg" width="400" height="180" alt="Windows x64용 ZIP 다운로드 (0.18.9)"></a>
+  <a href="https://github.com/lighfu/remote-code/releases/download/v0.19.4/remote-code-v0.19.4-win32-x64.zip"><img src="docs/assets/readme/ko/download-windows.svg" width="400" height="180" alt="Windows x64용 ZIP 다운로드 (0.19.4)"></a>
 </p>
 
 Windows용 배포판은 [GitHub Releases](https://github.com/lighfu/remote-code/releases)에서 다운로드할 수 있습니다.
@@ -37,6 +37,7 @@ Android 앱을 설치하려면 PC에서 `start.cmd`를 실행한 뒤, 휴대전�
 - **대화** — 대화 전송 및 재개, 도구 실행 승인, 서브에이전트 확인, 백그라운드 알림.
 - **파일** — 이미지·동영상·파일 첨부 및 보기, 코드 편집·인용, Markdown 미리보기.
 - **Git·사용량** — 변경 내역(diff)·기록·브랜치 확인, 스테이징, 커밋·푸시. 사용량·컨텍스트·캐시 표시.
+- **원격 데스크톱** — 홈 화면의 모니터 아이콘을 탭하면 PC의 모든 디스플레이를 한눈에 보거나 하나를 선택해 볼 수 있습니다. 기본 터치패드 모드에서는 한 손가락으로 밀어 포인터를 이동하고, 한 손가락으로 탭하면 왼쪽 클릭, 두 손가락으로 탭하면 오른쪽 클릭이 됩니다. 두 손가락으로 최대 32배까지 확대하거나 키보드를 열어 입력할 수도 있습니다.
 
 <a name="설치"></a>
 
@@ -94,5 +95,5 @@ APK는 `android/app/build/outputs/apk/release/app-release.apk`에 생성됩니�
 <h2><img src="docs/assets/readme/ko/heading-docs.svg" width="360" height="66" alt="문서"></h2>
 
 <p>
-  <a href="docs/releases/ko/0.18.9.md"><img src="docs/assets/readme/ko/card-notes.svg" width="360" height="128" alt="0.18.9 릴리스 노트"></a>
+  <a href="docs/releases/ko/0.19.4.md"><img src="docs/assets/readme/ko/card-notes.svg" width="360" height="128" alt="0.19.4 릴리스 노트"></a>
 </p>
