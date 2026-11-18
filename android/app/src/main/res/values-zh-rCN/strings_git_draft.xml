@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="git_draft_staged">根据已暂存的 %1$d 个文件生成草稿</string>
+    <string name="git_draft_selected">根据选中的 %1$d 个未暂存文件生成草稿</string>
+    <string name="git_draft_working">根据全部 %1$d 个未暂存文件生成草稿</string>
+    <string name="git_draft_title">提交信息草稿</string>
+    <string name="git_draft_use">使用草稿</string>
+    <string name="git_draft_replace">替换当前信息</string>
+    <string name="git_draft_changed">无法读取更改。请刷新 Git 状态后重试。</string>
+    <string name="git_draft_add">添加 %1$s</string>
+    <string name="git_draft_delete">删除 %1$s</string>
+    <string name="git_draft_update">更新 %1$s</string>
+    <string name="git_draft_rename">将 %1$s 重命名为 %2$s</string>
+    <string name="git_draft_subject">%1$s，另有 %2$d 项</string>
+</resources>

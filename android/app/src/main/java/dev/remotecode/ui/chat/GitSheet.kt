@@ -29,6 +29,7 @@ import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.automirrored.rounded.WrapText
 import androidx.compose.material.icons.rounded.ContentCopy
 import androidx.compose.material.icons.rounded.AccountTree
+import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.ArrowDownward
 import androidx.compose.material.icons.rounded.CheckCircle
@@ -128,9 +129,31 @@ fun GitSheet(sessionId: String, onDismiss: () -> Unit) {
     var chooseRemote by remember(sessionId, openedServer) { mutableStateOf(false) }
     val snackbar = remember { SnackbarHostState() }
     val canOperate = connected && status?.isRepo == true && status.error == null && !busy
+    val draftTarget = remember(status?.files, selected) { gitDraftTarget(status?.files.orEmpty(), selected) }
+    var generating by remember(sessionId, openedServer, connected, status?.root, status?.head, status?.branch, draftTarget) { mutableStateOf(false) }
+    var candidate by remember(sessionId, openedServer, connected, status?.root, status?.head, status?.branch, draftTarget) { mutableStateOf<String?>(null) }
 
     fun validConnection(): Boolean = openedServer != null && openedCwd != null && repo.api.server?.connectionIdentity() == openedServer &&
         repo.connection.value is ConnState.Connected && repo.session(sessionId)?.cwd == openedCwd
+
+    LaunchedEffect(sessionId, openedServer, connected, status?.root, status?.head, status?.branch, draftTarget, generating) {
+        if (!generating) return@LaunchedEffect
+        try {
+            val target = repo.api.server?.takeIf { it.connectionIdentity() == openedServer } ?: return@LaunchedEffect
+            repo.refreshGit(sessionId, force = true)
+            val fresh = repo.git.value[sessionId]
+            check(validConnection() && fresh?.isRepo == true && fresh.error == null && status != null &&
+                fresh.root == status.root && fresh.branch == status.branch && fresh.head == status.head &&
+                gitDraftTarget(fresh.files, selected) == draftTarget) { appString(R.string.git_draft_changed) }
+            val draft = generateGitDraft(draftTarget, fetch = { path, staged ->
+                check(validConnection()) { appString(R.string.chat_git_sheet_005) }
+                repo.api.gitDiff(sessionId, path, staged, target)
+            })
+            if (validConnection() && gitDraftTarget(repo.git.value[sessionId]?.files.orEmpty(), selected) == draftTarget) candidate = draft
+        } catch (e: CancellationException) { throw e }
+        catch (e: Exception) { error = e.message ?: appString(R.string.git_draft_changed) }
+        finally { generating = false }
+    }
 
     fun refresh() {
         if (busy || !validConnection()) return
@@ -229,6 +252,10 @@ fun GitSheet(sessionId: String, onDismiss: () -> Unit) {
                                             Column(Modifier.padding(horizontal = 16.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                                                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) { Icon(Icons.Rounded.Commit, null, Modifier.size(20.dp), tint = MaterialTheme.colorScheme.primary); Text(stringResource(R.string.chat_git_sheet_042, status.stagedFiles), style = MaterialTheme.typography.titleSmall) }
                                                 OutlinedTextField(value = message, onValueChange = { message = it }, label = { Text(stringResource(R.string.chat_git_sheet_041)) }, modifier = Modifier.fillMaxWidth(), minLines = 2, maxLines = 5, enabled = !busy)
+                                                OutlinedButton(onClick = { error = null; generating = true }, enabled = canOperate && !generating && draftTarget.files.isNotEmpty()) {
+                                                    if (generating) LoadingIndicator(Modifier.size(18.dp)) else Icon(Icons.Rounded.AutoAwesome, null, Modifier.size(18.dp))
+                                                    Text(stringResource(draftTarget.scope.label, draftTarget.files.size), Modifier.padding(start = 8.dp))
+                                                }
                                                 if (status.conflictedFiles > 0) Text(stringResource(R.string.chat_git_sheet_040), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
                                                 Button(onClick = { action("commit", commitMessage = message.trim()) }, enabled = canOperate && !status.detached && message.isNotBlank() && status.stagedFiles > 0 && status.conflictedFiles == 0) { GitActionLabel(Icons.Rounded.Commit, appString(R.string.chat_git_sheet_039, status.stagedFiles)) }
                                                 Text(stringResource(R.string.chat_git_sheet_038), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -276,6 +303,19 @@ fun GitSheet(sessionId: String, onDismiss: () -> Unit) {
                 }
             }
         }
+    }
+    candidate?.let { draft ->
+        AlertDialog(
+            onDismissRequest = { candidate = null },
+            title = { Text(stringResource(R.string.git_draft_title)) },
+            text = { CodeBlock(draft, diff = false, maxHeight = 280, wrapLines = true) },
+            confirmButton = {
+                Button(onClick = { if (validConnection()) message = draft; candidate = null }, enabled = canOperate) {
+                    Text(stringResource(if (message.isBlank()) R.string.git_draft_use else R.string.git_draft_replace))
+                }
+            },
+            dismissButton = { TextButton(onClick = { candidate = null }) { Text(stringResource(R.string.chat_cancel_short)) } },
+        )
     }
     if (chooseRemote && sameServer && sameProject && status != null) {
         var remote by remember { mutableStateOf(status.remotes.firstOrNull { it.name == "origin" }?.name ?: status.remotes.firstOrNull()?.name.orEmpty()) }

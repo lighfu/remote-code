@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="git_draft_staged">Draft from staged files (%1$d)</string>
+    <string name="git_draft_selected">Draft from selected unstaged files (%1$d)</string>
+    <string name="git_draft_working">Draft from all unstaged files (%1$d)</string>
+    <string name="git_draft_title">Commit message draft</string>
+    <string name="git_draft_use">Use draft</string>
+    <string name="git_draft_replace">Replace current message</string>
+    <string name="git_draft_changed">Could not read the changes. Refresh Git status and try again.</string>
+    <string name="git_draft_add">Add %1$s</string>
+    <string name="git_draft_delete">Delete %1$s</string>
+    <string name="git_draft_update">Update %1$s</string>
+    <string name="git_draft_rename">Rename %1$s to %2$s</string>
+    <string name="git_draft_subject">%1$s and %2$d more</string>
+</resources>
