@@ -47,6 +47,7 @@ internal data class DesktopDisplays(
     val regionFrames: Boolean = false,
     val streamBitrate: Boolean = false,
     val layout: String? = null,
+    val compressionControls: Boolean = false,
 )
 
 internal class DesktopStreamUnsupported : IOException()
@@ -148,7 +149,7 @@ internal class DesktopApi(client: OkHttpClient, private val strings: AppStringRe
 
     private fun frameRequest(server: ServerConfig, display: String, resolution: DesktopResolution, capture: String,
                              codec: String, separateCursor: Boolean, fps: Int? = null, regions: Boolean = false,
-                             bitrateKbps: Int? = null): Request.Builder {
+                             bitrateKbps: Int? = null, compression: DesktopCompression? = null): Request.Builder {
         val req = request(server, if (fps != null) "stream" else "frame")
         val url = req.build().url.newBuilder().addQueryParameter("display", display)
             .addQueryParameter("capture", capture).addQueryParameter("codec", codec)
@@ -156,15 +157,20 @@ internal class DesktopApi(client: OkHttpClient, private val strings: AppStringRe
         if (separateCursor) url.addQueryParameter("cursor", "separate")
         if (fps != null) url.addQueryParameter("fps", fps.toString())
         if (regions) url.addQueryParameter("regions", "1")
+        when (compression) {
+            is DesktopCompression.Jpeg -> if (codec == "jpeg") url.addQueryParameter("jpegQuality", compression.quality.toString())
+            is DesktopCompression.Png -> if (codec == "png") url.addQueryParameter("pngCompression", compression.wire)
+            null -> Unit
+        }
         if (fps != null && bitrateKbps != null) url.addQueryParameter("bitrateKbps", bitrateKbps.toString())
         return req.url(url.build())
     }
 
     suspend fun frame(server: ServerConfig, display: String, resolution: DesktopResolution, capture: String = "auto",
                       codec: String = "jpeg", separateCursor: Boolean = false, previous: DesktopFrame? = null,
-                      decodeColor: DesktopDecodeColor = DesktopDecodeColor.Auto): DesktopFrame {
-        val req = frameRequest(server, display, resolution, capture, codec, separateCursor)
-        val reusable = previous?.takeIf { it.codec == codec && it.decodeColor == decodeColor }
+                      decodeColor: DesktopDecodeColor = DesktopDecodeColor.Auto, compression: DesktopCompression? = null): DesktopFrame {
+        val req = frameRequest(server, display, resolution, capture, codec, separateCursor, compression = compression)
+        val reusable = previous?.takeIf { it.codec == codec && it.decodeColor == decodeColor && it.compression == compression }
         reusable?.headers?.etag?.let { req.header("If-None-Match", it) }
         val next = execute(server, req.build(), allowNotModified = reusable?.headers?.etag != null, client = frameHttp) { response ->
             if (response.code == 304) {
@@ -187,17 +193,18 @@ internal class DesktopApi(client: OkHttpClient, private val strings: AppStringRe
                     ByteArray(size.toInt()).also { source.readFully(it) }
                 }
             }
-            decodeDesktopFrame(bytes, headers, codec, resolution, strings, decodeColor = decodeColor)
+            decodeDesktopFrame(bytes, headers, codec, resolution, strings, decodeColor = decodeColor, compression = compression)
         }
         // Intermediaries may omit custom headers on a 304. Request a complete frame before reusing its layout.
-        return next ?: frame(server, display, resolution, capture, codec, separateCursor, decodeColor = decodeColor)
+        return next ?: frame(server, display, resolution, capture, codec, separateCursor, decodeColor = decodeColor, compression = compression)
     }
 
     fun stream(server: ServerConfig, display: String, resolution: DesktopResolution, capture: String, codec: String,
                separateCursor: Boolean, fps: Int, regions: Boolean = false, bitrateKbps: Int? = null,
                decodeColor: DesktopDecodeColor = DesktopDecodeColor.Auto, decodeLatest: Boolean = true,
+               compression: DesktopCompression? = null,
                onPayloadBytes: (Int) -> Unit = {}): Flow<Pair<Long, DesktopFrame>> {
-        val request = frameRequest(server, display, resolution, capture, codec, separateCursor, fps, regions, bitrateKbps).build()
+        val request = frameRequest(server, display, resolution, capture, codec, separateCursor, fps, regions, bitrateKbps, compression).build()
         val needsOrderedDelivery = regions || !decodeLatest
         val packets = callbackFlow {
             checkTarget(server)
@@ -245,7 +252,7 @@ internal class DesktopApi(client: OkHttpClient, private val strings: AppStringRe
                     if (packet.regions.isNotEmpty() && (old?.headers?.etag != packet.baseETag || old?.layout != packet.headers.layout))
                         throw IOException("Missing decoded desktop patch base")
                     decodeDesktopFrame(packet.bytes, packet.headers, codec, resolution, strings, packet.regions, old?.image,
-                        packet.receivedPayloadBytes, decodeColor)
+                        packet.receivedPayloadBytes, decodeColor, compression)
                 }
                 bytes = packet.bytes
                 last = next

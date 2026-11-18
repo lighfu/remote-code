@@ -100,6 +100,7 @@ internal fun DesktopScreen(onBack: () -> Unit) {
     val codecs = remember(capabilities) { capabilities?.codecs.orEmpty().filter { it in setOf("jpeg", "png") }.ifEmpty { listOf("jpeg") } }
     val capture = prefs.capture.takeIf { it in captures } ?: captures.first()
     val codec = prefs.codec.takeIf { it in codecs } ?: codecs.first()
+    val compression = prefs.compressionFor(codec, capabilities?.compressionControls == true)
     val touchpad = prefs.touchpad && capabilities?.touchpad == true
     var displayError by remember(identity) { mutableStateOf<String?>(null) }
     var frame by remember(identity, display, resolution, active, refresh, capture, codec) { mutableStateOf<VisibleFrame?>(null) }
@@ -199,7 +200,7 @@ internal fun DesktopScreen(onBack: () -> Unit) {
     val regions = capabilities?.regionFrames == true
     val ready = capabilities != null || displayError != null
     LaunchedEffect(target, active, display, resolution, refresh, capture, codec, streaming, conditional, separateCursor, regions, ready,
-        prefs.fps, bitrateKbps, autoBitrate, prefs.decodeColor, prefs.decodeLatest) {
+        prefs.fps, bitrateKbps, autoBitrate, prefs.decodeColor, prefs.decodeLatest, compression) {
         if (target == null || !active || !ready) return@LaunchedEffect
         val decodeColor = prefs.decodeColor
         fun receive(image: DesktopFrame, validatedAt: Long) {
@@ -236,7 +237,7 @@ internal fun DesktopScreen(onBack: () -> Unit) {
                     try {
                         autoBitrate.newStream()
                         desktop.stream(target, display, resolution, capture, codec, separateCursor, prefs.fps, regions,
-                            bitrateKbps, decodeColor = decodeColor, decodeLatest = prefs.decodeLatest,
+                            bitrateKbps, decodeColor = decodeColor, decodeLatest = prefs.decodeLatest, compression = compression,
                             onPayloadBytes = { telemetry.addBytes(it.toLong()) })
                             .collect { (at, image) ->
                                 if (!streamReady) {
@@ -267,7 +268,8 @@ internal fun DesktopScreen(onBack: () -> Unit) {
                 val started = SystemClock.elapsedRealtime()
                 try {
                     val previous = frame?.image?.takeIf { conditional }
-                    val image = desktop.frame(target, display, resolution, capture, codec, separateCursor, previous, decodeColor = decodeColor)
+                    val image = desktop.frame(target, display, resolution, capture, codec, separateCursor, previous,
+                        decodeColor = decodeColor, compression = compression)
                     telemetry.addBytes(image.receivedPayloadBytes)
                     receive(image, started)
                     if (!pollReady) {
@@ -471,7 +473,8 @@ internal fun DesktopScreen(onBack: () -> Unit) {
             OptionAction(R.string.desktop_scroll_down, Icons.Rounded.KeyboardArrowDown, canControl) { scroll(-3); options = false }
         }
         DesktopVideoOptions(prefs, ::updatePreferences, frame?.image?.image?.width, frame?.image?.image?.height, measuredFps,
-            captures, capture, frame?.image?.captureMethod, codecs, codec, resolution, supportsNative, supportsBitrate, autoKbps)
+            captures, capture, frame?.image?.captureMethod, codecs, codec, resolution, supportsNative, supportsBitrate, autoKbps,
+            capabilities?.compressionControls)
     }
     if (help) AlertDialog(onDismissRequest = { help = false }, title = { Text(stringResource(R.string.desktop_help)) },
         text = { Text(stringResource(if (touchpad) R.string.desktop_gestures else R.string.desktop_direct_gestures)) },

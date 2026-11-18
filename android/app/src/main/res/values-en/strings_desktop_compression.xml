@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="desktop_compression_upgrade">To change compression settings, please update the server on your PC.</string>
+    <string name="desktop_jpeg_quality">JPEG quality</string>
+    <string name="desktop_jpeg_quality_hint">Specify quality from 1 to 100. Lower values increase compression, while higher values provide clearer details. In manual mode, quality is fixed and the transmission interval is adjusted to match the target bitrate.</string>
+    <string name="desktop_jpeg_quality_mode">JPEG quality mode</string>
+    <string name="desktop_png_compression">PNG compression level</string>
+    <string name="desktop_png_compression_balanced">Balanced</string>
+    <string name="desktop_png_compression_best">Prioritize size</string>
+    <string name="desktop_png_compression_hint">Image quality is the same at all levels. Higher compression reduces data usage, but takes more time to process on the PC.</string>
+    <string name="desktop_png_compression_none">No compression</string>
+    <string name="desktop_png_compression_speed">Prioritize speed</string>
+</resources>

@@ -20,6 +20,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.unit.dp
 import dev.remotecode.R
+import dev.remotecode.data.DesktopCompression
 import dev.remotecode.data.DesktopDecodeColor
 import dev.remotecode.data.DesktopDisplay
 import dev.remotecode.data.DesktopPreferences
@@ -166,10 +167,11 @@ internal fun DesktopDisplayOptions(
 }
 
 @Composable
-private fun VideoSlider(@StringRes title: Int, value: Int, range: IntRange, unit: String, change: (Int) -> Unit) {
+private fun VideoSlider(@StringRes title: Int, value: Int, range: IntRange, unit: String? = null, change: (Int) -> Unit) {
     val label = stringResource(title)
     var draft by remember(value) { mutableIntStateOf(value) }
-    val amount = "${NumberFormat.getIntegerInstance().format(draft)} $unit"
+    val number = NumberFormat.getIntegerInstance().format(draft)
+    val amount = if (unit == null) number else "$number $unit"
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         Text(label, Modifier.weight(1f), style = MaterialTheme.typography.labelLarge)
         Text(amount, style = MaterialTheme.typography.labelLarge)
@@ -192,7 +194,7 @@ private fun VideoSlider(@StringRes title: Int, value: Int, range: IntRange, unit
 internal fun DesktopVideoOptions(
     prefs: DesktopPreferences, change: (DesktopPreferences) -> Unit, width: Int?, height: Int?, receivedFps: Float?,
     captures: List<String>, capture: String, activeCapture: String?, codecs: List<String>, codec: String,
-    resolution: DesktopResolution, supportsNative: Boolean, supportsBitrate: Boolean, autoKbps: Int,
+    resolution: DesktopResolution, supportsNative: Boolean, supportsBitrate: Boolean, autoKbps: Int, compressionControls: Boolean?,
 ) {
     OptionGroup(R.string.desktop_video_options, Icons.Rounded.Videocam) {
         VideoSlider(R.string.desktop_refresh_rate, prefs.fps, DesktopPreferences.frameRates, "FPS") {
@@ -250,6 +252,32 @@ internal fun DesktopVideoOptions(
         HorizontalDivider()
         Choices(R.string.desktop_codec, codecs, codec, { it.uppercase() }) { change(prefs.copy(codec = it)) }
         Detail(stringResource(if (codec == "png") R.string.desktop_codec_png else R.string.desktop_codec_jpeg))
+        val supportsCompression = compressionControls == true
+        if (codec == "png") {
+            Choices(R.string.desktop_png_compression, listOf(null) + DesktopCompression.Png.entries,
+                prefs.pngCompression.takeIf { supportsCompression }, { level ->
+                    stringResource(when (level) {
+                        null -> R.string.desktop_automatic
+                        DesktopCompression.Png.None -> R.string.desktop_png_compression_none
+                        DesktopCompression.Png.Speed -> R.string.desktop_png_compression_speed
+                        DesktopCompression.Png.Balanced -> R.string.desktop_png_compression_balanced
+                        DesktopCompression.Png.Best -> R.string.desktop_png_compression_best
+                    })
+                }, enabled = supportsCompression) { change(prefs.copy(pngCompression = it)) }
+            if (supportsCompression) Detail(stringResource(R.string.desktop_png_compression_hint))
+        } else {
+            val manual = supportsCompression && prefs.fixedJpegQuality
+            Choices(R.string.desktop_jpeg_quality_mode, listOf(false, true), manual,
+                { stringResource(if (it) R.string.desktop_bitrate_manual else R.string.desktop_automatic) },
+                enabled = supportsCompression) { change(prefs.copy(fixedJpegQuality = it)) }
+            if (manual) {
+                VideoSlider(R.string.desktop_jpeg_quality, prefs.jpegQuality, DesktopPreferences.jpegQualities) {
+                    change(prefs.copy(jpegQuality = it))
+                }
+            }
+            if (supportsCompression) Detail(stringResource(R.string.desktop_jpeg_quality_hint))
+        }
+        if (compressionControls == false) Detail(stringResource(R.string.desktop_compression_upgrade))
         HorizontalDivider()
         Choices(R.string.desktop_decode_color, DesktopDecodeColor.entries, prefs.decodeColor, { stringResource(when (it) {
             DesktopDecodeColor.Auto -> R.string.desktop_automatic

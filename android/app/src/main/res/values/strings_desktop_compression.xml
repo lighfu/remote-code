@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="desktop_jpeg_quality_mode">JPEG 画質の調整</string>
+    <string name="desktop_jpeg_quality">JPEG 画質</string>
+    <string name="desktop_jpeg_quality_hint">画質は 1〜100 で指定します。低いほど圧縮が強くなり、高いほど細部が鮮明になります。手動では画質を固定し、目標ビットレートに合わせて送信間隔を調整します。</string>
+    <string name="desktop_png_compression">PNG 圧縮レベル</string>
+    <string name="desktop_png_compression_none">圧縮なし</string>
+    <string name="desktop_png_compression_speed">速度優先</string>
+    <string name="desktop_png_compression_balanced">バランス</string>
+    <string name="desktop_png_compression_best">サイズ優先</string>
+    <string name="desktop_png_compression_hint">どのレベルでも画質は同じです。圧縮を強くすると通信量を抑えられますが、PC での処理に時間がかかります。</string>
+    <string name="desktop_compression_upgrade">圧縮設定を変更するには、PC のサーバーを更新してください。</string>
+</resources>

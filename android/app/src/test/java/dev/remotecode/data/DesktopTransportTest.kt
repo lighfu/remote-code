@@ -142,6 +142,48 @@ class DesktopTransportTest {
         }
     }
 
+    @Test fun streamsAndFallbackFramesUseOnlyTheActiveSupportedCompression() {
+        val oldPc = AppJson.decodeFromString<DesktopDisplays>("""{"displays":[]}""")
+        val newPc = AppJson.decodeFromString<DesktopDisplays>("""{"displays":[],"compressionControls":true}""")
+        val requests = CopyOnWriteArrayList<String>()
+        withPc({ exchange ->
+            requests += exchange.requestURI.toString()
+            exchange.sendResponseHeaders(404, -1)
+        }) { api, pc ->
+            suspend fun check(prefs: DesktopPreferences, codec: String, pcInfo: DesktopDisplays, jpeg: String?, png: String?) {
+                val option = prefs.compressionFor(codec, pcInfo.compressionControls)
+                val streamError = runCatching {
+                    api.desktop.stream(pc, "all", DesktopResolution.Native, "auto", codec, true, 60,
+                        compression = option).first()
+                }.exceptionOrNull()
+                assertTrue(streamError is DesktopStreamUnsupported)
+                val frameError = runCatching {
+                    api.desktop.frame(pc, "all", DesktopResolution.Native, codec = codec, compression = option)
+                }.exceptionOrNull()
+                assertEquals(404, (frameError as ApiException).code)
+                val urls = requests.map { (pc.url + it).toHttpUrl() }
+                assertEquals(listOf("/api/desktop/stream", "/api/desktop/frame"), urls.map { it.encodedPath })
+                for (url in urls) {
+                    assertEquals(jpeg, url.queryParameter("jpegQuality"))
+                    assertEquals(png, url.queryParameter("pngCompression"))
+                }
+                requests.clear()
+            }
+
+            val defaults = DesktopPreferences()
+            val manual = defaults.copy(fixedJpegQuality = true, jpegQuality = 1, pngCompression = DesktopCompression.Png.Best)
+            check(defaults, "jpeg", newPc, null, null)
+            check(defaults, "png", newPc, null, null)
+            check(manual, "jpeg", oldPc, null, null)
+            check(manual, "png", oldPc, null, null)
+            check(manual, "jpeg", newPc, "1", null)
+            check(manual.copy(jpegQuality = 100), "jpeg", newPc, "100", null)
+            for (level in DesktopCompression.Png.entries) {
+                check(manual.copy(pngCompression = level), "png", newPc, null, level.wire)
+            }
+        }
+    }
+
     @Test fun clipboardStartsWithRevisionOnlyAndSendsUnicodeWithExpectedRevision() {
         val requests = CopyOnWriteArrayList<String>()
         var posted = ""

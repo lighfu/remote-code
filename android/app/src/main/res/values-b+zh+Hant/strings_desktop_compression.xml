@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="desktop_compression_upgrade">若要變更壓縮設定，請更新 PC 上的伺服器。</string>
+    <string name="desktop_jpeg_quality">JPEG 畫質</string>
+    <string name="desktop_jpeg_quality_hint">畫質指定為 1～100。數值越低壓縮越強，數值越高細節越清晰。手動模式下會固定畫質，並根據目標位元速率調整傳送間隔。</string>
+    <string name="desktop_jpeg_quality_mode">JPEG 畫質模式</string>
+    <string name="desktop_png_compression">PNG 壓縮等級</string>
+    <string name="desktop_png_compression_balanced">平衡</string>
+    <string name="desktop_png_compression_best">大小優先</string>
+    <string name="desktop_png_compression_hint">所有等級的畫質均相同。提高壓縮率可減少傳輸量，但在 PC 上的處理時間會增加。</string>
+    <string name="desktop_png_compression_none">無壓縮</string>
+    <string name="desktop_png_compression_speed">速度優先</string>
+</resources>

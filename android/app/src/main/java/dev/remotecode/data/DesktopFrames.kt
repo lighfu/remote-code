@@ -51,6 +51,7 @@ internal data class DesktopFrame(
     // Stream total (including skipped frames), or this response's body size when polling.
     val receivedPayloadBytes: Long,
     val decodeColor: DesktopDecodeColor,
+    val compression: DesktopCompression? = null,
 ) {
     val layout get() = headers.layout
     val captureMethod get() = headers.capture
@@ -113,6 +114,7 @@ internal fun decodeDesktopFrame(
     bytes: ByteArray, headers: FrameHeaders, codec: String, resolution: DesktopResolution, strings: AppStringResolver,
     regions: List<DesktopRegion> = emptyList(), previous: DesktopImage? = null, receivedPayloadBytes: Long = bytes.size.toLong(),
     decodeColor: DesktopDecodeColor = DesktopDecodeColor.Auto,
+    compression: DesktopCompression? = null,
 ): DesktopFrame {
     val start = System.nanoTime()
     val options = BitmapFactory.Options().apply { inJustDecodeBounds = true }
@@ -134,7 +136,7 @@ internal fun decodeDesktopFrame(
         val bitmap = BitmapFactory.decodeByteArray(bytes, 0, bytes.size, options) ?: throw IOException("Invalid desktop image")
         if (regions.isEmpty()) DesktopImage.full(bitmap) else checkNotNull(previous).patch(regions, bitmap)
     }
-    return DesktopFrame(image, headers, codec, (System.nanoTime() - start) / 1_000_000, receivedPayloadBytes, decodeColor)
+    return DesktopFrame(image, headers, codec, (System.nanoTime() - start) / 1_000_000, receivedPayloadBytes, decodeColor, compression)
 }
 
 /** A keyframe, an ordered region update, or a fresh validation of the last image. */

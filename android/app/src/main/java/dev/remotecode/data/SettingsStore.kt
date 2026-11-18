@@ -41,6 +41,14 @@ enum class DesktopResolution(val wire: String) {
     }
 }
 
+sealed interface DesktopCompression {
+    data class Jpeg(val quality: Int) : DesktopCompression
+
+    enum class Png(val wire: String) : DesktopCompression {
+        None("none"), Speed("speed"), Balanced("balanced"), Best("best"),
+    }
+}
+
 data class DesktopPreferences(
     val fps: Int = 10,
     val resolution: DesktopResolution = DesktopResolution.Standard,
@@ -57,8 +65,20 @@ data class DesktopPreferences(
     val decodeColor: DesktopDecodeColor = DesktopDecodeColor.Auto,
     val decodeLatest: Boolean = true,
     val pixelated: Boolean = false,
+    val fixedJpegQuality: Boolean = false,
+    val jpegQuality: Int = defaultJpegQuality,
+    val pngCompression: DesktopCompression.Png? = null,
 ) {
+    fun compressionFor(codec: String, supported: Boolean): DesktopCompression? = when {
+        !supported -> null
+        codec == "png" -> pngCompression
+        codec == "jpeg" && fixedJpegQuality -> DesktopCompression.Jpeg(jpegQuality)
+        else -> null
+    }
+
     companion object {
+        const val defaultJpegQuality = 85
+        val jpegQualities = 1..100
         val frameRates = 1..60
         val manualBitrates = 1..150
         val pointerSpeeds = listOf(0.5f, 1f, 1.5f, 2f)
@@ -124,6 +144,9 @@ class SettingsStore(private val context: Context) {
         val desktopGraphMask = intPreferencesKey("desktop_graph_mask")
         val desktopCapture = stringPreferencesKey("desktop_capture")
         val desktopCodec = stringPreferencesKey("desktop_codec")
+        val desktopFixedJpegQuality = booleanPreferencesKey("desktop_fixed_jpeg_quality")
+        val desktopJpegQuality = intPreferencesKey("desktop_jpeg_quality")
+        val desktopPngCompression = stringPreferencesKey("desktop_png_compression")
         val desktopTouchpad = booleanPreferencesKey("desktop_touchpad")
         val desktopPointerSpeed = floatPreferencesKey("desktop_pointer_speed")
         val desktopControl = booleanPreferencesKey("desktop_control")
@@ -162,6 +185,10 @@ class SettingsStore(private val context: Context) {
                 graphMask = p[Keys.desktopGraphMask]?.and(7) ?: 3,
                 capture = p[Keys.desktopCapture] ?: "auto",
                 codec = p[Keys.desktopCodec] ?: "jpeg",
+                fixedJpegQuality = p[Keys.desktopFixedJpegQuality] ?: false,
+                jpegQuality = p[Keys.desktopJpegQuality]?.takeIf { it in DesktopPreferences.jpegQualities }
+                    ?: DesktopPreferences.defaultJpegQuality,
+                pngCompression = DesktopCompression.Png.entries.find { it.wire == p[Keys.desktopPngCompression] },
                 touchpad = p[Keys.desktopTouchpad] ?: true,
                 pointerSpeed = p[Keys.desktopPointerSpeed]?.takeIf { it in DesktopPreferences.pointerSpeeds } ?: 1f,
                 control = p[Keys.desktopControl] ?: true,
@@ -277,6 +304,10 @@ class SettingsStore(private val context: Context) {
             it[Keys.desktopGraphMask] = prefs.graphMask
             it[Keys.desktopCapture] = prefs.capture
             it[Keys.desktopCodec] = prefs.codec
+            it[Keys.desktopFixedJpegQuality] = prefs.fixedJpegQuality
+            it[Keys.desktopJpegQuality] = prefs.jpegQuality
+            if (prefs.pngCompression == null) it.remove(Keys.desktopPngCompression)
+            else it[Keys.desktopPngCompression] = prefs.pngCompression.wire
             it[Keys.desktopTouchpad] = prefs.touchpad
             it[Keys.desktopPointerSpeed] = prefs.pointerSpeed
             it[Keys.desktopControl] = prefs.control
