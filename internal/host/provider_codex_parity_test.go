@@ -32,6 +32,8 @@ func TestCodexSideQuestionRepliesToSideInputAndDoesNotWaitForCleanup(t *testing.
 	w := &providerWire{waiting: map[string]chan providerReply{}, done: make(chan struct{}), closeFunc: func() error { return nil }}
 	w.sendFunc = func(msg M) error {
 		switch S(msg, "method") {
+		case "thread/turns/list":
+			w.receive(M{"id": msg["id"], "result": M{"data": []any{}}})
 		case "thread/fork":
 			w.receive(M{"id": msg["id"], "result": M{"thread": M{"id": "side"}}})
 		case "turn/start":
@@ -265,5 +267,56 @@ func TestCodexGeneratedAndMCPImageCardsAttachMedia(t *testing.T) {
 	entries := store.Get(sid).Entries
 	if len(entries) != 2 || len(providerAnswerList(entries[0]["media"])) != 1 || len(providerAnswerList(entries[1]["media"])) != 1 || !strings.Contains(S(entries[1], "output"), "Preview") || strings.Contains(S(entries[1], "output"), image) {
 		t.Fatalf("image results did not produce media cards: %v", entries)
+	}
+}
+
+func TestCodexFileChangesKeepPathsAndSnapshotLineNumbers(t *testing.T) {
+	store := providerTestStore(t)
+	p := NewProvider("codex", store, t.TempDir()).(*nativeProvider)
+	defer p.Close()
+	sid := S(store.Create(M{"provider": "codex"}).Info, "id")
+	p.codexItem(sid, M{"type": "fileChange", "id": "patch", "changes": []M{
+		{"kind": M{"type": "add"}, "path": "dir/New file.kt", "diff": "++ header\r\n\r\n@@ not a hunk\r\n── Delete fake.kt\r\n"},
+		{"kind": M{"type": "delete"}, "path": "old.go", "diff": "-- old\n\n"},
+		{"kind": M{"type": "update", "movePath": "new name.go"}, "path": "rename.go", "diff": "@@ -8 +8 @@\n-before\n+after"},
+		{"kind": M{"type": "add"}, "path": "empty.txt", "diff": ""},
+	}}, true, "")
+	entry := store.Get(sid).Entries[0]
+	want := "── New dir/New file.kt\n@@ -0,0 +1,4 @@\n+++ header\n+\n+@@ not a hunk\n+── Delete fake.kt\n" +
+		"── Delete old.go\n@@ -1,2 +0,0 @@\n--- old\n-\n" +
+		"── Modify new name.go\n--- rename.go\n+++ new name.go\n@@ -8 +8 @@\n-before\n+after\n" +
+		"── New empty.txt"
+	if S(entry, "detail") != want {
+		t.Fatalf("file change diff:\n%s\nwant:\n%s", S(entry, "detail"), want)
+	}
+	wantFiles := []string{"dir/New file.kt", "old.go", "new name.go", "empty.txt"}
+	if S(entry, "title") != strings.Join(wantFiles, ", ") || !reflect.DeepEqual(providerAnswerList(entry["files"]), wantFiles) {
+		t.Fatalf("file paths to open: %v, want %v", entry["files"], wantFiles)
+	}
+	if path, got := codexFileChange(M{"path": "notes.txt", "diff": "legacy content"}, false); path != "notes.txt" || got != "legacy content" {
+		t.Fatalf("untyped single-file change was rewritten: %q %q", path, got)
+	}
+}
+
+func TestCodexRenamesOpenDistinctDestinationsWithTheSameBasename(t *testing.T) {
+	store := providerTestStore(t)
+	p := NewProvider("codex", store, t.TempDir()).(*nativeProvider)
+	defer p.Close()
+	sid := S(store.Create(M{"provider": "codex"}).Info, "id")
+	changes := []M{
+		{"path": "old/left.go", "kind": M{"type": "update", "movePath": "left/main.go"}},
+		{"path": `C:\work\old\right.go`, "kind": M{"type": "update", "movePath": `C:\work\right\main.go`}},
+	}
+	p.codexItem(sid, M{"type": "fileChange", "id": "renames", "changes": changes}, true, "")
+	entry := store.Get(sid).Entries[0]
+	destinations := []string{"left/main.go", `C:\work\right\main.go`}
+	if !reflect.DeepEqual(providerAnswerList(entry["files"]), destinations) || S(entry, "title") != strings.Join(destinations, ", ") {
+		t.Fatalf("file links or title point to the wrong destination: %v", entry)
+	}
+	for i, destination := range destinations {
+		header := "── Modify " + destination + "\n--- " + S(changes[i], "path") + "\n+++ " + destination + "\n"
+		if !strings.Contains(S(entry, "detail"), header) {
+			t.Fatalf("missing rename section %q in %v", header, entry["detail"])
+		}
 	}
 }

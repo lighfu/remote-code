@@ -58,4 +58,22 @@ class ToolFilesTest {
         val entry = Entry(id = "prefix", kind = "tool", tool = "fileChange", title = "New Modify notes.txt")
         assertEquals(listOf("Modify notes.txt"), toolFiles(entry))
     }
+
+    @Test fun singleFileSnapshotFallbackKeepsCodeIntactAndDoesNotNumberPartialPatches() {
+        val path = "C:\\src\\New thing.kt"
+        val files = listOf(path)
+        assertTrue(isLegacyFileSnapshot(path, files, "package demo\n\n- counter\n@@ heading in text"))
+        assertTrue(isLegacyFileSnapshot(path, files, "\n\n"))
+        assertEquals(false, isLegacyFileSnapshot(path, listOf(path, "other"), "package demo"))
+        for (patch in listOf("@@ -5 +5 @@\n-a\n+b", "── New x\n+a", " context\n- old\n+ new")) {
+            assertEquals(false, isLegacyFileSnapshot(path, files, patch))
+        }
+    }
+
+    @Test fun legacySingleFileTitlesMaySupplyTheMissingOperation() {
+        assertEquals(1, parseDiff(fileChangePreviewDiff("Created a.kt", null, "+ val a = 1"))[1].new)
+        assertEquals(2, parseDiff(fileChangePreviewDiff("削除 a.kt", listOf("a.kt"), "- x\n- y"))[2].old)
+        assertEquals("+ example", fileChangePreviewDiff("New real name.txt", listOf("New real name.txt"), "+ example"))
+        assertEquals("@@ -9 +9 @@\n-x\n+y", fileChangePreviewDiff("Created a.kt", null, "@@ -9 +9 @@\n-x\n+y"))
+    }
 }

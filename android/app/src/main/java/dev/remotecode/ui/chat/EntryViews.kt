@@ -381,23 +381,29 @@ internal fun StatusIcon(status: String?) {
 @Composable
 private fun ToolCard(e: Entry, wrap: ToolWrapPreferences) {
     var open by rememberSaveable(e.id) { mutableStateOf(false) }
+    val files = rememberToolFiles(e)
+    val multipleEdits = e.tool in EDIT_TOOLS && files.size > 1
+    val title = if (multipleEdits) stringResource(R.string.chat_chat_screen_050, editFileCount(e, files)) else e.title ?: e.tool ?: ""
     Card(
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
         shape = RoundedCornerShape(18.dp),
-        modifier = Modifier.fillMaxWidth().then(toolFileGesture(e) { open = !open }).animateContentSize(),
+        modifier = Modifier.fillMaxWidth().then(toolFileGesture(files) { open = !open }).animateContentSize(),
     ) {
         Row(Modifier.padding(horizontal = 14.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
             Icon(toolIcon(e.tool), null, Modifier.size(20.dp), tint = MaterialTheme.colorScheme.primary)
             Spacer(Modifier.size(10.dp))
             Column(Modifier.weight(1f)) {
                 Text(
-                    highlightedCode(e.title ?: e.tool ?: "", if (e.tool in setOf("Bash", "PowerShell", "command")) commandCodeLanguage(e.tool, e.title.orEmpty()) else codeLanguage("plain.txt")),
+                    highlightedCode(title, if (e.tool in setOf("Bash", "PowerShell", "command")) commandCodeLanguage(e.tool, e.title.orEmpty()) else codeLanguage("plain.txt")),
                     style = MaterialTheme.typography.bodyMedium.copy(fontFamily = Mono),
                     softWrap = wrap.input,
                     modifier = if (wrap.input) Modifier else Modifier.horizontalScroll(rememberScrollState()),
                     maxLines = if (open) 6 else 1,
                     overflow = TextOverflow.Ellipsis,
                 )
+                if (multipleEdits && !e.title.isNullOrBlank() && !isFileChangeSummary(e.title)) {
+                    Text(e.title, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
                 if (!e.text.isNullOrBlank()) {
                     Text(e.text, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
@@ -408,16 +414,18 @@ private fun ToolCard(e: Entry, wrap: ToolWrapPreferences) {
         if (!e.media.isNullOrEmpty() || !e.videos.isNullOrEmpty()) {
             dev.remotecode.ui.common.EntryMedia(e.media, e.videos, Modifier.padding(start = 14.dp, end = 14.dp, bottom = 12.dp))
         }
-        if (open) {
+        if (open || multipleEdits) {
             Column(Modifier.padding(start = 14.dp, end = 14.dp, bottom = 12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                if (!e.detail.isNullOrBlank()) {
-                    if (e.tool in EDIT_TOOLS) EditPreview(e, wrapLines = wrap.input) else CodeBlock(e.detail, diff = false, language = if (e.tool in setOf("Bash", "PowerShell", "command")) commandCodeLanguage(e.tool, e.detail) else null, wrapLines = wrap.input)
+                if (multipleEdits || (e.tool in EDIT_TOOLS && e.hasToolDetail)) {
+                    EditPreview(e, maxLines = if (open) Int.MAX_VALUE else 12, wrapLines = wrap.input, files = files)
+                } else if (!e.detail.isNullOrBlank()) {
+                    CodeBlock(e.detail, diff = false, language = if (e.tool in setOf("Bash", "PowerShell", "command")) commandCodeLanguage(e.tool, e.detail) else null, wrapLines = wrap.input)
                 }
-                if (!e.output.isNullOrBlank()) {
+                if (open && !e.output.isNullOrBlank()) {
                     Text(stringResource(R.string.chat_entry_views_028), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     CodeBlock(e.output, diff = false, wrapLines = wrap.output)
                 }
-                if (e.detail.isNullOrBlank() && e.output.isNullOrBlank()) {
+                if (open && !e.hasToolDetail && e.output.isNullOrBlank()) {
                     Text(stringResource(R.string.chat_entry_extras_013), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
@@ -496,9 +504,10 @@ private fun ApprovalCard(e: Entry, respond: Responder, wrapInput: Boolean) {
                     modifier = if (wrapInput) Modifier else Modifier.horizontalScroll(rememberScrollState()),
                 )
             }
-            if (pending && !e.detail.isNullOrBlank()) {
-                if (e.tool in EDIT_TOOLS) EditPreview(e, wrapLines = wrapInput)
-                else CodeBlock(e.detail, diff = false, maxHeight = 280, wrapLines = wrapInput)
+            if (pending && e.tool in EDIT_TOOLS) {
+                EditPreview(e, wrapLines = wrapInput)
+            } else if (pending && !e.detail.isNullOrBlank()) {
+                CodeBlock(e.detail, diff = false, maxHeight = 280, wrapLines = wrapInput)
             }
             if (pending) {
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {

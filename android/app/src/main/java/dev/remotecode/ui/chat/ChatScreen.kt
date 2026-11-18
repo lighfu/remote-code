@@ -630,7 +630,7 @@ fun ChatScreen(sessionId: String, onBack: () -> Unit, onTerminals: (String) -> U
                                 onClick = { moreMenu = false; showAgents = true },
                             )
                             DropdownMenuItem(
-                                text = { Text(stringResource(R.string.chat_chat_screen_050, edits.size)) },
+                                text = { Text(stringResource(R.string.chat_chat_screen_050, remember(edits) { changedFileCount(edits) })) },
                                 leadingIcon = { Icon(Icons.Rounded.EditNote, null) },
                                 onClick = { moreMenu = false; showFiles = true },
                             )

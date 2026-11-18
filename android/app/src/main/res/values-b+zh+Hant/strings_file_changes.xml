@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="tool_changes_combined">所有檔案的差異</string>
+    <string name="tool_changes_open_file">在程式碼檢視器中開啟 %1$s</string>
+    <string name="tool_changes_show_diff">顯示 %1$s 的差異</string>
+</resources>

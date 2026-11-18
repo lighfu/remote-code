@@ -223,6 +223,13 @@ fun parseDiff(text: String): List<DiffLine> {
                 untilNew = (new ?: 0).toLong() + (match.groupValues[4].toIntOrNull() ?: 1)
                 DiffLine(line, '@')
             }
+            line.startsWith("── ") -> {
+                val sign = legacyFileChangeSign(line.removePrefix("── "))
+                old = if (sign == '-') 1 else null
+                new = if (sign == '+') 1 else null
+                inHunk = false
+                DiffLine(line, '@')
+            }
             line.startsWith("──") || line == "⋯" || line.startsWith("diff --git") -> {
                 old = null; new = null; inHunk = false; DiffLine(line, '@')
             }

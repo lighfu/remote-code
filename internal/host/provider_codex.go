@@ -387,6 +387,51 @@ func codexClientMessageID(item M) string {
 	return S(item, "clientUserMessageId")
 }
 
+// Return the path to open and its patch. Codex sends full file bodies for additions and deletions.
+func codexFileChange(change M, multi bool) (string, string) {
+	path, detail := S(change, "path"), S(change, "diff")
+	kind := providerMap(change["kind"])
+	changeType := S(kind, "type")
+	if changeType == "" {
+		changeType = S(change, "kind")
+	}
+	switch changeType {
+	case "add", "delete":
+		verb, sign := "New", "+"
+		if changeType == "delete" {
+			verb, sign = "Delete", "-"
+		}
+		var out strings.Builder
+		fmt.Fprintf(&out, "── %s %s", verb, path)
+		if detail == "" {
+			return path, out.String()
+		}
+		body := strings.TrimSuffix(strings.ReplaceAll(detail, "\r\n", "\n"), "\n")
+		lineCount := strings.Count(body, "\n") + 1
+		if changeType == "add" {
+			fmt.Fprintf(&out, "\n@@ -0,0 +1,%d @@", lineCount)
+		} else {
+			fmt.Fprintf(&out, "\n@@ -1,%d +0,0 @@", lineCount)
+		}
+		for line := range strings.SplitSeq(body, "\n") {
+			out.WriteByte('\n')
+			out.WriteString(sign)
+			out.WriteString(line)
+		}
+		return path, out.String()
+	case "update":
+		if moved := S(kind, "movePath"); moved != "" {
+			return moved, "── Modify " + moved + "\n--- " + path + "\n+++ " + moved + "\n" + detail
+		}
+		return path, "── Modify " + path + "\n" + detail
+	default:
+		if multi {
+			return path, "── " + path + "\n" + detail
+		}
+		return path, detail
+	}
+}
+
 func (p *nativeProvider) codexItem(sid string, item M, completed bool, parent string) {
 	p.addCodexItem(sid, item, completed, parent, p.store.Add)
 }
@@ -555,9 +600,11 @@ func (p *nativeProvider) addCodexItem(sid string, item M, completed bool, parent
 		case "fileChange":
 			paths := []string{}
 			diffs := []string{}
-			for _, c := range providerRows(item["changes"]) {
-				paths = append(paths, S(c, "path"))
-				diffs = append(diffs, S(c, "diff"))
+			changes := providerRows(item["changes"])
+			for _, c := range changes {
+				path, detail := codexFileChange(c, len(changes) > 1)
+				paths = append(paths, path)
+				diffs = append(diffs, detail)
 			}
 			entry["title"] = strings.Join(paths, ", ")
 			entry["files"] = paths

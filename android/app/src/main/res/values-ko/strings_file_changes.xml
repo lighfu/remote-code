@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="tool_changes_combined">모든 파일의 차이</string>
+    <string name="tool_changes_open_file">코드 뷰어에서 %1$s 열기</string>
+    <string name="tool_changes_show_diff">%1$s의 차이 표시</string>
+</resources>

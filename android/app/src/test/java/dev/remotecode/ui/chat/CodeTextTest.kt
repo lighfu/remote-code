@@ -64,6 +64,29 @@ class CodeTextTest {
         assertNull(removed.new)
     }
 
+    @Test fun fileChangeHunksNumberEmptyAndDiffLikeSourceLinesAcrossFiles() {
+        val diff = "── New first.kt\n@@ -0,0 +1,4 @@\n+++ header\n+\n+@@ -4 +4 @@\n+── Delete fake\n" +
+            "── Delete second.kt\n@@ -1,2 +0,0 @@\n--- old\n-\n── Modify other.kt\n@@ -39 +40 @@\n-old\n+new"
+        val rows = parseDiff(diff)
+        assertEquals(listOf("++ header", "", "@@ -4 +4 @@", "── Delete fake"), rows.slice(2..5).map { it.text })
+        assertEquals(listOf(1, 2, 3, 4), rows.slice(2..5).map { it.new })
+        assertTrue(rows.slice(2..5).all { it.kind == '+' && it.old == null })
+        assertEquals(listOf("-- old", ""), rows.slice(8..9).map { it.text })
+        assertEquals(listOf(1, 2), rows.slice(8..9).map { it.old })
+        assertEquals(39, rows[12].old)
+        assertEquals(40, rows[13].new)
+    }
+
+    @Test fun numberedLegacyChangesUseExplicitFileKindsAndBoundaries() {
+        val rows = parseDiff("── 新規 one.txt\n+ first\n+ \n── Created two.txt\n+ second\n── Deleted gone.txt\n- old\n── Modify more.txt\n+ unknown")
+        assertEquals(1, rows[1].new)
+        assertEquals(2, rows[2].new)
+        assertEquals("", rows[2].text)
+        assertEquals(1, rows[4].new)
+        assertEquals(1, rows[6].old)
+        assertNull(rows[8].new)
+    }
+
     @Test fun diffHighlightsTheTwoVersionsIndependentlyAcrossCommentsAndRenames() {
         val text = """diff --git "a/old file.kt" "b/new file.py"
 --- "a/old file.kt"

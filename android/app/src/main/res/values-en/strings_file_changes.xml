@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="tool_changes_combined">Diff of all files</string>
+    <string name="tool_changes_open_file">Open %1$s in code viewer</string>
+    <string name="tool_changes_show_diff">Show diff for %1$s</string>
+</resources>

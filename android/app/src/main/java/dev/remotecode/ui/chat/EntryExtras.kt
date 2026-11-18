@@ -77,6 +77,12 @@ fun diffStats(diff: String?): Pair<Int, Int> {
     return rows.count { it.kind == '+' } to rows.count { it.kind == '-' }
 }
 
+private fun editStats(entry: Entry): Pair<Int, Int> {
+    val detail = entry.detail ?: return 0 to 0
+    if (entry.tool == "fileChange" && isLegacyFileSnapshot(entry.title, entry.files, detail)) return 0 to 0
+    return diffStats(detail)
+}
+
 /** 最後の太字見出し、なければ最終段落の先頭文を使う。 */
 fun thinkingHeadline(text: String): String {
     val bold = Regex("""\*\*(.+?)\*\*""").findAll(text).lastOrNull()?.groupValues?.get(1)
@@ -170,14 +176,15 @@ fun DetailedToolCard(e: Entry, wrap: ToolWrapPreferences) {
     val isEdit = e.tool in EDIT_TOOLS
     val isCommand = e.tool in COMMAND_TOOLS
     val isTodo = e.tool == "TodoWrite"
-    val editFiles = remember(e.files, e.path, e.tool, e.title, e.detail) { if (isEdit) toolFiles(e) else emptyList() }
-    val editPath = editFiles.singleOrNull()
-    val changedCount = if (e.tool == "fileChange") changedFileSummaryCount(e.title) else null
+    val files = rememberToolFiles(e)
+    val multipleEdits = isEdit && files.size > 1
+    val editPath = files.singleOrNull()
+    val changedCount = if (multipleEdits) editFileCount(e, files).toString() else if (e.tool == "fileChange") changedFileSummaryCount(e.title) else null
     val x = Extra.colors
     Card(
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
         shape = RoundedCornerShape(18.dp),
-        modifier = Modifier.fillMaxWidth().then(toolFileGesture(e) { open = !open }).animateContentSize(),
+        modifier = Modifier.fillMaxWidth().then(toolFileGesture(files) { open = !open }).animateContentSize(),
     ) {
         Column(Modifier.padding(horizontal = 14.dp, vertical = 10.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -202,13 +209,16 @@ fun DetailedToolCard(e: Entry, wrap: ToolWrapPreferences) {
                             maxLines = if (open) 8 else if (isCommand) 3 else 1,
                             overflow = TextOverflow.Ellipsis,
                         )
+                        if (multipleEdits && !e.title.isNullOrBlank() && !isFileChangeSummary(e.title)) {
+                            Text(e.title, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
                         if (!e.text.isNullOrBlank()) {
                             Text(e.text, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
                         }
                     }
                 }
                 if (isEdit) {
-                    val (add, del) = diffStats(e.detail)
+                    val (add, del) = remember(e.detail, e.tool, e.title, e.files) { editStats(e) }
                     if (add + del > 0) {
                         Text("+$add", style = MaterialTheme.typography.labelMedium, color = x.diffAdd, fontFamily = Mono)
                         Spacer(Modifier.size(4.dp))
@@ -219,7 +229,7 @@ fun DetailedToolCard(e: Entry, wrap: ToolWrapPreferences) {
                 StatusIcon(e.status)
             }
             when {
-                isEdit && !e.detail.isNullOrBlank() -> EditPreview(e, maxLines = if (open) Int.MAX_VALUE else 12, wrapLines = wrap.input)
+                multipleEdits || (isEdit && e.hasToolDetail) -> EditPreview(e, maxLines = if (open) Int.MAX_VALUE else 12, wrapLines = wrap.input, files = files)
                 isTodo && !e.detail.isNullOrBlank() -> Text(e.detail, style = MaterialTheme.typography.bodyMedium)
                 isCommand -> {
                     if (open && e.detail.isNullOrBlank() && !e.title.isNullOrBlank()) CodeBlock(e.title, diff = false, language = commandCodeLanguage(e.tool, e.title), wrapLines = wrap.input)
@@ -343,9 +353,9 @@ fun AgentsSheet(agents: List<Entry>, children: Map<String, List<Entry>>, display
 fun ChangedFilesSheet(edits: List<Entry>, wrap: ToolWrapPreferences, onDismiss: () -> Unit) {
     val x = Extra.colors
     ModalBottomSheet(modifier = dev.remotecode.ui.common.hapticArea(), onDismissRequest = onDismiss, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
-        val total = edits.fold(0 to 0) { acc, e -> diffStats(e.detail).let { (a, d) -> acc.first + a to acc.second + d } }
+        val total = remember(edits) { edits.fold(0 to 0) { acc, e -> editStats(e).let { (a, d) -> acc.first + a to acc.second + d } } }
         Row(Modifier.padding(horizontal = 20.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-            Text(stringResource(R.string.chat_chat_screen_050, edits.size), style = MaterialTheme.typography.headlineSmall, modifier = Modifier.weight(1f))
+            Text(stringResource(R.string.chat_chat_screen_050, remember(edits) { changedFileCount(edits) }), style = MaterialTheme.typography.headlineSmall, modifier = Modifier.weight(1f))
             Text("+${total.first}", color = x.diffAdd, fontFamily = Mono)
             Spacer(Modifier.size(6.dp))
             Text("−${total.second}", color = x.diffRemove, fontFamily = Mono)

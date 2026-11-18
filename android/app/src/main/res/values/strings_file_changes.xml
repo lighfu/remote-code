@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="tool_changes_combined">全ファイルの差分</string>
+    <string name="tool_changes_open_file">%1$s をコードビューアーで開く</string>
+    <string name="tool_changes_show_diff">%1$s の差分を表示</string>
+</resources>
