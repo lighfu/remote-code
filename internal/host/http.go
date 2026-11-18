@@ -113,7 +113,7 @@ func (a *App) handler(serverDone <-chan struct{}) http.Handler {
 				publicURL = S(rt, "publicUrl")
 			}
 		}
-		return M{"name": "remote-code", "version": Version, "instanceId": a.InstanceID, "startedAt": a.StartedAt, "host": hostname, "home": home, "publicUrl": publicURL, "providers": ps, "usdJpy": a.fx.usdJpy(defaultNumber(a.Config.Raw, "usdJpy", 150)), "defaults": pcDefaults(a.DataDir), "acceptingWrites": true}, nil
+		return M{"name": "remote-code", "version": Version, "instanceId": a.InstanceID, "startedAt": a.StartedAt, "host": hostname, "home": home, "publicUrl": publicURL, "providers": ps, "usdJpy": a.fx.usdJpy(defaultNumber(a.Config.Raw, "usdJpy", 150)), "usdRates": a.fx.usdRates(), "defaults": pcDefaults(a.DataDir), "acceptingWrites": true}, nil
 	})
 	route(mux, "GET /api/sessions", func(r *http.Request, b M) (any, error) { return a.Store.List(), nil })
 	route(mux, "POST /api/sessions", func(r *http.Request, b M) (any, error) {

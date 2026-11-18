@@ -17,8 +17,9 @@ const fxEndpoint = "https://open.er-api.com/v6/latest/USD"
 const fxLifetime = 12 * time.Hour
 
 type fxQuote struct {
-	Rate float64   `json:"rate"`
-	At   time.Time `json:"at"`
+	Rate  float64            `json:"rate"`
+	Rates map[string]float64 `json:"rates,omitempty"`
+	At    time.Time          `json:"at"`
 }
 
 type fxRates struct {
@@ -50,16 +51,30 @@ func (f *fxRates) usdJpy(fallback float64) float64 {
 	return fallback
 }
 
+// Published tables are immutable. Older caches contain a JPY quote only.
+func (f *fxRates) usdRates() map[string]float64 {
+	f.mu.RLock()
+	defer f.mu.RUnlock()
+	if len(f.quote.Rates) != 0 {
+		return f.quote.Rates
+	}
+	rates := map[string]float64{"USD": 1}
+	if fxValidRate(f.quote.Rate) {
+		rates["JPY"] = f.quote.Rate
+	}
+	return rates
+}
+
 func (f *fxRates) refreshLoop(ctx context.Context, data string) {
 	for ctx.Err() == nil {
 		delay := time.Until(f.quote.At.Add(fxLifetime))
-		if delay <= 0 {
+		if delay <= 0 || len(f.quote.Rates) == 0 {
 			probe, cancel := context.WithTimeout(ctx, 10*time.Second)
-			rate, err := fetchUSDJPY(probe, fxEndpoint)
+			rates, err := fetchUSDRates(probe, fxEndpoint)
 			cancel()
 			delay = 5 * time.Minute
 			if err == nil {
-				quote := fxQuote{Rate: rate, At: time.Now()}
+				quote := fxQuote{Rate: rates["JPY"], Rates: rates, At: time.Now()}
 				f.mu.Lock()
 				f.quote = quote
 				f.mu.Unlock()
@@ -77,21 +92,29 @@ func (f *fxRates) refreshLoop(ctx context.Context, data string) {
 	}
 }
 
-func fetchUSDJPY(ctx context.Context, endpoint string) (float64, error) {
+func fetchUSDRates(ctx context.Context, endpoint string) (map[string]float64, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
 	if err != nil {
-		return 0, err
+		return nil, err
 	}
 	res, err := http.DefaultClient.Do(req)
 	if err != nil {
-		return 0, err
+		return nil, err
 	}
 	defer res.Body.Close()
 	var payload struct {
-		Rates struct{ JPY float64 }
+		Base  string `json:"base_code"`
+		Rates map[string]float64
 	}
-	if res.StatusCode != http.StatusOK || json.NewDecoder(io.LimitReader(res.Body, 64<<10)).Decode(&payload) != nil || !fxValidRate(payload.Rates.JPY) {
-		return 0, errors.New("USD/JPY quote unavailable")
+	if res.StatusCode != http.StatusOK || json.NewDecoder(io.LimitReader(res.Body, 64<<10)).Decode(&payload) != nil ||
+		(payload.Base != "" && payload.Base != "USD") || !fxValidRate(payload.Rates["JPY"]) {
+		return nil, errors.New("USD exchange rates unavailable")
 	}
-	return payload.Rates.JPY, nil
+	for code, rate := range payload.Rates {
+		if len(code) != 3 || !fxValidRate(rate) {
+			delete(payload.Rates, code)
+		}
+	}
+	payload.Rates["USD"] = 1
+	return payload.Rates, nil
 }

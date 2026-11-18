@@ -120,17 +120,17 @@ func TestClaudeCacheKeepsPreviousTTLAndDeduplicatesRequests(t *testing.T) {
 func TestFXReadsValidQuoteAndKeepsFallback(t *testing.T) {
 	api := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/valid" {
-			_, _ = w.Write([]byte(`{"rates":{"JPY":152.25}}`))
+			_, _ = w.Write([]byte(`{"base_code":"USD","rates":{"JPY":152.25,"EUR":0.9,"BAD":-4}}`))
 		} else {
 			http.Error(w, "Unavailable", http.StatusServiceUnavailable)
 		}
 	}))
 	defer api.Close()
-	rate, err := fetchUSDJPY(t.Context(), api.URL+"/valid")
-	if err != nil || rate != 152.25 {
-		t.Fatalf("rate = %v, error = %v", rate, err)
+	table, err := fetchUSDRates(t.Context(), api.URL+"/valid")
+	if err != nil || table["JPY"] != 152.25 || table["EUR"] != 0.9 || table["USD"] != 1 || len(table) != 3 {
+		t.Fatalf("rates = %v, error = %v", table, err)
 	}
-	if _, err = fetchUSDJPY(t.Context(), api.URL+"/unavailable"); err == nil {
+	if _, err = fetchUSDRates(t.Context(), api.URL+"/unavailable"); err == nil {
 		t.Fatal("invalid quote was accepted")
 	}
 	var rates fxRates
@@ -138,11 +138,11 @@ func TestFXReadsValidQuoteAndKeepsFallback(t *testing.T) {
 	if rates.usdJpy(150) != 150 {
 		t.Fatal("configured fallback was lost")
 	}
-	if err = atomicJSON(filepath.Join(dir, "fx-usdjpy.json"), fxQuote{Rate: rate, At: time.Now()}); err != nil {
+	if err = atomicJSON(filepath.Join(dir, "fx-usdjpy.json"), fxQuote{Rate: table["JPY"], At: time.Now()}); err != nil {
 		t.Fatal(err)
 	}
 	rates.restore(dir)
-	if rates.usdJpy(150) != 152.25 {
+	if rates.usdJpy(150) != 152.25 || rates.usdRates()["JPY"] != 152.25 || len(rates.usdRates()) != 2 {
 		t.Fatal("last quote did not survive startup")
 	}
 }
