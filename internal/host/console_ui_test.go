@@ -44,23 +44,23 @@ func consoleScreenText(s tcell.SimulationScreen) string {
 func TestConsoleDestructiveKeysRequireExplicitConfirmation(t *testing.T) {
 	m := consoleModel{}
 	for _, key := range []tcell.Key{tcell.KeyCtrlC} {
-		if a := m.event(tcell.NewEventKey(key, 0, 0)); a != "" || m.confirm != ConsoleStop {
+		if a, _ := m.event(tcell.NewEventKey(key, 0, 0)); a != "" || m.confirm != ConsoleStop {
 			t.Fatal(a, m.confirm)
 		}
 	}
-	if a := m.event(tcell.NewEventKey(tcell.KeyEnter, 0, 0)); a != "" || m.confirm != "" {
+	if a, _ := m.event(tcell.NewEventKey(tcell.KeyEnter, 0, 0)); a != "" || m.confirm != "" {
 		t.Fatal("default accepted destructive action", a)
 	}
-	_ = m.event(tcell.NewEventKey(tcell.KeyRune, 'r', 0))
+	m.event(tcell.NewEventKey(tcell.KeyRune, 'r', 0))
 	if m.confirm != ConsoleRestart || m.confirmYes {
 		t.Fatal("restart was not safely prompted")
 	}
-	_ = m.event(tcell.NewEventKey(tcell.KeyRight, 0, 0))
-	if a := m.event(tcell.NewEventKey(tcell.KeyEnter, 0, 0)); a != ConsoleRestart {
+	m.event(tcell.NewEventKey(tcell.KeyRight, 0, 0))
+	if a, _ := m.event(tcell.NewEventKey(tcell.KeyEnter, 0, 0)); a != ConsoleRestart {
 		t.Fatal(a)
 	}
-	_ = m.event(tcell.NewEventKey(tcell.KeyRune, 'q', 0))
-	_ = m.event(tcell.NewEventKey(tcell.KeyEsc, 0, 0))
+	m.event(tcell.NewEventKey(tcell.KeyRune, 'q', 0))
+	m.event(tcell.NewEventKey(tcell.KeyEsc, 0, 0))
 	if m.confirm != "" {
 		t.Fatal("escape did not cancel")
 	}
@@ -69,16 +69,16 @@ func TestConsoleKeyboardNavigationAndMouseActions(t *testing.T) {
 	s := consoleTestScreen(t, 100, 32)
 	m := consoleModel{}
 	m.draw(s, consoleTestSnapshot())
-	_ = m.event(tcell.NewEventKey(tcell.KeyRune, '2', 0))
+	m.event(tcell.NewEventKey(tcell.KeyRune, '2', 0))
 	if m.tab != 1 {
 		t.Fatal(m.tab)
 	}
-	_ = m.event(tcell.NewEventKey(tcell.KeyEsc, 0, 0))
+	m.event(tcell.NewEventKey(tcell.KeyEsc, 0, 0))
 	// The Setup tab sits after Logs; the existing action IDs stay stable.
 	for i := 0; i < 7; i++ {
-		_ = m.event(tcell.NewEventKey(tcell.KeyTab, 0, 0))
+		m.event(tcell.NewEventKey(tcell.KeyTab, 0, 0))
 	}
-	if a := m.event(tcell.NewEventKey(tcell.KeyEnter, 0, 0)); a != ConsoleCopy {
+	if a, _ := m.event(tcell.NewEventKey(tcell.KeyEnter, 0, 0)); a != ConsoleCopy {
 		t.Fatal(a, m.focus)
 	}
 	m.draw(s, consoleTestSnapshot())
@@ -88,7 +88,7 @@ func TestConsoleKeyboardNavigationAndMouseActions(t *testing.T) {
 			stop = rect
 		}
 	}
-	if a := m.event(tcell.NewEventMouse(stop.x+1, stop.y, tcell.Button1, 0)); a != "" || m.confirm != ConsoleStop {
+	if a, _ := m.event(tcell.NewEventMouse(stop.x+1, stop.y, tcell.Button1, 0)); a != "" || m.confirm != ConsoleStop {
 		t.Fatal(a, m.confirm)
 	}
 	m.draw(s, consoleTestSnapshot())
@@ -98,11 +98,11 @@ func TestConsoleKeyboardNavigationAndMouseActions(t *testing.T) {
 			confirm = rect
 		}
 	}
-	if a := m.event(tcell.NewEventMouse(confirm.x, confirm.y, tcell.Button1, 0)); a != "" {
+	if a, _ := m.event(tcell.NewEventMouse(confirm.x, confirm.y, tcell.Button1, 0)); a != "" {
 		t.Fatal("drag activated destructive button")
 	}
-	_ = m.event(tcell.NewEventMouse(confirm.x, confirm.y, tcell.ButtonNone, 0))
-	if a := m.event(tcell.NewEventMouse(confirm.x, confirm.y, tcell.Button1, 0)); a != ConsoleStop {
+	m.event(tcell.NewEventMouse(confirm.x, confirm.y, tcell.ButtonNone, 0))
+	if a, _ := m.event(tcell.NewEventMouse(confirm.x, confirm.y, tcell.Button1, 0)); a != ConsoleStop {
 		t.Fatal(a)
 	}
 }
@@ -137,7 +137,7 @@ func TestConsoleSetupShowsDependencyStateAndDispatchesOnlyEligibleInstalls(t *te
 	if m.focus != 13 {
 		t.Fatalf("focus must skip the installed provider, got %d", m.focus)
 	}
-	if a := m.event(tcell.NewEventKey(tcell.KeyEnter, 0, 0)); a != ConsoleInstallCodex {
+	if a, _ := m.event(tcell.NewEventKey(tcell.KeyEnter, 0, 0)); a != ConsoleInstallCodex {
 		t.Fatalf("Codex install not dispatched: %q", a)
 	}
 	var retry consoleHitRect
@@ -149,7 +149,7 @@ func TestConsoleSetupShowsDependencyStateAndDispatchesOnlyEligibleInstalls(t *te
 	if retry.w == 0 {
 		t.Fatal("failed dependency has no retry control")
 	}
-	if a := m.event(tcell.NewEventMouse(retry.x+1, retry.y, tcell.Button1, 0)); a != ConsoleInstallAntigravity {
+	if a, _ := m.event(tcell.NewEventMouse(retry.x+1, retry.y, tcell.Button1, 0)); a != ConsoleInstallAntigravity {
 		t.Fatalf("retry click did not select the correct installer: %q", a)
 	}
 	m.event(tcell.NewEventMouse(retry.x+1, retry.y, tcell.ButtonNone, 0))
@@ -210,11 +210,11 @@ func TestConsoleSetupSmallScreenFollowsInstallFocusAndPreservesExistingActions(t
 	if m.scroll == 0 {
 		t.Fatal("small Setup view did not scroll to Cloudflare Tunnel")
 	}
-	if a := m.event(tcell.NewEventKey(tcell.KeyEnter, 0, 0)); a != ConsoleInstallCloudflared {
+	if a, _ := m.event(tcell.NewEventKey(tcell.KeyEnter, 0, 0)); a != ConsoleInstallCloudflared {
 		t.Fatal(a)
 	}
 	m.event(tcell.NewEventKey(tcell.KeyTab, 0, 0))
-	if m.focus != 4 || m.event(tcell.NewEventKey(tcell.KeyEnter, 0, 0)) != ConsoleRefresh {
+	if a, _ := m.event(tcell.NewEventKey(tcell.KeyEnter, 0, 0)); m.focus != 4 || a != ConsoleRefresh {
 		t.Fatal("Setup changed the existing refresh action")
 	}
 }
@@ -340,18 +340,18 @@ func TestConsoleAPKCopyUsesTheActiveTab(t *testing.T) {
 		t.Fatal(text)
 	}
 	copyKey := tcell.NewEventKey(tcell.KeyRune, 'c', 0)
-	if a := m.event(copyKey); a != ConsoleCopyAPK || consoleActionDone(a) != "APK download link copied." {
+	if a, _ := m.event(copyKey); a != ConsoleCopyAPK || consoleActionDone(a) != "APK download link copied." {
 		t.Fatalf("wrong copy action for App QR: %q", a)
 	}
 	for _, rect := range m.buttons {
 		if rect.id == 6 {
-			if a := m.event(tcell.NewEventMouse(rect.x+1, rect.y, tcell.Button1, 0)); a != ConsoleCopyAPK {
+			if a, _ := m.event(tcell.NewEventMouse(rect.x+1, rect.y, tcell.Button1, 0)); a != ConsoleCopyAPK {
 				t.Fatalf("wrong mouse copy action for App QR: %q", a)
 			}
 		}
 	}
 	m.event(tcell.NewEventKey(tcell.KeyRune, '2', 0))
-	if a := m.event(copyKey); a != ConsoleCopy {
+	if a, _ := m.event(copyKey); a != ConsoleCopy {
 		t.Fatalf("wrong copy action for Pair QR: %q", a)
 	}
 }
@@ -405,12 +405,12 @@ func TestConsoleLogsAndResizeRemainOperable(t *testing.T) {
 	for i := 0; i < 30; i++ {
 		snapshot.Logs = append(snapshot.Logs, "extra log line")
 	}
-	_ = m.event(tcell.NewEventKey(tcell.KeyPgUp, 0, 0))
+	m.event(tcell.NewEventKey(tcell.KeyPgUp, 0, 0))
 	m.draw(s, snapshot)
 	if m.scroll == 0 {
 		t.Fatal("log scroll unavailable")
 	}
-	_ = m.event(tcell.NewEventKey(tcell.KeyEnd, 0, 0))
+	m.event(tcell.NewEventKey(tcell.KeyEnd, 0, 0))
 	if m.scroll != 0 {
 		t.Fatal("End does not follow logs")
 	}
@@ -418,7 +418,7 @@ func TestConsoleLogsAndResizeRemainOperable(t *testing.T) {
 		s.SetSize(size[0], size[1])
 		m.draw(s, snapshot)
 	}
-	if a := m.event(tcell.NewEventKey(tcell.KeyRune, 'r', 0)); a != "" || m.confirm != ConsoleRestart {
+	if a, _ := m.event(tcell.NewEventKey(tcell.KeyRune, 'r', 0)); a != "" || m.confirm != ConsoleRestart {
 		t.Fatal("resize broke restart prompt")
 	}
 }
@@ -427,6 +427,7 @@ type consoleLifecycleScreen struct {
 	tcell.SimulationScreen
 	ready    chan struct{}
 	finished atomic.Int32
+	frames   chan string
 }
 
 func (s *consoleLifecycleScreen) Init() error {
@@ -438,6 +439,109 @@ func (s *consoleLifecycleScreen) Init() error {
 	return nil
 }
 func (s *consoleLifecycleScreen) Fini() { s.finished.Add(1); s.SimulationScreen.Fini() }
+func (s *consoleLifecycleScreen) Show() {
+	s.SimulationScreen.Show()
+	if s.frames != nil {
+		select {
+		case s.frames <- consoleScreenText(s):
+		default:
+		}
+	}
+}
+
+func (s *consoleLifecycleScreen) waitFrame(t *testing.T, contains string) string {
+	t.Helper()
+	timeout := time.After(3 * time.Second)
+	for {
+		select {
+		case frame := <-s.frames:
+			if strings.Contains(frame, contains) {
+				return frame
+			}
+		case <-timeout:
+			t.Fatalf("dashboard did not display %q", contains)
+		}
+	}
+}
+
+func TestConsoleClickCanSwitchTabsWhileSnapshotIsBlocked(t *testing.T) {
+	s := &consoleLifecycleScreen{SimulationScreen: tcell.NewSimulationScreen("UTF-8"), ready: make(chan struct{}), frames: make(chan string, 16)}
+	ctx, cancel := context.WithCancel(context.Background())
+	samples := make(chan ConsoleSnapshot)
+	started := make(chan struct{}, 1)
+	done := make(chan error, 1)
+	go func() {
+		done <- RunConsoleScreen(ctx, s, func() ConsoleSnapshot {
+			select {
+			case started <- struct{}{}:
+			case <-ctx.Done():
+				return ConsoleSnapshot{}
+			}
+			select {
+			case sample := <-samples:
+				return sample
+			case <-ctx.Done():
+				return ConsoleSnapshot{}
+			}
+		}, nil)
+	}()
+	defer func() { cancel(); <-done }()
+	click := func(frame, label string) {
+		t.Helper()
+		for y, line := range strings.Split(frame, "\n") {
+			if x := strings.Index(line, label); x >= 0 {
+				s.PostEventWait(tcell.NewEventMouse(x, y, tcell.Button1, 0))
+				s.PostEventWait(tcell.NewEventMouse(x, y, tcell.ButtonNone, 0))
+				return
+			}
+		}
+		t.Fatalf("button %q missing", label)
+	}
+	frame := s.waitFrame(t, "Loading server status...")
+	<-started
+	for i := 0; i < 64; i++ {
+		s.PostEventWait(tcell.NewEventMouse(i, 1, tcell.ButtonNone, 0))
+	}
+	click(frame, "2 Pair QR")
+	// QR tabs place their tab bar on the first row even before the initial snapshot.
+	for !strings.Contains(strings.SplitN(frame, "\n", 2)[0], "2 Pair QR") {
+		frame = s.waitFrame(t, "Loading server status...")
+	}
+	samples <- consoleSetupSnapshot()
+	frame = s.waitFrame(t, "Scan with Remote Code to connect.")
+	s.InjectKey(tcell.KeyF5, 0, 0)
+	select {
+	case <-started:
+	case <-time.After(3 * time.Second):
+		t.Fatal("refresh did not fetch server state")
+	}
+	click(frame, "5 Setup")
+	s.waitFrame(t, "Install missing software")
+	updated := consoleSetupSnapshot()
+	updated.Host = "refreshed-host"
+	samples <- updated
+	s.waitFrame(t, "refreshed-host")
+}
+
+func TestConsoleMouseMotionAndReleaseDoNotRequestRedraw(t *testing.T) {
+	m := consoleModel{buttons: []consoleHitRect{{x: 0, y: 0, w: 5, h: 1, id: 1}}}
+	for _, event := range []struct {
+		buttons tcell.ButtonMask
+		x       int
+		redraw  bool
+	}{
+		{tcell.ButtonNone, 0, false}, {tcell.Button1, 0, true},
+		{tcell.Button1, 3, false}, {tcell.ButtonNone, 3, false},
+		{tcell.Button1, 10, false}, {tcell.ButtonNone, 10, false},
+		{tcell.WheelDown, 0, true}, {tcell.Button1, 0, true},
+	} {
+		_, redraw := m.event(tcell.NewEventMouse(event.x, 0, event.buttons, 0))
+		if redraw != event.redraw {
+			t.Fatalf("mouse mask %d at %d requested redraw=%v", event.buttons, event.x, redraw)
+		}
+	}
+}
+
 func TestConsoleRunDispatchesConfirmedRestartAndRestoresTerminal(t *testing.T) {
 	s := &consoleLifecycleScreen{SimulationScreen: tcell.NewSimulationScreen("UTF-8"), ready: make(chan struct{})}
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
@@ -544,7 +648,7 @@ func TestConsoleStopCanCancelBusyAction(t *testing.T) {
 }
 
 func TestConsoleShutdownWaitsForInstallerCleanup(t *testing.T) {
-	s := &consoleLifecycleScreen{SimulationScreen: tcell.NewSimulationScreen("UTF-8"), ready: make(chan struct{})}
+	s := &consoleLifecycleScreen{SimulationScreen: tcell.NewSimulationScreen("UTF-8"), ready: make(chan struct{}), frames: make(chan string, 16)}
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	started, cancelled, release := make(chan struct{}), make(chan struct{}), make(chan struct{})
@@ -561,7 +665,7 @@ func TestConsoleShutdownWaitsForInstallerCleanup(t *testing.T) {
 			return actionContext.Err()
 		})
 	}()
-	<-s.ready
+	s.waitFrame(t, "TEST-PC")
 	s.InjectKey(tcell.KeyRune, '5', 0)
 	s.InjectKey(tcell.KeyTab, 0, 0)
 	s.InjectKey(tcell.KeyEnter, 0, 0)

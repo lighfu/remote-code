@@ -62,7 +62,7 @@ type consoleResizeAttempt struct {
 type consoleModel struct {
 	tab, focus, scroll                  int
 	confirm                             ConsoleAction
-	confirmYes, busy                    bool
+	confirmYes, busy, loading           bool
 	message                             string
 	buttons                             []consoleHitRect
 	mouseDown                           bool
@@ -108,10 +108,34 @@ func runConsoleScreen(ctx context.Context, screen tcell.Screen, snapshot func() 
 	screen.SetStyle(consoleBase)
 	screen.EnableMouse(tcell.MouseButtonEvents)
 	screen.HideCursor()
-	model := consoleModel{resizeWindow: resizeWindow}
+	model := consoleModel{resizeWindow: resizeWindow, loading: true}
 	results := make(chan consoleResult, 1)
-	ticker := time.NewTicker(time.Second)
-	defer ticker.Stop()
+	// Reading sessions and detecting software can take longer than a click.
+	// Only the event loop touches the model and screen.
+	refresh := make(chan struct{}, 1)
+	updates := make(chan ConsoleSnapshot)
+	pollCtx, stopPolling := context.WithCancel(ctx)
+	pollDone := make(chan struct{})
+	go func() {
+		defer close(pollDone)
+		ticker := time.NewTicker(time.Second)
+		defer ticker.Stop()
+		for {
+			state := snapshot()
+			select {
+			case updates <- state:
+			case <-pollCtx.Done():
+				return
+			}
+			select {
+			case <-pollCtx.Done():
+				return
+			case <-ticker.C:
+			case <-refresh:
+			}
+		}
+	}()
+	defer func() { stopPolling(); <-pollDone }()
 	var actionCancel context.CancelFunc
 	var actionDone <-chan struct{}
 	var queued ConsoleAction
@@ -161,7 +185,7 @@ func runConsoleScreen(ctx context.Context, screen tcell.Screen, snapshot func() 
 			}
 		}()
 	}
-	current := snapshot()
+	current := ConsoleSnapshot{Version: Version}
 	model.draw(screen, current)
 	for {
 		select {
@@ -184,20 +208,27 @@ func runConsoleScreen(ctx context.Context, screen tcell.Screen, snapshot func() 
 					return nil
 				}
 			}
-		case <-ticker.C:
+			select {
+			case refresh <- struct{}{}:
+			default:
+			}
+		case current = <-updates:
+			model.loading = false
 		case event, ok := <-events:
 			if !ok {
 				return nil
 			}
-			if resize, ok := event.(*tcell.EventResize); ok {
-				_, _ = resize.Size()
+			if _, ok := event.(*tcell.EventResize); ok {
 				screen.Sync()
 			}
-			if a := model.event(event); a != "" {
+			a, redraw := model.event(event)
+			if !redraw {
+				continue
+			}
+			if a != "" {
 				start(a)
 			}
 		}
-		current = snapshot()
 		model.draw(screen, current)
 	}
 }
@@ -303,96 +334,102 @@ func (m *consoleModel) moveFocus(delta int) {
 	m.focus = order[0]
 }
 
-func (m *consoleModel) event(event tcell.Event) ConsoleAction {
-	switch ev := event.(type) {
-	case *tcell.EventKey:
-		if m.confirm != "" {
-			switch ev.Key() {
-			case tcell.KeyEsc, tcell.KeyCtrlC:
-				m.confirm = ""
-				m.confirmYes = false
-			case tcell.KeyLeft, tcell.KeyRight, tcell.KeyTab, tcell.KeyBacktab:
-				m.confirmYes = !m.confirmYes
-			case tcell.KeyEnter:
-				if m.confirmYes {
-					return m.activate(10)
-				}
-				return m.activate(11)
-			case tcell.KeyRune:
-				switch unicode.ToLower(ev.Rune()) {
-				case 'y', '1':
-					return m.activate(10)
-				case 'n', '2':
-					return m.activate(11)
-				}
-			}
-			return ""
-		}
+func (m *consoleModel) key(ev *tcell.EventKey) ConsoleAction {
+	if m.confirm != "" {
 		switch ev.Key() {
-		case tcell.KeyCtrlC:
-			return m.activate(8)
-		case tcell.KeyTab, tcell.KeyRight, tcell.KeyDown:
-			m.moveFocus(1)
-		case tcell.KeyBacktab, tcell.KeyLeft, tcell.KeyUp:
-			m.moveFocus(-1)
+		case tcell.KeyEsc, tcell.KeyCtrlC:
+			m.confirm = ""
+			m.confirmYes = false
+		case tcell.KeyLeft, tcell.KeyRight, tcell.KeyTab, tcell.KeyBacktab:
+			m.confirmYes = !m.confirmYes
 		case tcell.KeyEnter:
-			return m.activate(m.focus)
-		case tcell.KeyF5:
-			return m.activate(4)
-		case tcell.KeyPgUp:
-			if m.tab == 4 {
-				m.scroll = max(0, m.scroll-5)
-			} else {
-				m.tab = 3
-				m.scroll += 5
+			if m.confirmYes {
+				return m.activate(10)
 			}
-		case tcell.KeyPgDn:
-			if m.tab == 4 {
-				m.scroll += 5
-			} else {
-				m.tab = 3
-				m.scroll = max(0, m.scroll-5)
-			}
-		case tcell.KeyHome:
-			if m.tab == 3 {
-				m.scroll = 1000000
-			} else if m.tab == 4 {
-				m.scroll = 0
-			}
-		case tcell.KeyEnd:
-			if m.tab == 4 {
-				m.scroll = 1000000
-			} else {
-				m.scroll = 0
-			}
-		case tcell.KeyEsc:
-			m.tab = 0
-			m.focus = 0
+			return m.activate(11)
 		case tcell.KeyRune:
 			switch unicode.ToLower(ev.Rune()) {
-			case '1', '2', '3', '4':
-				return m.activate(int(ev.Rune() - '1'))
-			case '5':
-				return m.activate(9)
-			case 's':
-				return m.activate(0)
-			case 'p':
-				return m.activate(1)
-			case 'a':
-				return m.activate(2)
-			case 'l':
-				return m.activate(3)
-			case 'o':
-				return m.activate(5)
-			case 'c':
-				return m.activate(6)
-			case 'r':
-				return m.activate(7)
-			case 'q':
-				return m.activate(8)
+			case 'y', '1':
+				return m.activate(10)
+			case 'n', '2':
+				return m.activate(11)
 			}
 		}
+		return ""
+	}
+	switch ev.Key() {
+	case tcell.KeyCtrlC:
+		return m.activate(8)
+	case tcell.KeyTab, tcell.KeyRight, tcell.KeyDown:
+		m.moveFocus(1)
+	case tcell.KeyBacktab, tcell.KeyLeft, tcell.KeyUp:
+		m.moveFocus(-1)
+	case tcell.KeyEnter:
+		return m.activate(m.focus)
+	case tcell.KeyF5:
+		return m.activate(4)
+	case tcell.KeyPgUp:
+		if m.tab == 4 {
+			m.scroll = max(0, m.scroll-5)
+		} else {
+			m.tab = 3
+			m.scroll += 5
+		}
+	case tcell.KeyPgDn:
+		if m.tab == 4 {
+			m.scroll += 5
+		} else {
+			m.tab = 3
+			m.scroll = max(0, m.scroll-5)
+		}
+	case tcell.KeyHome:
+		if m.tab == 3 {
+			m.scroll = 1000000
+		} else if m.tab == 4 {
+			m.scroll = 0
+		}
+	case tcell.KeyEnd:
+		if m.tab == 4 {
+			m.scroll = 1000000
+		} else {
+			m.scroll = 0
+		}
+	case tcell.KeyEsc:
+		m.tab = 0
+		m.focus = 0
+	case tcell.KeyRune:
+		switch unicode.ToLower(ev.Rune()) {
+		case '1', '2', '3', '4':
+			return m.activate(int(ev.Rune() - '1'))
+		case '5':
+			return m.activate(9)
+		case 's':
+			return m.activate(0)
+		case 'p':
+			return m.activate(1)
+		case 'a':
+			return m.activate(2)
+		case 'l':
+			return m.activate(3)
+		case 'o':
+			return m.activate(5)
+		case 'c':
+			return m.activate(6)
+		case 'r':
+			return m.activate(7)
+		case 'q':
+			return m.activate(8)
+		}
+	}
+	return ""
+}
+
+func (m *consoleModel) event(event tcell.Event) (ConsoleAction, bool) {
+	switch ev := event.(type) {
+	case *tcell.EventKey:
+		return m.key(ev), true
 	case *tcell.EventMouse:
+		// Windows also delivers motion when only button events were requested.
 		buttons := ev.Buttons()
 		down := buttons&tcell.Button1 != 0
 		pressed := down && !m.mouseDown
@@ -420,12 +457,15 @@ func (m *consoleModel) event(event tcell.Event) ConsoleAction {
 					if m.confirm == "" {
 						m.focus = rect.id
 					}
-					return m.activate(rect.id)
+					return m.activate(rect.id), true
 				}
 			}
 		}
+		return "", buttons&(tcell.WheelUp|tcell.WheelDown) != 0
+	case *tcell.EventResize:
+		return "", true
 	}
-	return ""
+	return "", false
 }
 
 func consoleText(screen tcell.Screen, x, y, width int, text string, style tcell.Style) {
@@ -532,8 +572,10 @@ func (m *consoleModel) draw(screen tcell.Screen, s ConsoleSnapshot) {
 	}
 	if !compactQR {
 		consoleText(screen, 2, 1, w-4, "Remote Code  v"+s.Version, consoleAccent)
-		consoleText(screen, 2, 2, w-4, fmt.Sprintf("RUNNING  %s  :%d", s.Host, s.Port), consoleMuted)
-		consoleText(screen, 2, 3, w-4, fmt.Sprintf("Sessions %d   Running %d   Waiting %d   Terminals %d", s.Sessions, s.Running, s.Waiting, s.Terminals), consoleBase)
+		if !m.loading {
+			consoleText(screen, 2, 2, w-4, fmt.Sprintf("RUNNING  %s  :%d", s.Host, s.Port), consoleMuted)
+			consoleText(screen, 2, 3, w-4, fmt.Sprintf("Sessions %d   Running %d   Waiting %d   Terminals %d", s.Sessions, s.Running, s.Waiting, s.Terminals), consoleBase)
+		}
 	}
 	labels := []string{"1 Status", "2 Pair QR", "3 App QR", "4 Logs", "5 Setup"}
 	x := 2
@@ -585,8 +627,10 @@ func (m *consoleModel) draw(screen tcell.Screen, s ConsoleSnapshot) {
 		x += bw + 1
 	}
 	contentH := max(0, actionY-contentY-1)
-	switch m.tab {
-	case 0:
+	switch {
+	case m.loading:
+		consoleText(screen, 2, contentY, w-4, "Loading server status...", consoleMuted)
+	case m.tab == 0:
 		lines := []string{"Connection", s.URL, "", "Agents"}
 		for _, name := range []string{"claude", "codex", "antigravity"} {
 			status := "Not installed"
@@ -606,15 +650,15 @@ func (m *consoleModel) draw(screen tcell.Screen, s ConsoleSnapshot) {
 			}
 			consoleText(screen, 2, contentY+i, w-4, line, style)
 		}
-	case 1:
+	case m.tab == 1:
 		m.drawQR(screen, s.PairLink, "Scan with Remote Code to connect.", contentY, contentH, rows, false)
-	case 2:
+	case m.tab == 2:
 		caption := "Scan to install the Android app."
 		if s.APKVersion != "" {
 			caption = "Android v" + s.APKVersion + " · Scan to install."
 		}
 		m.drawQR(screen, s.APKURL, caption, contentY, contentH, rows, true)
-	case 3:
+	case m.tab == 3:
 		consoleText(screen, 2, contentY, w-4, "Server logs  ·  wheel / PgUp / PgDn  ·  End = follow", consoleAccent)
 		lines := []string{}
 		for _, line := range s.Logs {
@@ -631,7 +675,7 @@ func (m *consoleModel) draw(screen tcell.Screen, s ConsoleSnapshot) {
 				consoleText(screen, 2, contentY+1+i, w-4, line, consoleMuted)
 			}
 		}
-	case 4:
+	case m.tab == 4:
 		m.drawSetup(screen, s, contentY, contentH)
 	}
 	if m.message != "" {
@@ -647,8 +691,11 @@ func (m *consoleModel) draw(screen tcell.Screen, s ConsoleSnapshot) {
 		if m.confirm == ConsoleRestart {
 			title = "Restart server?"
 		}
-		question := fmt.Sprintf("%d running, %d waiting, %d terminal(s).\nOwned agent processes and terminals will close.\nPC-owned conversations stay on the PC.", s.Running, s.Waiting, s.Terminals)
-		m.drawConfirm(screen, title, question)
+		counts := "Loading session and terminal counts."
+		if !m.loading {
+			counts = fmt.Sprintf("%d running, %d waiting, %d terminal(s).", s.Running, s.Waiting, s.Terminals)
+		}
+		m.drawConfirm(screen, title, counts+"\nOwned agent processes and terminals will close.\nPC-owned conversations stay on the PC.")
 	}
 	screen.Show()
 }
@@ -905,7 +952,10 @@ func consoleConfirmScreen(ctx context.Context, screen tcell.Screen, question str
 			if _, ok := event.(*tcell.EventResize); ok {
 				screen.Sync()
 			}
-			a := m.event(event)
+			a, redraw := m.event(event)
+			if !redraw {
+				continue
+			}
 			if a == ConsoleStop {
 				return true
 			}
