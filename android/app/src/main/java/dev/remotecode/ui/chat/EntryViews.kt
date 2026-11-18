@@ -141,7 +141,7 @@ fun EntryView(
                 display.toolDetail -> DetailedToolCard(e, display.toolWrap)
                 else -> ToolCard(e, display.toolWrap)
             }
-            "approval" -> ApprovalCard(e, respond)
+            "approval" -> ApprovalCard(e, respond, wrapInput = display.toolWrap.input)
             "question" -> QuestionCard(e, respond)
             "result" -> ResultChip(e)
             else -> SystemLine(e)
@@ -465,7 +465,7 @@ fun CodeBlock(text: String, diff: Boolean, maxHeight: Int = 360, maxLines: Int =
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun ApprovalCard(e: Entry, respond: Responder) {
+private fun ApprovalCard(e: Entry, respond: Responder, wrapInput: Boolean) {
     val pending = e.status == "pending"
     var sent by remember(e.id) { mutableStateOf(false) }
     val container = if (pending) MaterialTheme.colorScheme.tertiaryContainer else MaterialTheme.colorScheme.surfaceContainer
@@ -489,10 +489,16 @@ private fun ApprovalCard(e: Entry, respond: Responder) {
                 Text(it, style = MaterialTheme.typography.bodySmall)
             }
             if (!e.title.isNullOrBlank()) {
-                Text(e.title, style = MaterialTheme.typography.bodyMedium.copy(fontFamily = Mono), maxLines = if (pending) 8 else 1, overflow = TextOverflow.Ellipsis)
+                Text(
+                    e.title, style = MaterialTheme.typography.bodyMedium.copy(fontFamily = Mono),
+                    maxLines = if (pending) 8 else 1, overflow = TextOverflow.Ellipsis,
+                    softWrap = wrapInput,
+                    modifier = if (wrapInput) Modifier else Modifier.horizontalScroll(rememberScrollState()),
+                )
             }
             if (pending && !e.detail.isNullOrBlank()) {
-                if (e.tool in EDIT_TOOLS) EditPreview(e) else CodeBlock(e.detail, diff = false, maxHeight = 280)
+                if (e.tool in EDIT_TOOLS) EditPreview(e, wrapLines = wrapInput)
+                else CodeBlock(e.detail, diff = false, maxHeight = 280, wrapLines = wrapInput)
             }
             if (pending) {
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
