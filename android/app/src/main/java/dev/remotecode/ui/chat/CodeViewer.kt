@@ -199,51 +199,66 @@ private fun SourceCode(lines: List<CodeLine>, target: Int?, modifier: Modifier =
     }
     val gutter = charWidth * (lines.size.toString().length + if (changes == null) 2 else 4) + 12.dp
     val palette = Extra.colors
-    BoxWithConstraints(modifier.fillMaxWidth()) {
-        val maxLayout = with(density) { 16_000.toDp() }
-        val contentWidth = if (wrapLines) maxWidth else maxOf(maxWidth, minOf(maxLayout, charWidth * (longest + 5) + gutter + 24.dp))
-        SelectionContainer {
-            Box(Modifier.fillMaxSize().then(if (wrapLines) Modifier else Modifier.horizontalScroll(horizontal))) {
-                LazyColumn(state = list, modifier = Modifier.width(contentWidth).fillMaxHeight(), contentPadding = PaddingValues(vertical = 8.dp)) {
-                    itemsIndexed(lines) { index, line ->
-                        val focused = target == index + 1
-                        val chosen = selected?.contains(index + 1) == true
-                        val mark = if (changes?.file?.untracked == true) SourceChange.Added else changes?.markers?.get(index + 1)
-                        val changeColor = when (mark) {
-                            SourceChange.Added -> palette.diffAdd
-                            SourceChange.Removed -> palette.diffRemove
-                            SourceChange.Modified -> MaterialTheme.colorScheme.tertiary
-                            null -> null
-                        }
-                        Row(Modifier.fillMaxWidth().background(when {
-                            chosen -> MaterialTheme.colorScheme.secondaryContainer
-                            focused -> MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)
-                            changeColor != null -> changeColor.copy(alpha = 0.12f)
-                            else -> Color.Transparent
-                        })
-                            .then(if (selecting && onSelectLine != null) Modifier.clickable { onSelectLine(index + 1) } else Modifier)) {
-                            val lineNumber = if (changes == null) "${index + 1}" else "${index + 1} ${mark?.sign ?: " "}"
-                            Text(lineNumber, Modifier.width(gutter).then(if (onSelectLine != null && !selecting) Modifier.clickable(onClickLabel = stringResource(R.string.chat_code_viewer_004, index + 1)) { onSelectLine(index + 1) } else Modifier).padding(end = 12.dp), style = style, textAlign = TextAlign.End, color = changeColor ?: if (chosen) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant)
-                            Text(coloredLine(line), Modifier.weight(1f).padding(end = 16.dp), style = style, softWrap = wrapLines || contentWidth >= maxLayout)
+    fun changeAt(index: Int) = if (changes?.file?.untracked == true) SourceChange.Added else changes?.markers?.get(index + 1)
+    Row(modifier.fillMaxWidth()) {
+        BoxWithConstraints(Modifier.weight(1f).fillMaxHeight()) {
+            val maxLayout = with(density) { 16_000.toDp() }
+            val contentWidth = if (wrapLines) maxWidth else maxOf(maxWidth, minOf(maxLayout, charWidth * (longest + 5) + gutter + 24.dp))
+            SelectionContainer {
+                Box(Modifier.fillMaxSize().then(if (wrapLines) Modifier else Modifier.horizontalScroll(horizontal))) {
+                    LazyColumn(state = list, modifier = Modifier.width(contentWidth).fillMaxHeight(), contentPadding = PaddingValues(vertical = 8.dp)) {
+                        itemsIndexed(lines) { index, line ->
+                            val focused = target == index + 1
+                            val chosen = selected?.contains(index + 1) == true
+                            val mark = changeAt(index)
+                            val changeColor = when (mark) {
+                                SourceChange.Added -> palette.diffAdd
+                                SourceChange.Removed -> palette.diffRemove
+                                SourceChange.Modified -> MaterialTheme.colorScheme.tertiary
+                                null -> null
+                            }
+                            Row(Modifier.fillMaxWidth().background(when {
+                                chosen -> MaterialTheme.colorScheme.secondaryContainer
+                                focused -> MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)
+                                changeColor != null -> changeColor.copy(alpha = 0.12f)
+                                else -> Color.Transparent
+                            })
+                                .then(if (selecting && onSelectLine != null) Modifier.clickable { onSelectLine(index + 1) } else Modifier)) {
+                                val lineNumber = if (changes == null) "${index + 1}" else "${index + 1} ${mark?.sign ?: " "}"
+                                Text(lineNumber, Modifier.width(gutter).then(if (onSelectLine != null && !selecting) Modifier.clickable(onClickLabel = stringResource(R.string.chat_code_viewer_004, index + 1)) { onSelectLine(index + 1) } else Modifier).padding(end = 12.dp), style = style, textAlign = TextAlign.End, color = changeColor ?: if (chosen) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant)
+                                Text(coloredLine(line), Modifier.weight(1f).padding(end = 16.dp), style = style, softWrap = wrapLines || contentWidth >= maxLayout)
+                            }
                         }
                     }
                 }
             }
         }
+        CodeMinimap(lines, list, stringResource(R.string.code_navigation_minimap), Modifier.fillMaxHeight(),
+            markAt = { index -> changeAt(index)?.let { if (it == SourceChange.Removed) '-' else it.sign.single() } }) { it }
     }
+}
+
+private val darkCodeInk = listOf(0xFFC4A7FF, 0xFFA8D69D, 0xFF94A3AD, 0xFFF4BF88, 0xFF85CFE8,
+    0xFFFFC88B, 0xFF85CFE8, 0xFFFFC88B, 0xFFC4A7FF, 0xFFD2D9E1).map { Color(it) }
+private val lightCodeInk = listOf(0xFF7137A8, 0xFF28651B, 0xFF64716C, 0xFF955000, 0xFF006B80,
+    0xFF904C16, 0xFF006B80, 0xFF904C16, 0xFF7137A8, 0xFF35495C).map { Color(it) }
+
+@Composable
+internal fun codeInkColors(): List<Color> {
+    val surface = MaterialTheme.colorScheme.surface
+    return if (surface.red + surface.green + surface.blue < 1.5f) darkCodeInk else lightCodeInk
 }
 
 @Composable
 internal fun coloredLine(line: CodeLine, limit: Int = MAX_LINE_CHARS): AnnotatedString {
-    val dark = MaterialTheme.colorScheme.surface.red + MaterialTheme.colorScheme.surface.green + MaterialTheme.colorScheme.surface.blue < 1.5f
-    val colors = if (dark) listOf(0xFFC4A7FF, 0xFFA8D69D, 0xFF94A3AD, 0xFFF4BF88, 0xFF85CFE8, 0xFFFFC88B, 0xFF85CFE8, 0xFFFFC88B, 0xFFC4A7FF, 0xFFD2D9E1) else listOf(0xFF7137A8, 0xFF28651B, 0xFF64716C, 0xFF955000, 0xFF006B80, 0xFF904C16, 0xFF006B80, 0xFF904C16, 0xFF7137A8, 0xFF35495C)
-    return remember(line, dark, limit) {
+    val colors = codeInkColors()
+    return remember(line, colors, limit) {
         buildAnnotatedString {
             val shown = line.text.take(limit)
             append(shown)
             for (token in line.tokens) {
                 if (token.start >= shown.length) break
-                addStyle(SpanStyle(color = Color(colors[token.ink.ordinal])), token.start, token.end.coerceAtMost(shown.length))
+                addStyle(SpanStyle(color = colors[token.ink.ordinal]), token.start, token.end.coerceAtMost(shown.length))
             }
             if (line.text.length > limit) append(" …")
         }

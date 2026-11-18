@@ -67,12 +67,9 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
-import androidx.compose.ui.text.SpanStyle
-import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -91,10 +88,12 @@ import dev.remotecode.data.projectEditorFits
 import dev.remotecode.data.isProjectMarkdown
 import dev.remotecode.data.projectDraftKey
 import dev.remotecode.ui.chat.CodeLine
+import dev.remotecode.ui.chat.CodeMinimap
 import dev.remotecode.ui.chat.CodeQuoteRangeDialog
 import dev.remotecode.ui.chat.LinkSheet
 import dev.remotecode.ui.chat.LocalCodeQuote
 import dev.remotecode.ui.chat.codeLanguage
+import dev.remotecode.ui.chat.coloredLine
 import dev.remotecode.ui.chat.highlightCode
 import dev.remotecode.ui.chat.saveToDownloads
 import dev.remotecode.ui.theme.CodeScale
@@ -377,8 +376,6 @@ private fun ProjectCodePreview(text: String, path: String, modifier: Modifier, w
     val loaded = lines
     if (loaded == null) { Box(modifier.fillMaxWidth(), contentAlignment = Alignment.Center) { LoadingIndicator() }; return }
     val style = MaterialTheme.typography.bodySmall.copy(fontFamily = Mono, fontSize = 13.sp * CodeScale, lineHeight = 20.sp * CodeScale)
-    val dark = MaterialTheme.colorScheme.surface.red + MaterialTheme.colorScheme.surface.green + MaterialTheme.colorScheme.surface.blue < 1.5f
-    val colors = if (dark) listOf(0xFFC4A7FF, 0xFFA8D69D, 0xFF94A3AD, 0xFFF4BF88, 0xFF85CFE8, 0xFFFFC88B, 0xFF85CFE8, 0xFFFFC88B, 0xFFC4A7FF, 0xFFD2D9E1) else listOf(0xFF7137A8, 0xFF28651B, 0xFF64716C, 0xFF955000, 0xFF006B80, 0xFF904C16, 0xFF006B80, 0xFF904C16, 0xFF7137A8, 0xFF35495C)
     val density = LocalDensity.current
     val measurer = rememberTextMeasurer()
     val gutter = with(density) { measurer.measure("9".repeat(loaded.size.toString().length), style).size.width.toDp() } + 20.dp
@@ -392,31 +389,27 @@ private fun ProjectCodePreview(text: String, path: String, modifier: Modifier, w
             previousWrap = wrapLines
         }
     }
-    BoxWithConstraints(modifier.fillMaxWidth()) {
-        val columns = remember(loaded, wrapLines) {
-            if (wrapLines) 0 else loaded.maxOfOrNull { line ->
-                (0 until minOf(line.text.length, 4000)).sumOf { index ->
-                    when { line.text[index] == '\t' -> 4; line.text[index] >= '\u2e80' -> 2; else -> 1 }
-                }
-            } ?: 0
-        }
-        val width = if (wrapLines) maxWidth else with(density) { maxOf(maxWidth.toPx(), (columns + 8) * style.fontSize.toPx()).coerceAtMost(100_000f).toDp() }
-        Box(Modifier.fillMaxSize().then(if (wrapLines) Modifier else Modifier.horizontalScroll(horizontal))) {
-            LazyColumn(state = list, modifier = Modifier.width(width).fillMaxHeight(), contentPadding = PaddingValues(vertical = 8.dp)) {
-                itemsIndexed(loaded) { index, line ->
-                    val annotated = remember(line, dark) {
-                        buildAnnotatedString {
-                            val shown = line.text.take(4000); append(shown)
-                            line.tokens.forEach { token -> if (token.start < shown.length) addStyle(SpanStyle(color = Color(colors[token.ink.ordinal])), token.start, token.end.coerceAtMost(shown.length)) }
-                            if (line.text.length > 4000) append(" …")
-                        }
+    Row(modifier.fillMaxWidth()) {
+        BoxWithConstraints(Modifier.weight(1f).fillMaxHeight()) {
+            val columns = remember(loaded, wrapLines) {
+                if (wrapLines) 0 else loaded.maxOfOrNull { line ->
+                    (0 until minOf(line.text.length, 4000)).sumOf { index ->
+                        when { line.text[index] == '\t' -> 4; line.text[index] >= '\u2e80' -> 2; else -> 1 }
                     }
-                    Row(Modifier.fillMaxWidth()) {
-                        Text("${index + 1}", Modifier.width(gutter).padding(end = 10.dp), textAlign = TextAlign.End, style = style, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        Text(annotated, style = style, softWrap = wrapLines, modifier = Modifier.then(if (wrapLines) Modifier.weight(1f) else Modifier).padding(end = 12.dp))
+                } ?: 0
+            }
+            val width = if (wrapLines) maxWidth else with(density) { maxOf(maxWidth.toPx(), (columns + 8) * style.fontSize.toPx()).coerceAtMost(100_000f).toDp() }
+            Box(Modifier.fillMaxSize().then(if (wrapLines) Modifier else Modifier.horizontalScroll(horizontal))) {
+                LazyColumn(state = list, modifier = Modifier.width(width).fillMaxHeight(), contentPadding = PaddingValues(vertical = 8.dp)) {
+                    itemsIndexed(loaded) { index, line ->
+                        Row(Modifier.fillMaxWidth()) {
+                            Text("${index + 1}", Modifier.width(gutter).padding(end = 10.dp), textAlign = TextAlign.End, style = style, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text(coloredLine(line, limit = 4000), style = style, softWrap = wrapLines, modifier = Modifier.then(if (wrapLines) Modifier.weight(1f) else Modifier).padding(end = 12.dp))
+                        }
                     }
                 }
             }
         }
+        CodeMinimap(loaded, list, stringResource(R.string.code_navigation_minimap), Modifier.fillMaxHeight()) { it }
     }
 }
