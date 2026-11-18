@@ -26,7 +26,9 @@ func providerModes(name string) []M {
 
 type providerSide struct {
 	mu   sync.Mutex
-	text string
+	text strings.Builder
+	onText func(string)
+	lastSent time.Time
 	done chan error
 	once sync.Once
 	wire *providerWire
@@ -41,7 +43,21 @@ func (p *nativeProvider) codexSideQuestion(ctx context.Context, rec *Record, bod
 	if err != nil {
 		return nil, err
 	}
-	res, err := w.request(ctx, "thread/fork", M{"threadId": id, "ephemeral": true, "excludeTurns": true, "approvalPolicy": "never", "sandbox": "read-only", "developerInstructions": "Answer a quick side question from the conversation only, briefly, in the language of the question. Do not run tools, edit files, or continue the main task."})
+	const instructions = "Answer a quick side question from the conversation only, briefly, in the language of the question. Do not run tools, edit files, or continue the main task."
+	var parts []string
+	for _, row := range providerRows(body["history"]) {
+		parts = append(parts, "Earlier side question: "+S(row, "question")+"\nAnswer: "+S(row, "response"))
+	}
+	parts = append(parts, "Side question: "+S(body, "question"))
+	prompt := strings.Join(parts, "\n\n")
+	turn := ""
+	if runtime := p.session(S(rec.Info, "id")); runtime != nil && runtime.External() == id {
+		turn = runtime.Turn()
+	}
+	if answer, err := codexSampleSideQuestion(ctx, w, id, turn, instructions+"\n\n"+prompt); answer != nil || err != nil {
+		return answer, err
+	}
+	res, err := w.request(ctx, "thread/fork", M{"threadId": id, "ephemeral": true, "excludeTurns": true, "approvalPolicy": "never", "sandbox": "read-only", "developerInstructions": instructions})
 	if err != nil {
 		return nil, err
 	}
@@ -50,6 +66,7 @@ func (p *nativeProvider) codexSideQuestion(ctx context.Context, rec *Record, bod
 		return nil, errors.New("Failed to create temporary thread")
 	}
 	side := &providerSide{done: make(chan error, 1), wire: w}
+	side.onText, _ = ctx.Value(btwProgressKey{}).(func(string))
 	p.mu.Lock()
 	if p.sides == nil {
 		p.sides = map[string]*providerSide{}
@@ -67,12 +84,7 @@ func (p *nativeProvider) codexSideQuestion(ctx context.Context, rec *Record, bod
 			_, _ = w.request(c, "thread/unsubscribe", M{"threadId": sideID})
 		}()
 	}()
-	parts := []string{}
-	for _, row := range providerRows(body["history"]) {
-		parts = append(parts, "Earlier side question: "+S(row, "question")+"\nAnswer: "+S(row, "response"))
-	}
-	parts = append(parts, "Side question: "+S(body, "question"))
-	_, err = w.request(ctx, "turn/start", M{"threadId": sideID, "input": []M{{"type": "text", "text": strings.Join(parts, "\n\n"), "text_elements": []any{}}}, "summary": "none"})
+	_, err = w.request(ctx, "turn/start", M{"threadId": sideID, "input": []M{{"type": "text", "text": prompt, "text_elements": []any{}}}, "summary": "none"})
 	if err != nil {
 		return nil, err
 	}
@@ -82,7 +94,7 @@ func (p *nativeProvider) codexSideQuestion(ctx context.Context, rec *Record, bod
 			return nil, err
 		}
 		side.mu.Lock()
-		text := strings.TrimSpace(side.text)
+		text := strings.TrimSpace(side.text.String())
 		side.mu.Unlock()
 		if text == "" {
 			return nil, nil
@@ -122,11 +134,19 @@ func (p *nativeProvider) codexSideMessage(msg M, params M) bool {
 	defer side.mu.Unlock()
 	switch method {
 	case "item/agentMessage/delta":
-		side.text += S(params, "delta")
+		side.text.WriteString(S(params, "delta"))
+		if side.onText != nil && side.text.Len() > 0 && time.Since(side.lastSent) >= 100*time.Millisecond {
+			side.lastSent = time.Now()
+			side.onText(side.text.String())
+		}
 	case "item/completed":
 		item := providerMap(params["item"])
 		if S(item, "type") == "agentMessage" && S(item, "text") != "" {
-			side.text = S(item, "text")
+			side.text.Reset()
+			side.text.WriteString(S(item, "text"))
+			if side.onText != nil {
+				side.onText(side.text.String())
+			}
 		}
 	case "turn/completed":
 		turn := providerMap(params["turn"])

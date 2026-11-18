@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	gomaps "maps"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -20,6 +21,8 @@ const (
 )
 
 var btwUnsafeFileChars = regexp.MustCompile(`[^A-Za-z0-9_-]`)
+
+type btwProgressKey struct{}
 
 func (a *App) btwFile(sid string) string {
 	return filepath.Join(a.DataDir, "btw", btwUnsafeFileChars.ReplaceAllString(sid, "_")+".json")
@@ -63,7 +66,7 @@ func (a *App) saveBtwRows(sid string, rows []M) error {
 func (a *App) registerBtw(mux *http.ServeMux) {
 	route(mux, "GET /api/sessions/{id}/btw", func(r *http.Request, _ M) (any, error) {
 		sid := r.PathValue("id")
-		if _, err := a.session(sid); err != nil {
+		if _, err := a.sessionInfoRecord(sid); err != nil {
 			return nil, err
 		}
 		a.btwMu.Lock()
@@ -72,7 +75,7 @@ func (a *App) registerBtw(mux *http.ServeMux) {
 		return clone(rows), err
 	})
 	route(mux, "POST /api/sessions/{id}/btw", func(r *http.Request, body M) (any, error) {
-		rec, err := a.session(r.PathValue("id"))
+		rec, err := a.sessionInfoRecord(r.PathValue("id"))
 		if err != nil {
 			return nil, err
 		}
@@ -88,7 +91,7 @@ func (a *App) registerBtw(mux *http.ServeMux) {
 	for _, pattern := range []string{"DELETE /api/sessions/{id}/btw", "DELETE /api/sessions/{id}/btw/{item}"} {
 		route(mux, pattern, func(r *http.Request, _ M) (any, error) {
 			sid := r.PathValue("id")
-			if _, err := a.session(sid); err != nil {
+			if _, err := a.sessionInfoRecord(sid); err != nil {
 				return nil, err
 			}
 			return nil, a.removeBtw(sid, r.PathValue("item"))
@@ -118,6 +121,7 @@ func (a *App) askBtw(rec *Record, question string) (M, error) {
 	item := M{"id": id, "question": question, "status": "pending", "at": nowMS()}
 	next := append(slices.Clone(rows[max(0, len(rows)-btwSavedLimit+1):]), item)
 	ctx, cancel := context.WithTimeout(a.taskCtx, btwAnswerTimeout)
+	ctx = context.WithValue(ctx, btwProgressKey{}, func(text string) { a.publishBtwProgress(sid, id, text) })
 	if err = a.saveBtwRows(sid, next); err != nil {
 		cancel()
 		return nil, err
@@ -137,6 +141,23 @@ func (a *App) askBtw(rec *Record, question string) (M, error) {
 	}
 	a.Store.Emit(M{"type": "btw", "sessionId": sid, "item": item})
 	return clone(item), nil
+}
+
+// Keep partial replies available on reconnect without writing to disk on each delta.
+func (a *App) publishBtwProgress(sid, id, text string) {
+	a.btwMu.Lock()
+	defer a.btwMu.Unlock()
+	for index, item := range a.btw[sid] {
+		if S(item, "id") != id || S(item, "status") != "pending" || S(item, "response") == text {
+			continue
+		}
+		next := gomaps.Clone(item)
+		next["response"] = text
+		next["responseRevision"] = int(N(item, "responseRevision")) + 1
+		a.btw[sid][index] = next
+		a.Store.Emit(M{"type": "btw", "sessionId": sid, "item": next})
+		return
+	}
 }
 
 func (a *App) finishBtw(sid, id string, value any, err error) {

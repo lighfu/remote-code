@@ -73,6 +73,17 @@ class BtwSnapshotsTest {
         assertEquals("done", cache.values.value["chat"]!!.single().status)
     }
 
+    @Test fun lateAcknowledgementCannotEraseAnAnswerInProgress() = exercise { cache ->
+        val partial = pending().copy(response = "First words", responseRevision = 2)
+        cache.receive("chat", partial)
+        cache.receive("chat", pending())
+        cache.receive("chat", partial.copy(response = "First", responseRevision = 1))
+        assertEquals(partial, cache.values.value["chat"]!!.single())
+        cache.receive("chat", answered())
+        cache.receive("chat", partial)
+        assertEquals(answered(), cache.values.value["chat"]!!.single())
+    }
+
     @Test fun deletedRepliesAreNotResurrectedByAnInflightSnapshot() = exercise { cache ->
         val started = CompletableDeferred<Unit>()
         val release = CompletableDeferred<Unit>()

@@ -107,8 +107,8 @@ fun BtwSheet(sessionId: String, initial: String?, onDismiss: () -> Unit, onUseIn
         }
     }
 
-    LaunchedEffect(sessionId) {
-        repo.loadBtw(sessionId)
+    LaunchedEffect(sessionId) { repo.loadBtw(sessionId) }
+    LaunchedEffect(sessionId, initial) {
         if (!initial.isNullOrBlank() && !asked) {
             asked = true
             ask(initial)
@@ -215,10 +215,15 @@ private fun BtwTurnView(item: BtwItem, onCopy: () -> Unit, onRetry: () -> Unit, 
             "pending" -> Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(start = 4.dp)) {
                 LoadingIndicator(Modifier.size(28.dp))
                 Spacer(Modifier.size(8.dp))
-                Text(stringResource(R.string.chat_btw_sheet_008), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f))
+                Box(Modifier.weight(1f)) {
+                    if (item.response.isNullOrEmpty()) {
+                        Text(stringResource(R.string.chat_btw_sheet_008), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    } else ChatSelectionContainer { Text(item.response, style = MaterialTheme.typography.bodyLarge) }
+                }
                 IconButton(onClick = onRemove) { Icon(Icons.Rounded.Close, stringResource(R.string.chat_btw_sheet_007)) }
             }
             "error" -> Column(Modifier.padding(start = 4.dp)) {
+                item.response?.takeIf { it.isNotEmpty() }?.let { MarkdownText(it) }
                 Row(verticalAlignment = Alignment.Top) {
                     Icon(Icons.Rounded.ErrorOutline, null, Modifier.size(20.dp), tint = MaterialTheme.colorScheme.error)
                     Spacer(Modifier.size(8.dp))

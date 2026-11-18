@@ -261,7 +261,10 @@ func (w *providerWire) writeContext(ctx context.Context, msg M) error {
 	return err
 }
 func (w *providerWire) request(ctx context.Context, method string, params M) (M, error) {
-	id := NewID()
+	return w.requestWithID(ctx, NewID(), method, params)
+}
+
+func (w *providerWire) requestWithID(ctx context.Context, id, method string, params M) (M, error) {
 	c := make(chan providerReply, 1)
 	w.mu.Lock()
 	select {

@@ -5,9 +5,61 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 )
+
+func BenchmarkBtwGetLongConversation(b *testing.B) {
+	for _, count := range []int{10, 10000} {
+		b.Run(fmt.Sprint(count), func(b *testing.B) {
+			entries := make([]M, count)
+			for i := range entries {
+				entries[i] = M{"kind": "tool", "id": fmt.Sprint(i), "text": strings.Repeat("x", 3000), "input": M{"path": "example.txt"}}
+			}
+			a := &App{Store: &Store{records: map[string]*Record{"s": {Info: M{"id": "s", "provider": "codex"}, Entries: entries}}}, btw: map[string][]M{"s": {}}}
+			mux := http.NewServeMux()
+			a.registerBtw(mux)
+			r := httptest.NewRequest("GET", "/api/sessions/s/btw", nil)
+			b.ReportAllocs()
+			b.ResetTimer()
+			for range b.N {
+				result := httptest.NewRecorder()
+				mux.ServeHTTP(result, r)
+				if result.Code != 200 {
+					b.Fatal(result.Code)
+				}
+			}
+		})
+	}
+}
+
+type btwCopyCounter int
+
+func (n *btwCopyCounter) MarshalJSON() ([]byte, error) {
+	*n++
+	return []byte("0"), nil
+}
+
+func TestBtwRoutesSkipLargeMainTimeline(t *testing.T) {
+	var copies btwCopyCounter
+	entries := make([]M, 10000)
+	for i := range entries {
+		entries[i] = M{"kind": "tool", "output": "existing tool result"}
+	}
+	entries[len(entries)-1]["probe"] = &copies
+	a := &App{DataDir: t.TempDir(), Store: &Store{records: map[string]*Record{"s": {Info: M{"id": "s", "provider": "codex"}, Entries: entries}}}, btw: map[string][]M{"s": {}}}
+	mux := http.NewServeMux()
+	a.registerBtw(mux)
+	for _, method := range []string{"GET", "POST", "DELETE"} {
+		request := httptest.NewRequest(method, "/api/sessions/s/btw", nil)
+		mux.ServeHTTP(httptest.NewRecorder(), request)
+		if copies != 0 {
+			t.Fatalf("%s cloned the main timeline", method)
+		}
+	}
+}
 
 type btwFixtureProvider struct {
 	fakeProvider
@@ -19,6 +71,9 @@ type btwFixtureProvider struct {
 func (p *btwFixtureProvider) Do(ctx context.Context, action string, rec *Record, body M) (any, error) {
 	if action != "sideQuestion" {
 		return p.fakeProvider.Do(ctx, action, rec, body)
+	}
+	if progress, ok := ctx.Value(btwProgressKey{}).(func(string)); ok {
+		progress("First words")
 	}
 	p.started <- body
 	select {
@@ -67,6 +122,15 @@ func TestBtwRestoresHistoryAndPersistsAnswersAndCancellation(t *testing.T) {
 		}
 	case <-time.After(3 * time.Second):
 		t.Fatal("provider did not start")
+	}
+	res := testRequest(a, http.MethodGet, url, "")
+	var rows []M
+	if err := json.Unmarshal(res.Body.Bytes(), &rows); err != nil || len(rows) == 0 {
+		t.Fatal("could not read the in-progress reply", err)
+	}
+	partial := rows[len(rows)-1]
+	if S(partial, "status") != "pending" || S(partial, "response") != "First words" || N(partial, "responseRevision") != 1 {
+		t.Fatal("partial reply was not available before completion")
 	}
 	if duplicate := testRequest(a, http.MethodPost, url, `{"question":"Another?"}`); duplicate.Code == http.StatusOK {
 		t.Fatal("a second question ran while the first was pending")

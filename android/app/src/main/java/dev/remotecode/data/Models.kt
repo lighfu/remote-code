@@ -115,6 +115,7 @@ data class BtwItem(
     val synthetic: Boolean = false,
     val at: Long = 0,
     val doneAt: Long? = null,
+    val responseRevision: Long = 0,
 )
 
 @Serializable

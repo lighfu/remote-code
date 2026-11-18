@@ -107,5 +107,6 @@ internal class BtwSnapshots(scope: CoroutineScope) {
 internal fun newerBtw(previous: BtwItem?, incoming: BtwItem): BtwItem {
     if (previous == null) return incoming
     if (previous.status != "pending" && incoming.status == "pending") return previous
+    if (previous.status == "pending" && incoming.status == "pending" && previous.responseRevision > incoming.responseRevision) return previous
     return if ((previous.doneAt ?: previous.at) > (incoming.doneAt ?: incoming.at)) previous else incoming
 }
