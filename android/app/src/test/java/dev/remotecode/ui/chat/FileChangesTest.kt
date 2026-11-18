@@ -27,5 +27,7 @@ class FileChangesTest {
             sourceChanges("@@ -1 +1 @@\n-old\n+different text", listOf("current text")))
         assertEquals(emptyMap<Int, SourceChange>(),
             sourceChanges("@@ -1 +0,0 @@\n-last", emptyList()))
+        assertEquals(emptyMap<Int, SourceChange>(),
+            sourceChanges("@@ -1000 +999,0 @@\n-far", listOf("preview"), truncated = true))
     }
 }

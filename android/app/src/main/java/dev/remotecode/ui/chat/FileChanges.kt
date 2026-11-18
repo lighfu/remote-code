@@ -37,15 +37,17 @@ internal fun GitStatus.changedFile(absolutePath: String): GitFile? {
 internal enum class SourceChange(val sign: String) { Added("+"), Removed("−"), Modified("±") }
 
 /** The source gutter refers to current-file lines. Deleted text is read in the full diff. */
-internal fun sourceChanges(diff: String, source: List<String>): Map<Int, SourceChange> {
+internal fun sourceChanges(diff: String, source: List<String>, truncated: Boolean = false): Map<Int, SourceChange> {
     if (source.isEmpty()) return emptyMap()
     val changes = mutableMapOf<Int, SourceChange>()
     var pendingDeletes = 0
     var currentLine = 0
     fun markDeletion() {
         if (pendingDeletes > 0) {
-            val anchor = currentLine.coerceIn(1, source.size)
-            changes[anchor] = if (changes.containsKey(anchor) && changes[anchor] != SourceChange.Removed) SourceChange.Modified else SourceChange.Removed
+            if (!truncated || currentLine <= source.size) {
+                val anchor = currentLine.coerceIn(1, source.size)
+                changes[anchor] = if (changes[anchor] == null) SourceChange.Removed else SourceChange.Modified
+            }
             pendingDeletes = 0
         }
     }
@@ -107,7 +109,7 @@ internal fun rememberFileChanges(info: LinkFileInfo, sessionId: String, server: 
         try {
             val patch = repo.api.gitDiff(sessionId, file.path, staged, server)
             if (repo.session(sessionId)?.cwd == openedCwd && !patch.binary) {
-                value = withContext(Dispatchers.Default) { sourceChanges(patch.text, sourceLines(info.text.orEmpty())) }
+                value = withContext(Dispatchers.Default) { sourceChanges(patch.text, sourceLines(info.text.orEmpty()), info.truncated) }
             }
         } catch (e: CancellationException) { throw e }
         catch (_: Exception) { /* The file stays readable. The diff dialog reports errors and offers retry. */ }
