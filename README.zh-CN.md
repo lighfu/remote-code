@@ -42,17 +42,21 @@ Windows 发行版可从 [GitHub Releases](https://github.com/lighfu/remote-code/
 
 <h2><img src="docs/assets/readme/zh-CN/heading-setup.svg" width="360" height="66" alt="安装"></h2>
 
-支持 Windows x64 与 Android 10 及以上版本。请先在 PC 上安装并登录所用提供方的应用或 CLI。
+支持 Windows x64 和 Android 10+。使用服务器仪表板中的 **5 Setup** 安装所需的原生 CLI，然后使用其中显示的可执行命令在 PC 上登录。
+
+您也可以从已连接的 Android 应用的服务器设置中请求安装。
 
 Windows ZIP 内包含 Go 原生服务端、`start.cmd` 和 Android APK。配置与会话保存在 `data/` 中。
 
-1. 将 Windows 版 ZIP 解压到新文件夹。
-2. 打开 `start.cmd`，通过终端中的应用二维码或链接安装 APK。
-3. 使用应用扫描连接二维码。
+1. 将 Windows ZIP 解压到一个新文件夹中。
+2. 打开 `start.cmd`，然后打开 **5 Setup** 安装所选的 CLI 以及用于 Quick Tunnel 的 `cloudflared`。
+3. 在 PC 上登录已安装的 CLI。
+4. 使用 **App QR** 或其下载链接安装 APK。
+5. 在应用中扫描连接二维码。
 
 使用期间请保持终端窗口处于打开状态。
 
-使用 Cloudflare Tunnel 连接时，请在 PC 上安装 `cloudflared` 并将其加入 `PATH`，或通过 `CLOUDFLARED_BIN` 指定可执行文件路径。便携版在启动时开启隧道，从源码运行时使用 `--tunnel` 开启。
+安装过程在可用时优先使用 WinGet，否则会从提供商的官方发布源下载原生 Windows 可执行文件。对于 Cloudflare Tunnel 连接，安装 `cloudflared` 后便携式启动器会自动启动隧道。从源码运行时可通过 `--tunnel` 启用。
 
 服务端会在启动时检查更新，并在确认后应用。Android 应用从当前连接的服务端获取更新用的 APK。
 

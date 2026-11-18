@@ -42,17 +42,21 @@ Android 앱을 설치하려면 PC에서 `start.cmd`를 실행한 뒤, 휴대전�
 
 <h2><img src="docs/assets/readme/ko/heading-setup.svg" width="360" height="66" alt="설치"></h2>
 
-Windows x64 및 Android 10 이상을 지원합니다. 먼저 PC에 사용할 제공자의 앱이나 CLI를 설치하고 로그인하세요.
+Windows x64 및 Android 10+를 지원합니다. 서버 대시보드의 **5 Setup**을 사용하여 사용할 네이티브 CLI를 설치한 다음, 거기에 표시된 실행 명령을 사용하여 PC에서 로그인하세요.
+
+연결된 Android 앱의 서버 설정에서 설치를 요청할 수도 있습니다.
 
 Windows ZIP에는 Go 네이티브 서버, `start.cmd`, Android APK가 포함되어 있습니다. 설정과 대화는 `data/`에 저장됩니다.
 
-1. Windows용 ZIP 파일을 새 폴더에 압축 해제합니다.
-2. `start.cmd`를 실행하고 앱용 QR 코드나 URL을 통해 APK를 설치합니다.
-3. 앱에서 연결용 QR 코드를 스캔합니다.
+1. 새 폴더에 Windows ZIP의 압축을 풉니다.
+2. `start.cmd`를 연 다음 **5 Setup**을 열어 선택한 CLI와 Quick Tunnel용 `cloudflared`를 설치합니다.
+3. PC에 설치된 CLI에 로그인합니다.
+4. **App QR** 또는 다운로드 URL을 사용하여 APK를 설치합니다.
+5. 앱에서 연결 QR 코드를 스캔합니다.
 
 사용 중에는 터미널 창을 닫지 말고 열어 두세요.
 
-Cloudflare Tunnel로 연결하려면 PC에 `cloudflared`를 설치하여 `PATH`에 추가하거나 `CLOUDFLARED_BIN`에 실행 파일 경로를 지정하세요. 포터블 버전은 시작 시 터널을 열고, 소스 실행 시에는 `--tunnel`로 활성화합니다.
+설치 시 사용 가능한 경우 WinGet을 우선하며, 그렇지 않은 경우 제공업체의 공식 릴리스 소스에서 네이티브 Windows 실행 파일을 다운로드합니다. Cloudflare Tunnel 연결의 경우 `cloudflared`가 설치된 후 포터블 런처가 터널을 자동으로 시작합니다. 소스 실행 시에는 `--tunnel`로 활성화합니다.
 
 서버는 시작할 때 업데이트를 확인하고 승인 후 적용합니다. Android 앱은 연결된 서버에서 업데이트용 APK를 받습니다.
 

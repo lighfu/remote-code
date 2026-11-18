@@ -26,7 +26,7 @@
       <g transform="translate(70 72) scale(.86)"><g fill="none" stroke="#263322" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round"><path d="M-13-20v36a9 9 0 0 0 9 9h14M-13 3h12a14 14 0 0 0 14-14v-9"/><circle cx="-13" cy="-22" r="7"/><circle cx="13" cy="-22" r="7"/><circle cx="17" cy="25" r="7"/></g></g>
       <text x="345" y="58" text-anchor="end" font-size="18" font-weight="600" fill="#59634F">03</text>
       <text x="32" y="147" font-size="16" font-weight="700" letter-spacing="2" fill="#46503D">GIT</text>
-      <text x="30" y="199" font-size="37" font-weight="700" fill="#263322">整理變更</text>
+      <text x="30" y="199" font-size="37" font-weight="700" fill="#263322">提交變更</text>
       <text x="32" y="244" font-size="20" fill="#46503D">差異 · 提交 · 推送</text>
     </g>
   </g>

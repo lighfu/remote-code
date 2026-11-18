@@ -42,17 +42,21 @@ Android アプリは、PC で `start.cmd` を開き、ターミナルの **App Q
 
 <h2><img src="docs/assets/readme/heading-setup.svg" width="360" height="66" alt="導入"></h2>
 
-Windows x64 / Android 10 以降に対応します。PC に利用するプロバイダーのアプリ／CLI を導入し、ログインしてください。
+Windows x64 および Android 10+ に対応しています。サーバーダッシュボードの **5 Setup** を使って使用するネイティブ CLI をインストールし、そこに表示される実行コマンドを使って PC でサインインしてください。
+
+接続した Android アプリのサーバー設定からインストールをリクエストすることもできます。
 
 Windows 用 ZIP には、Go 製ネイティブサーバー、`start.cmd`、Android APK を同梱しています。設定と会話は `data/` に保存されます。
 
-1. Windows 用 ZIP を新しいフォルダーへ展開します。
-2. `start.cmd` を開き、アプリ用 QR／URL から APK をインストールします。
-3. アプリで接続用 QR を読み取ります。
+1. Windows ZIP を新しいフォルダーに展開します。
+2. `start.cmd` を開き、**5 Setup** を開いて使用する CLI と Quick Tunnel 用の `cloudflared` をインストールします。
+3. PC でインストールした CLI にサインインします。
+4. **App QR** またはダウンロード URL から APK をインストールします。
+5. アプリで接続 QR コードを読み取ります。
 
 利用中はターミナルを開いたままにしてください。
 
-Cloudflare Tunnel で接続する場合は、PC に `cloudflared` を導入して `PATH` に追加するか、実行ファイルのパスを `CLOUDFLARED_BIN` に指定してください。ポータブル版は起動時にトンネルを開始し、ソース版は `--tunnel` で有効にします。
+セットアップでは利用可能な場合は WinGet を優先し、そうでない場合はプロバイダーの公式リリース元から Windows ネイティブ実行ファイルをダウンロードします。Cloudflare Tunnel 接続では、`cloudflared` のインストール後にポータブルランチャーがトンネルを自動的に開始します。ソースから実行する場合は `--tunnel` で有効化します。
 
 コンソールはクリック、矢印キーと Enter で操作できます。`R` で再起動、`Q` で終了します。通常のログ表示は `--no-ui` を指定します。
 

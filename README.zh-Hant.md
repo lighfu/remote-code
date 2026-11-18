@@ -22,7 +22,7 @@
   <a href="https://github.com/lighfu/remote-code/releases/download/v0.18.8/remote-code-v0.18.8-win32-x64.zip"><img src="docs/assets/readme/zh-Hant/download-windows.svg" width="400" height="180" alt="取得 Windows x64 版 ZIP（0.18.8）"></a>
 </p>
 
-Windows 發行版本可從 [GitHub Releases](https://github.com/lighfu/remote-code/releases) 下載。
+Windows 套件可於 [GitHub Releases](https://github.com/lighfu/remote-code/releases) 下載。
 
 若要安裝 Android 應用程式，請在電腦上開啟 `start.cmd`，再用手機掃描終端機中的 **App QR** 碼。[安裝指南](#安裝)
 
@@ -34,27 +34,31 @@ Windows 發行版本可從 [GitHub Releases](https://github.com/lighfu/remote-co
   <img src="docs/assets/readme/zh-Hant/features.svg" width="1200" height="290" alt="對話與執行、編輯程式碼、提交變更">
 </p>
 
-- **對話** — 傳送與繼續對話、核准工具呼叫、查看子代理程式，並接收背景通知。
+- **對話** — 傳送與繼續對話、核准工具呼叫、檢視子代理，並接收背景通知。
 - **檔案** — 附加與檢視圖片、影片及檔案，編輯與引用程式碼，並預覽 Markdown。
-- **Git 與用量** — 查看差異、歷史記錄及分支，暫存變更、提交與推送。檢查用量、上下文及快取狀態。
+- **Git 與用量** — 檢視差異、歷史記錄與分支，暫存變更、提交與推送。檢查用量、上下文與快取狀態。
 
 <a name="安裝"></a>
 
 <h2><img src="docs/assets/readme/zh-Hant/heading-setup.svg" width="360" height="66" alt="安裝"></h2>
 
-支援 Windows x64 與 Android 10 以上版本。請先在電腦上安裝並登入所選服務提供者的應用程式或 CLI。
+支援 Windows x64 與 Android 10+。請使用伺服器儀表板中的 **5 Setup** 安裝您使用的原生 CLI，接著使用該處顯示的可執行指令在 PC 上登入。
 
-Windows ZIP 內含原生 Go 伺服器、`start.cmd` 及 Android APK。設定與對話儲存在 `data/` 中。
+您也可以從已連線的 Android 應用程式的伺服器設定中請求安裝。
 
-1. 將 Windows ZIP 解壓縮至新資料夾。
-2. 開啟 `start.cmd`，透過應用程式 QR 碼或網址安裝 APK。
-3. 在應用程式中掃描連線 QR 碼。
+Windows ZIP 內含原生 Go 伺服器、`start.cmd` 與 Android APK。設定與對話儲存在 `data/` 中。
 
-使用期間請保持終端機視窗開啟。
+1. 將 Windows ZIP 解壓縮到新資料夾。
+2. 開啟 `start.cmd`，接著開啟 **5 Setup** 以安裝您選擇的 CLI 以及用於 Quick Tunnel 的 `cloudflared`。
+3. 在 PC 上登入已安裝的 CLI。
+4. 使用 **App QR** 或其下載網址安裝 APK。
+5. 在應用程式中掃描連線 QR Code。
 
-若要透過 Cloudflare Tunnel 連線，請在電腦上安裝 `cloudflared` 並將其加入 `PATH`，或將 `CLOUDFLARED_BIN` 設為其執行檔路徑。可攜版啟動器會啟動通道。從原始碼執行時，請使用 `--tunnel` 啟用。
+使用本工具期間，請保持終端機視窗開啟。
 
-伺服器會在啟動時檢查更新，並在您核准後套用。應用程式會從目前連線的伺服器下載更新。
+安裝程式在可用時會優先使用 WinGet，否則會從供應商的官方發佈來源下載原生 Windows 可執行檔。針對 Cloudflare Tunnel 連線，安裝 `cloudflared` 後，可攜式啟動器會自動啟動通道。從原始碼執行時可透過 `--tunnel` 啟用。
+
+伺服器會在啟動時檢查更新，並在您核准後套用。應用程式會從所連線的伺服器下載更新。
 
 <a name="開發"></a>
 
@@ -64,13 +68,13 @@ Windows ZIP 內含原生 Go 伺服器、`start.cmd` 及 Android APK。設定與�
 
 伺服器以 Go 撰寫。從原始碼建置與執行需要 Go 1.26 或更新版本。
 
-Claude Code 使用電腦上已安裝的執行檔。發行版 ZIP 不包含 Claude Code 本身。
+Claude Code 會使用電腦上已安裝的執行檔。發布的 ZIP 不包含 Claude Code 本身。
 
 ```powershell
 go run ./cmd/remote-code --tunnel
 ```
 
-若要建置 Windows 伺服器執行檔，請在儲存庫根目錄執行下列指令。
+若要建置 Windows 伺服器執行檔，請在儲存庫根目錄執行以下指令。
 
 ```powershell
 go build -o remote-code.exe ./cmd/remote-code
@@ -83,7 +87,7 @@ go build -o remote-code.exe ./cmd/remote-code
 .\android\gradlew.bat -p android assembleRelease
 ```
 
-APK 會產生於 `android/app/build/outputs/apk/release/app-release.apk`。設定位於 `data/config.json`，啟動選項可透過 `go run ./cmd/remote-code --help` 查看。
+APK 會產生於 `android/app/build/outputs/apk/release/app-release.apk`。設定儲存在 `data/config.json`，啟動選項可透過 `go run ./cmd/remote-code --help` 查看。
 
 <a name="文件"></a>
 

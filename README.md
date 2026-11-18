@@ -42,17 +42,21 @@ To install the Android app, open `start.cmd` on your PC and scan the terminal’
 
 <h2><img src="docs/assets/readme/en/heading-setup.svg" width="360" height="66" alt="Setup"></h2>
 
-Supports Windows x64 and Android 10+. Install and sign in to your chosen provider's app or CLI on your PC first.
+Supports Windows x64 and Android 10+. Use **5 Setup** in the server dashboard to install the native CLIs you use, then sign in on your PC using the executable command shown there.
+
+You can also request installation from the connected Android app's server settings.
 
 The Windows ZIP includes the native Go server, `start.cmd`, and the Android APK. Settings and conversations are stored in `data/`.
 
 1. Extract the Windows ZIP into a new folder.
-2. Open `start.cmd` and install the APK using the app QR code or URL.
-3. Scan the connection QR code in the app.
+2. Open `start.cmd`, then open **5 Setup** to install your chosen CLI and `cloudflared` for Quick Tunnel.
+3. Sign in to the installed CLI on your PC.
+4. Install the APK using **App QR** or its download URL.
+5. Scan the connection QR code in the app.
 
 Keep the terminal open while using the tool.
 
-For a Cloudflare Tunnel connection, install `cloudflared` on the PC and add it to `PATH`, or set `CLOUDFLARED_BIN` to its executable path. The portable launcher starts the tunnel, and source runs enable it with `--tunnel`.
+Setup prefers WinGet when available and otherwise downloads the native Windows executable from the provider's official release source. For Cloudflare Tunnel connections, the portable launcher starts the tunnel automatically after `cloudflared` is installed. Source runs enable it with `--tunnel`.
 
 The server checks for updates at startup and applies them after your approval. The app downloads its updates from the server it’s connected to.
 
