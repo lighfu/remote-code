@@ -309,7 +309,6 @@
     <string name="chat_git_sheet_023">"建立並切換"</string>
     <string name="chat_git_sheet_024">"分支名稱"</string>
     <string name="chat_git_sheet_025">"新分支"</string>
-    <string name="chat_git_sheet_026">"Push"</string>
     <string name="chat_git_sheet_027">"設定 %1$s 的追蹤目標，並 Push 至所選的遠端。"</string>
     <string name="chat_git_sheet_028">"首次 Push"</string>
     <string name="chat_git_sheet_029">"切換"</string>
@@ -329,8 +328,6 @@
     <string name="chat_git_sheet_043">"分支"</string>
     <string name="chat_git_sheet_044">"歷史記錄"</string>
     <string name="chat_git_sheet_045">"變更 (%1$s)"</string>
-    <string name="chat_git_sheet_046">"Pull"</string>
-    <string name="chat_git_sheet_047">"Fetch"</string>
     <string name="chat_git_sheet_048">"請重新取得 Git 狀態。"</string>
     <string name="chat_git_sheet_049">"此工作資料夾未受 Git 版本控管。"</string>
     <string name="chat_git_sheet_050">"\n目前顯示的是上次的資訊。請從右上角重新整理。"</string>

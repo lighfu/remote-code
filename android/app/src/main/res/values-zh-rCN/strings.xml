@@ -309,7 +309,6 @@
     <string name="chat_git_sheet_023">"创建并切换"</string>
     <string name="chat_git_sheet_024">"分支名称"</string>
     <string name="chat_git_sheet_025">"新建分支"</string>
-    <string name="chat_git_sheet_026">"推送"</string>
     <string name="chat_git_sheet_027">"设置 %1$s 的跟踪分支，并推送到所选远程仓库。"</string>
     <string name="chat_git_sheet_028">"首次推送"</string>
     <string name="chat_git_sheet_029">"切换"</string>
@@ -329,8 +328,6 @@
     <string name="chat_git_sheet_043">"分支"</string>
     <string name="chat_git_sheet_044">"历史"</string>
     <string name="chat_git_sheet_045">"更改 (%1$s)"</string>
-    <string name="chat_git_sheet_046">"拉取"</string>
-    <string name="chat_git_sheet_047">"抓取"</string>
     <string name="chat_git_sheet_048">"请重新获取 Git 状态。"</string>
     <string name="chat_git_sheet_049">"此工作文件夹未被 Git 管理。"</string>
     <string name="chat_git_sheet_050">"\n当前显示为上次的信息。请从右上角刷新。"</string>

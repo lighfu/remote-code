@@ -309,7 +309,7 @@
     <string name="chat_git_sheet_023">作成して切り替える</string>
     <string name="chat_git_sheet_024">ブランチ名</string>
     <string name="chat_git_sheet_025">新しいブランチ</string>
-    <string name="chat_git_sheet_026">プッシュ</string>
+    <string name="chat_git_sheet_026" translatable="false">Push</string>
     <string name="chat_git_sheet_027">%1$s の追跡先を設定し、選んだリモートへプッシュします。</string>
     <string name="chat_git_sheet_028">最初のプッシュ</string>
     <string name="chat_git_sheet_029">切り替える</string>
@@ -329,8 +329,8 @@
     <string name="chat_git_sheet_043">ブランチ</string>
     <string name="chat_git_sheet_044">履歴</string>
     <string name="chat_git_sheet_045">変更 (%1$s)</string>
-    <string name="chat_git_sheet_046">プル</string>
-    <string name="chat_git_sheet_047">フェッチ</string>
+    <string name="chat_git_sheet_046" translatable="false">Pull</string>
+    <string name="chat_git_sheet_047" translatable="false">Fetch</string>
     <string name="chat_git_sheet_048">Git の状態を再取得してください。</string>
     <string name="chat_git_sheet_049">この作業フォルダは Git で管理されていません。</string>
     <string name="chat_git_sheet_050">\n前回の情報を表示しています。右上から更新してください。</string>

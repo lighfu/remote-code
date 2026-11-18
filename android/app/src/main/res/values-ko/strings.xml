@@ -309,7 +309,6 @@
     <string name="chat_git_sheet_023">"생성 후 전환"</string>
     <string name="chat_git_sheet_024">"브랜치 이름"</string>
     <string name="chat_git_sheet_025">"새 브랜치"</string>
-    <string name="chat_git_sheet_026">"푸시"</string>
     <string name="chat_git_sheet_027">"%1$s의 추적 대상을 설정하고 선택한 원격 저장소로 푸시합니다."</string>
     <string name="chat_git_sheet_028">"첫 푸시"</string>
     <string name="chat_git_sheet_029">"전환"</string>
@@ -329,8 +328,6 @@
     <string name="chat_git_sheet_043">"브랜치"</string>
     <string name="chat_git_sheet_044">"내역"</string>
     <string name="chat_git_sheet_045">"변경 사항 (%1$s)"</string>
-    <string name="chat_git_sheet_046">"풀"</string>
-    <string name="chat_git_sheet_047">"패치"</string>
     <string name="chat_git_sheet_048">"Git 상태를 다시 가져와 주세요."</string>
     <string name="chat_git_sheet_049">"이 작업 폴더는 Git으로 관리되지 않습니다."</string>
     <string name="chat_git_sheet_050">"\n이전 정보를 표시하고 있습니다. 오른쪽 상단에서 새로고침해 주세요."</string>

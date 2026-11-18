@@ -309,7 +309,6 @@
     <string name="chat_git_sheet_023">"Create and switch"</string>
     <string name="chat_git_sheet_024">"Branch name"</string>
     <string name="chat_git_sheet_025">"New branch"</string>
-    <string name="chat_git_sheet_026">"Push"</string>
     <string name="chat_git_sheet_027">"Sets upstream tracking for %1$s and pushes to selected remote."</string>
     <string name="chat_git_sheet_028">"First push"</string>
     <string name="chat_git_sheet_029">"Switch"</string>
@@ -329,8 +328,6 @@
     <string name="chat_git_sheet_043">"Branches"</string>
     <string name="chat_git_sheet_044">"History"</string>
     <string name="chat_git_sheet_045">"Changes (%1$s)"</string>
-    <string name="chat_git_sheet_046">"Pull"</string>
-    <string name="chat_git_sheet_047">"Fetch"</string>
     <string name="chat_git_sheet_048">"Please refresh Git status."</string>
     <string name="chat_git_sheet_049">"This working folder is not managed by Git."</string>
     <string name="chat_git_sheet_050">"\nShowing previous info. Refresh from top right."</string>
