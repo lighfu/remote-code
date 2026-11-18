@@ -47,6 +47,7 @@ import kotlinx.serialization.Serializable
 
 @Serializable object SetupRoute
 @Serializable object SessionsRoute
+@Serializable object DesktopRoute
 @Serializable data class ChatRoute(val id: String)
 @Serializable object HistoryRoute
 @Serializable object SettingsRoute
@@ -117,9 +118,13 @@ fun AppNav(activity: MainActivity) {
                 SessionsScreen(
                     onOpen = { nav.navigate(ChatRoute(it)) },
                     onHistory = { nav.navigate(HistoryRoute) },
+                    onDesktop = { nav.navigate(DesktopRoute) },
                     onSettings = { nav.navigate(SettingsRoute) },
                     onPairing = { nav.navigate(SetupRoute) },
                 )
+            }
+            composable<DesktopRoute> {
+                dev.remotecode.ui.desktop.DesktopScreen(onBack = { nav.popBackStack() })
             }
             composable<ChatRoute> { entry ->
                 val route = entry.toRoute<ChatRoute>()

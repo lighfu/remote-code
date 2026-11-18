@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.floatPreferencesKey
+import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import kotlinx.coroutines.flow.Flow
@@ -25,7 +26,38 @@ data class AppSettings(
     val appearance: Appearance = Appearance(),
     val footerDisplay: ChatFooterDisplay = ChatFooterDisplay(),
     val codeWrap: Boolean = true,
+    val desktop: DesktopPreferences = DesktopPreferences(),
 )
+
+enum class DesktopResolution(val wire: String) {
+    Standard("normal"), High("high"), Native("native");
+
+    companion object {
+        fun restore(value: String?, highDetail: Boolean) =
+            entries.find { it.wire == value } ?: if (highDetail) High else Standard
+    }
+}
+
+data class DesktopPreferences(
+    val fps: Int = 10,
+    val resolution: DesktopResolution = DesktopResolution.Standard,
+    val debugOverlay: Boolean = false,
+    val capture: String = "auto",
+    val codec: String = "jpeg",
+    val touchpad: Boolean = true,
+    val pointerSpeed: Float = 1f,
+    val control: Boolean = true,
+    val clipboard: Boolean = false,
+    val bitrateMbps: Int = 0,
+    val graphMask: Int = 3,
+) {
+    companion object {
+        val frameRates = listOf(1, 5, 10, 15, 30, 60)
+        val pointerSpeeds = listOf(0.5f, 1f, 1.5f, 2f)
+        // Zero selects automatic tuning; -1 keeps the original uncapped stream.
+        val bitrateOptions = listOf(0, 4, 8, 16, 32, 64, -1)
+    }
+}
 
 data class Appearance(
     /** system / light / dark */
@@ -72,6 +104,18 @@ class SettingsStore(private val context: Context) {
         val codeFont = stringPreferencesKey("code_font")
         val textScale = floatPreferencesKey("text_scale")
         val codeScale = floatPreferencesKey("code_scale")
+        val desktopFps = intPreferencesKey("desktop_fps")
+        val desktopHighDetail = booleanPreferencesKey("desktop_high_detail")
+        val desktopResolution = stringPreferencesKey("desktop_resolution")
+        val desktopDebugOverlay = booleanPreferencesKey("desktop_debug_overlay")
+        val desktopBitrateMbps = intPreferencesKey("desktop_bitrate_mbps")
+        val desktopGraphMask = intPreferencesKey("desktop_graph_mask")
+        val desktopCapture = stringPreferencesKey("desktop_capture")
+        val desktopCodec = stringPreferencesKey("desktop_codec")
+        val desktopTouchpad = booleanPreferencesKey("desktop_touchpad")
+        val desktopPointerSpeed = floatPreferencesKey("desktop_pointer_speed")
+        val desktopControl = booleanPreferencesKey("desktop_control")
+        val desktopClipboard = booleanPreferencesKey("desktop_clipboard")
     }
 
     val settings: Flow<AppSettings> = context.dataStore.data.map { p ->
@@ -89,6 +133,19 @@ class SettingsStore(private val context: Context) {
             thinking = p[Keys.thinking] ?: "full",
             toolDetail = p[Keys.toolDetail] ?: true,
             codeWrap = p[Keys.codeWrap] ?: true,
+            desktop = DesktopPreferences(
+                fps = p[Keys.desktopFps]?.takeIf { it in DesktopPreferences.frameRates } ?: 10,
+                resolution = DesktopResolution.restore(p[Keys.desktopResolution], p[Keys.desktopHighDetail] ?: false),
+                debugOverlay = p[Keys.desktopDebugOverlay] ?: false,
+                bitrateMbps = p[Keys.desktopBitrateMbps]?.takeIf { it in DesktopPreferences.bitrateOptions } ?: 0,
+                graphMask = p[Keys.desktopGraphMask]?.and(7) ?: 3,
+                capture = p[Keys.desktopCapture] ?: "auto",
+                codec = p[Keys.desktopCodec] ?: "jpeg",
+                touchpad = p[Keys.desktopTouchpad] ?: true,
+                pointerSpeed = p[Keys.desktopPointerSpeed]?.takeIf { it in DesktopPreferences.pointerSpeeds } ?: 1f,
+                control = p[Keys.desktopControl] ?: true,
+                clipboard = p[Keys.desktopClipboard] ?: false,
+            ),
             footerDisplay = ChatFooterDisplay(
                 context = p[Keys.footerContext] ?: true,
                 cache = p[Keys.footerCache] ?: true,
@@ -114,6 +171,7 @@ class SettingsStore(private val context: Context) {
 
     suspend fun saveServer(cfg: ServerConfig?) {
         context.dataStore.edit {
+            if (cfg?.token != it[Keys.token]) it.remove(Keys.desktopClipboard)
             if (cfg == null) {
                 it.remove(Keys.url); it.remove(Keys.token); it.remove(Keys.name)
                 it.remove(Keys.accessId); it.remove(Keys.accessSecret); it.remove(Keys.publicUrl)
@@ -175,6 +233,22 @@ class SettingsStore(private val context: Context) {
 
     suspend fun setCodeWrap(on: Boolean) {
         context.dataStore.edit { it[Keys.codeWrap] = on }
+    }
+
+    suspend fun setDesktop(prefs: DesktopPreferences, pairedToken: String?) {
+        context.dataStore.edit {
+            it[Keys.desktopFps] = prefs.fps
+            it[Keys.desktopResolution] = prefs.resolution.wire
+            it[Keys.desktopDebugOverlay] = prefs.debugOverlay
+            it[Keys.desktopBitrateMbps] = prefs.bitrateMbps
+            it[Keys.desktopGraphMask] = prefs.graphMask
+            it[Keys.desktopCapture] = prefs.capture
+            it[Keys.desktopCodec] = prefs.codec
+            it[Keys.desktopTouchpad] = prefs.touchpad
+            it[Keys.desktopPointerSpeed] = prefs.pointerSpeed
+            it[Keys.desktopControl] = prefs.control
+            if (pairedToken != null && it[Keys.token] == pairedToken) it[Keys.desktopClipboard] = prefs.clipboard
+        }
     }
 
     suspend fun setFooterDisplay(display: ChatFooterDisplay) {

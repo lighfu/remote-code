@@ -32,6 +32,7 @@ import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.CloudOff
 import androidx.compose.material.icons.rounded.Delete
+import androidx.compose.material.icons.rounded.DesktopWindows
 import androidx.compose.material.icons.rounded.Edit
 import androidx.compose.material.icons.rounded.History
 import androidx.compose.material.icons.rounded.PowerSettingsNew
@@ -99,7 +100,7 @@ import kotlinx.coroutines.launch
 private var askedNotificationPermission = false
 
 @Composable
-fun SessionsScreen(onOpen: (String) -> Unit, onHistory: () -> Unit, onSettings: () -> Unit, onPairing: () -> Unit) {
+fun SessionsScreen(onOpen: (String) -> Unit, onHistory: () -> Unit, onSettings: () -> Unit, onPairing: () -> Unit, onDesktop: () -> Unit) {
     val repo = RemoteCodeApp.instance.repository
     val sessions by repo.sessions.collectAsState()
     val conn by repo.connection.collectAsState()
@@ -217,6 +218,7 @@ fun SessionsScreen(onOpen: (String) -> Unit, onHistory: () -> Unit, onSettings: 
                     )
                 },
                 actions = {
+                    IconButton(onClick = onDesktop) { Icon(Icons.Rounded.DesktopWindows, stringResource(R.string.desktop_title)) }
                     IconButton(onClick = { showArchived = !showArchived }) {
                         Icon(if (showArchived) Icons.Rounded.Unarchive else Icons.Rounded.Archive, if (showArchived) appString(R.string.screen_sessions_013) else appString(R.string.screen_sessions_014))
                     }

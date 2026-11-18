@@ -51,6 +51,8 @@ class Api(private val client: OkHttpClient, private val strings: AppStringResolv
     @Volatile
     var server: ServerConfig? = null
 
+    internal val desktop by lazy { DesktopApi(client, strings) { server } }
+
     private data class MediaRequest(val server: ConnectionIdentity, val id: String, val fresh: Boolean)
     private val mediaTransfers = SharedValues<MediaRequest, ByteArray>(CoroutineScope(SupervisorJob() + Dispatchers.IO))
     private data class ContextRequest(val server: ConnectionIdentity, val id: String, val cached: Boolean)
@@ -847,7 +849,7 @@ class Api(private val client: OkHttpClient, private val strings: AppStringResolv
             .build()
 }
 
-private fun Request.Builder.auth(cfg: ServerConfig): Request.Builder = apply {
+internal fun Request.Builder.auth(cfg: ServerConfig): Request.Builder = apply {
     header("Authorization", "Bearer ${cfg.token}")
     if (cfg.hasAccess) {
         header("CF-Access-Client-Id", cfg.accessId)

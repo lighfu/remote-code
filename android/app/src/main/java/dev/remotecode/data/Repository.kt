@@ -62,6 +62,7 @@ class Repository(context: Context, private val scope: CoroutineScope) {
 
     val api = Api(client)
     private val apiIdentity = MutableStateFlow<ConnectionIdentity?>(null)
+    internal val activeServerIdentity = apiIdentity.asStateFlow()
     private val gitSnapshots = GitSnapshots(scope)
     val git: StateFlow<Map<String, GitStatus>> = gitSnapshots.values
     val settingsStore = SettingsStore(context)
