@@ -63,4 +63,46 @@ class CodeTextTest {
         assertEquals(1, removed.old)
         assertNull(removed.new)
     }
+
+    @Test fun diffHighlightsTheTwoVersionsIndependentlyAcrossCommentsAndRenames() {
+        val text = """diff --git "a/old file.kt" "b/new file.py"
+--- "a/old file.kt"
++++ "b/new file.py"
+@@ -12,2 +1,2 @@
+-/* deleted
++def replacement():
+-comment */
++    return True # new"""
+        val rows = highlightDiff(text, "").rows
+        assertEquals(CodeInk.Comment, rows[4].code.tokens.single().ink)
+        assertEquals(CodeInk.Keyword, rows[5].code.tokens.first().ink)
+        assertEquals(CodeInk.Comment, rows[6].code.tokens.single().ink)
+        assertEquals(CodeInk.Comment, rows[7].code.tokens.last().ink)
+        assertEquals(13, rows[6].line.old)
+        assertEquals(2, rows[7].line.new)
+    }
+
+    @Test fun diffHandlesAdjacentFileHeadersAndLegacyToolChangesWithoutDroppingRows() {
+        val text = "--- a/first.ts\n+++ b/first.ts\n@@ -1 +1 @@\n-a\n+b\n" +
+            "--- a/second.py\n+++ b/second.py\n@@ -7 +7 @@\n-# old\n+# new\n" +
+            "── Modified status.sql\n- SELECT value\n+ SELECT count"
+        val full = highlightDiff(text, "fallback.txt")
+        assertEquals(text.lines().size, full.rows.size)
+        assertEquals('@', full.rows[5].line.kind)
+        assertEquals(CodeInk.Comment, full.rows[9].code.tokens.single().ink)
+        assertEquals(CodeInk.Keyword, full.rows[12].code.tokens.first().ink)
+        assertNull(full.rows[12].line.new)
+        val preview = highlightDiff(text, "fallback.txt", maxLines = 7)
+        assertEquals(full.rows.take(7), preview.rows)
+        assertEquals(full.rows.size, preview.totalLines)
+    }
+
+    @Test fun markersDoNotResetCodeStateOrSwallowLongLines() {
+        val payload = "x".repeat(8192)
+        val text = "@@ -1,2 +1,2 @@\n-/* old\n+val message = 42\n\\ No newline at end of file\n-closed */\n+$payload"
+        val rows = highlightDiff(text, "message.kt").rows
+        assertTrue(rows[3].code.tokens.isEmpty())
+        assertEquals(CodeInk.Comment, rows[4].code.tokens.single().ink)
+        assertEquals(payload, rows.last().code.text)
+    }
 }

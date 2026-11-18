@@ -63,8 +63,9 @@ fun toolFileGesture(e: Entry, onClick: () -> Unit): Modifier {
 }
 
 @Composable
-fun EditPreview(e: Entry, maxLines: Int = Int.MAX_VALUE) {
+fun EditPreview(e: Entry, maxLines: Int = Int.MAX_VALUE, wrapLines: Boolean = false) {
     val detail = e.detail ?: return
-    if (e.tool == "Write" || e.tool == "NotebookEdit") NumberedCodeBlock(detail, toolFiles(e).firstOrNull().orEmpty(), maxLines)
-    else DiffBlock(detail, maxLines = maxLines)
+    val path = remember(e) { toolFiles(e).firstOrNull().orEmpty() }
+    if (e.tool == "Write" || e.tool == "NotebookEdit") NumberedCodeBlock(detail, path, maxLines, wrapLines)
+    else DiffBlock(detail, maxLines = maxLines, path = path, wrapLines = wrapLines)
 }

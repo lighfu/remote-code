@@ -245,8 +245,9 @@ class Api(private val client: OkHttpClient, private val strings: AppStringResolv
     suspend fun gitStatus(id: String, force: Boolean = false): GitStatus =
         get("/api/sessions/$id/git" + if (force) "?force=1" else "", GitStatus.serializer())
 
-    suspend fun gitDiff(id: String, path: String, staged: Boolean = false): GitDiff =
-        get("/api/sessions/$id/git/diff?path=" + java.net.URLEncoder.encode(path, "UTF-8") + if (staged) "&staged=1" else "", GitDiff.serializer())
+    suspend fun gitDiff(id: String, path: String, staged: Boolean = false, expectedServer: ServerConfig? = null): GitDiff =
+        projectGet("/api/sessions/$id/git/diff?path=" + java.net.URLEncoder.encode(path, "UTF-8") + if (staged) "&staged=1" else "",
+            GitDiff.serializer(), expectedServer)
 
     suspend fun gitLog(id: String): List<GitLogEntry> = get("/api/sessions/$id/git/log", ListSerializer(GitLogEntry.serializer()))
 

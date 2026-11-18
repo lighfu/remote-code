@@ -79,6 +79,8 @@ internal fun CodeViewerContent(info: LinkFileInfo, link: String, sessionId: Stri
     var quoteError by remember(info) { mutableStateOf<String?>(null) }
     var markdownPreview by remember(info) { mutableStateOf(false) }
     val sourceServer = remember(info, source) { RemoteCodeApp.instance.repository.api.server?.takeIf { it.connectionIdentity() == source } }
+    val changes = rememberFileChanges(info, sessionId, sourceServer)
+    var showDiff by remember(info, sessionId, source) { mutableStateOf<Pair<FileChanges, Boolean>?>(null) }
     val canQuote = source != null && quoteHandler != null && info.text?.isNotEmpty() == true
     fun selectLine(line: Int) {
         selecting = true; quoteError = null
@@ -134,6 +136,7 @@ internal fun CodeViewerContent(info: LinkFileInfo, link: String, sessionId: Stri
                 }
             }
             Text(info.path, Modifier.padding(horizontal = 16.dp, vertical = 4.dp), style = MaterialTheme.typography.labelSmall, maxLines = 2, overflow = TextOverflow.Ellipsis, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            if (changes != null) FileChangeButtons(changes) { staged -> showDiff = changes to staged }
             if (info.truncated) Text(stringResource(R.string.chat_code_viewer_012), Modifier.padding(horizontal = 16.dp, vertical = 4.dp), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.tertiary)
             if (lines?.any { it.text.length > MAX_LINE_CHARS } == true) Text(stringResource(R.string.chat_code_viewer_011, MAX_LINE_CHARS), Modifier.padding(horizontal = 16.dp), style = MaterialTheme.typography.labelSmall)
             if (selecting) {
@@ -160,9 +163,10 @@ internal fun CodeViewerContent(info: LinkFileInfo, link: String, sessionId: Stri
             if (markdownPreview) ProjectMarkdownPreview(info.text.orEmpty(), info.path, sessionId, Modifier.weight(1f), expectedServer = sourceServer)
             else if (loaded == null) Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { LoadingIndicator() }
             else if (loaded.isEmpty()) Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Text(stringResource(R.string.chat_code_viewer_005)) }
-            else SourceCode(loaded, info.line, Modifier.weight(1f), selecting, selected, if (canQuote) ::selectLine else null, wrapLines)
+            else SourceCode(loaded, info.line, Modifier.weight(1f), selecting, selected, if (canQuote) ::selectLine else null, wrapLines, changes)
         }
     }
+    showDiff?.let { (origin, staged) -> GitDiffDialog(sessionId, origin.file.path, staged, source, origin.cwd) { showDiff = null } }
     if (quoteDialog && canQuote) CodeQuoteRangeDialog(
         info.path, info.text.orEmpty(), initialStartLine = selected?.first ?: info.line ?: 1,
         initialEndLine = selected?.last ?: info.line ?: 1, onDismiss = { quoteDialog = false }, onQuote = ::quote,
@@ -170,7 +174,7 @@ internal fun CodeViewerContent(info: LinkFileInfo, link: String, sessionId: Stri
 }
 
 @Composable
-private fun SourceCode(lines: List<CodeLine>, target: Int?, modifier: Modifier = Modifier, selecting: Boolean = false, selected: IntRange? = null, onSelectLine: ((Int) -> Unit)? = null, wrapLines: Boolean = true) {
+private fun SourceCode(lines: List<CodeLine>, target: Int?, modifier: Modifier = Modifier, selecting: Boolean = false, selected: IntRange? = null, onSelectLine: ((Int) -> Unit)? = null, wrapLines: Boolean = true, changes: FileChanges? = null) {
     val list = rememberLazyListState()
     val horizontal = rememberScrollState()
     var renderedWrap by remember { mutableStateOf(wrapLines) }
@@ -193,19 +197,34 @@ private fun SourceCode(lines: List<CodeLine>, target: Int?, modifier: Modifier =
             }
         }
     }
-    val gutter = charWidth * (lines.size.toString().length + 2) + 12.dp
+    val gutter = charWidth * (lines.size.toString().length + if (changes == null) 2 else 4) + 12.dp
+    val palette = Extra.colors
     BoxWithConstraints(modifier.fillMaxWidth()) {
-        val contentWidth = if (wrapLines) maxWidth else maxOf(maxWidth, charWidth * (longest + 5) + gutter + 24.dp)
+        val maxLayout = with(density) { 16_000.toDp() }
+        val contentWidth = if (wrapLines) maxWidth else maxOf(maxWidth, minOf(maxLayout, charWidth * (longest + 5) + gutter + 24.dp))
         SelectionContainer {
             Box(Modifier.fillMaxSize().then(if (wrapLines) Modifier else Modifier.horizontalScroll(horizontal))) {
                 LazyColumn(state = list, modifier = Modifier.width(contentWidth).fillMaxHeight(), contentPadding = PaddingValues(vertical = 8.dp)) {
                     itemsIndexed(lines) { index, line ->
                         val focused = target == index + 1
                         val chosen = selected?.contains(index + 1) == true
-                        Row(Modifier.fillMaxWidth().background(if (chosen) MaterialTheme.colorScheme.secondaryContainer else if (focused) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f) else Color.Transparent)
+                        val mark = if (changes?.file?.untracked == true) SourceChange.Added else changes?.markers?.get(index + 1)
+                        val changeColor = when (mark) {
+                            SourceChange.Added -> palette.diffAdd
+                            SourceChange.Removed -> palette.diffRemove
+                            SourceChange.Modified -> MaterialTheme.colorScheme.tertiary
+                            null -> null
+                        }
+                        Row(Modifier.fillMaxWidth().background(when {
+                            chosen -> MaterialTheme.colorScheme.secondaryContainer
+                            focused -> MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)
+                            changeColor != null -> changeColor.copy(alpha = 0.12f)
+                            else -> Color.Transparent
+                        })
                             .then(if (selecting && onSelectLine != null) Modifier.clickable { onSelectLine(index + 1) } else Modifier)) {
-                            Text("${index + 1}", Modifier.width(gutter).then(if (onSelectLine != null && !selecting) Modifier.clickable(onClickLabel = stringResource(R.string.chat_code_viewer_004, index + 1)) { onSelectLine(index + 1) } else Modifier).padding(end = 12.dp), style = style, textAlign = TextAlign.End, color = if (chosen) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant)
-                            Text(coloredLine(line), Modifier.weight(1f).padding(end = 16.dp), style = style, softWrap = wrapLines)
+                            val lineNumber = if (changes == null) "${index + 1}" else "${index + 1} ${mark?.sign ?: " "}"
+                            Text(lineNumber, Modifier.width(gutter).then(if (onSelectLine != null && !selecting) Modifier.clickable(onClickLabel = stringResource(R.string.chat_code_viewer_004, index + 1)) { onSelectLine(index + 1) } else Modifier).padding(end = 12.dp), style = style, textAlign = TextAlign.End, color = changeColor ?: if (chosen) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text(coloredLine(line), Modifier.weight(1f).padding(end = 16.dp), style = style, softWrap = wrapLines || contentWidth >= maxLayout)
                         }
                     }
                 }
@@ -215,7 +234,7 @@ private fun SourceCode(lines: List<CodeLine>, target: Int?, modifier: Modifier =
 }
 
 @Composable
-private fun coloredLine(line: CodeLine, limit: Int = MAX_LINE_CHARS): AnnotatedString {
+internal fun coloredLine(line: CodeLine, limit: Int = MAX_LINE_CHARS): AnnotatedString {
     val dark = MaterialTheme.colorScheme.surface.red + MaterialTheme.colorScheme.surface.green + MaterialTheme.colorScheme.surface.blue < 1.5f
     val colors = if (dark) listOf(0xFFC4A7FF, 0xFFA8D69D, 0xFF94A3AD, 0xFFF4BF88, 0xFF85CFE8, 0xFFFFC88B, 0xFF85CFE8, 0xFFFFC88B, 0xFFC4A7FF, 0xFFD2D9E1) else listOf(0xFF7137A8, 0xFF28651B, 0xFF64716C, 0xFF955000, 0xFF006B80, 0xFF904C16, 0xFF006B80, 0xFF904C16, 0xFF7137A8, 0xFF35495C)
     return remember(line, dark, limit) {
@@ -256,39 +275,15 @@ fun highlightedCode(text: String, language: CodeLanguage? = null): AnnotatedStri
 
 /** 横スクロールを全行で共有する。 */
 @Composable
-fun DiffBlock(text: String, maxHeight: Int = 360, maxLines: Int = Int.MAX_VALUE) {
-    val all = remember(text) { parseDiff(text) }
-    val rows = remember(all, maxLines) { all.take(maxLines) }
-    val x = Extra.colors
-    val style = MaterialTheme.typography.bodySmall.copy(fontFamily = Mono, fontSize = 12.sp * CodeScale, lineHeight = 18.sp * CodeScale)
-    val digits = remember(all) { maxOf(3, all.maxOfOrNull { maxOf(it.old ?: 0, it.new ?: 0) }?.toString()?.length ?: 1) }
-    val cell = " ".repeat(digits)
-    val annotated = remember(rows, x, digits) {
-        buildAnnotatedString {
-            rows.forEachIndexed { i, row ->
-                if (i > 0) append('\n')
-                val from = length
-                if (row.kind == '@') append("$cell $cell   ${row.text}")
-                else {
-                    append((row.old?.toString() ?: "").padStart(digits)); append(' ')
-                    append((row.new?.toString() ?: "").padStart(digits)); append(" ${row.kind} "); append(row.text)
-                }
-                val color = when (row.kind) { '+' -> x.diffAdd; '-' -> x.diffRemove; else -> null }
-                if (color != null) addStyle(SpanStyle(color = color, background = color.copy(alpha = 0.1f)), from, length)
-            }
-            if (all.size > rows.size) append(appString(R.string.chat_code_viewer_001, all.size - rows.size))
-        }
-    }
-    Surface(color = MaterialTheme.colorScheme.surfaceContainerHighest, shape = androidx.compose.foundation.shape.RoundedCornerShape(12.dp), modifier = Modifier.fillMaxWidth()) {
-        Column(Modifier.padding(vertical = 6.dp)) {
-            Text(stringResource(R.string.chat_code_viewer_003, if (all.none { it.old != null || it.new != null }) appString(R.string.chat_code_viewer_002) else ""), Modifier.padding(horizontal = 10.dp, vertical = 2.dp), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            Text(annotated, style = style, softWrap = false, modifier = Modifier.heightIn(max = maxHeight.dp).verticalScroll(rememberScrollState()).horizontalScroll(rememberScrollState()).padding(horizontal = 10.dp))
-        }
+fun DiffBlock(text: String, maxHeight: Int = 360, maxLines: Int = Int.MAX_VALUE, path: String = "", wrapLines: Boolean = false) {
+    Surface(color = MaterialTheme.colorScheme.surfaceContainerHighest, shape = androidx.compose.foundation.shape.RoundedCornerShape(12.dp),
+        modifier = Modifier.fillMaxWidth()) {
+        DiffCodeRows(text, path, wrapLines, Modifier.heightIn(max = maxHeight.dp).padding(vertical = 6.dp), maxLines)
     }
 }
 
 @Composable
-fun NumberedCodeBlock(text: String, path: String, maxLines: Int = Int.MAX_VALUE) {
+fun NumberedCodeBlock(text: String, path: String, maxLines: Int = Int.MAX_VALUE, wrapLines: Boolean = false) {
     val lines = remember(text, path) { highlightCode(text, codeLanguage(path)) }
     val annotated = buildAnnotatedString {
         lines.take(maxLines).forEachIndexed { index, line ->
@@ -299,7 +294,8 @@ fun NumberedCodeBlock(text: String, path: String, maxLines: Int = Int.MAX_VALUE)
         if (lines.size > maxLines) append(appString(R.string.chat_code_viewer_001, lines.size - maxLines))
     }
     Surface(color = MaterialTheme.colorScheme.surfaceContainerHighest, shape = androidx.compose.foundation.shape.RoundedCornerShape(12.dp)) {
-        Text(annotated, style = MaterialTheme.typography.bodySmall.copy(fontFamily = Mono, fontSize = 12.sp * CodeScale, lineHeight = 18.sp * CodeScale), softWrap = false,
-            modifier = Modifier.fillMaxWidth().heightIn(max = 360.dp).verticalScroll(rememberScrollState()).horizontalScroll(rememberScrollState()).padding(10.dp))
+        Text(annotated, style = MaterialTheme.typography.bodySmall.copy(fontFamily = Mono, fontSize = 12.sp * CodeScale, lineHeight = 18.sp * CodeScale), softWrap = wrapLines,
+            modifier = Modifier.fillMaxWidth().heightIn(max = 360.dp).verticalScroll(rememberScrollState())
+                .then(if (wrapLines) Modifier else Modifier.horizontalScroll(rememberScrollState())).padding(10.dp))
     }
 }

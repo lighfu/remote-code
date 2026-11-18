@@ -9,7 +9,6 @@ import android.content.ClipboardManager
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
@@ -27,6 +26,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
+import androidx.compose.material.icons.automirrored.rounded.WrapText
 import androidx.compose.material.icons.rounded.ContentCopy
 import androidx.compose.material.icons.rounded.AccountTree
 import androidx.compose.material.icons.rounded.Add
@@ -52,6 +52,7 @@ import androidx.compose.material3.Checkbox
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.IconToggleButton
 import androidx.compose.material3.LoadingIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -376,29 +377,38 @@ private fun GitActionLabel(icon: ImageVector, text: String) {
 }
 
 @Composable
-private fun GitDiffDialog(sessionId: String, path: String, staged: Boolean, openedServer: dev.remotecode.data.ConnectionIdentity?, openedCwd: String?, onDismiss: () -> Unit) {
+internal fun GitDiffDialog(sessionId: String, path: String, staged: Boolean, openedServer: dev.remotecode.data.ConnectionIdentity?, openedCwd: String?, onDismiss: () -> Unit) {
     val repo = RemoteCodeApp.instance.repository
     val settings by repo.settings.collectAsState()
     val route by repo.route.collectAsState()
     val connection by repo.connection.collectAsState()
     val sessions by repo.sessions.collectAsState()
     val activeServer = remember(settings?.server, route, connection) { repo.api.server?.connectionIdentity() }
-    val sameServer = activeServer == openedServer
+    val sameServer = openedServer != null && activeServer == openedServer
     val sameProject = openedCwd != null && sessions.firstOrNull { it.id == sessionId }?.cwd == openedCwd
     var result by remember(sessionId, path, staged, openedServer) { mutableStateOf<GitDiff?>(null) }
     var error by remember(sessionId, path, staged, openedServer) { mutableStateOf<String?>(null) }
     var retry by remember { mutableIntStateOf(0) }
+    val scope = rememberCoroutineScope()
+    val wrapLines = settings?.codeWrap ?: true
     LaunchedEffect(sessionId, path, staged, openedServer, sameServer, sameProject, retry) {
-        if (!sameServer || !sameProject || repo.api.server?.connectionIdentity() != openedServer || repo.session(sessionId)?.cwd != openedCwd) return@LaunchedEffect
+        val target = repo.api.server?.takeIf { it.connectionIdentity() == openedServer } ?: return@LaunchedEffect
+        if (!sameServer || !sameProject || repo.session(sessionId)?.cwd != openedCwd) return@LaunchedEffect
         result = null; error = null
-        try { result = repo.api.gitDiff(sessionId, path, staged) }
+        try { result = repo.api.gitDiff(sessionId, path, staged, expectedServer = target) }
         catch (e: CancellationException) { throw e }
         catch (e: Exception) { error = e.message ?: appString(R.string.chat_git_sheet_008) }
     }
     Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
         Surface(Modifier.fillMaxSize()) {
             Scaffold(modifier = Modifier.systemBarsPadding(), topBar = {
-                TopAppBar(title = { Text(if (staged) stringResource(R.string.chat_git_sheet_007) else stringResource(R.string.chat_git_sheet_006), style = MaterialTheme.typography.titleMedium) }, navigationIcon = { IconButton(onClick = onDismiss) { Icon(Icons.AutoMirrored.Rounded.ArrowBack, stringResource(R.string.chat_back)) } })
+                TopAppBar(title = { Text(if (staged) stringResource(R.string.chat_git_sheet_007) else stringResource(R.string.chat_git_sheet_006), style = MaterialTheme.typography.titleMedium) },
+                    navigationIcon = { IconButton(onClick = onDismiss) { Icon(Icons.AutoMirrored.Rounded.ArrowBack, stringResource(R.string.chat_back)) } },
+                    actions = {
+                        IconToggleButton(checked = wrapLines, onCheckedChange = { on -> scope.launch { repo.settingsStore.setCodeWrap(on) } }) {
+                            Icon(Icons.AutoMirrored.Rounded.WrapText, stringResource(R.string.chat_code_viewer_018, if (wrapLines) "ON" else "OFF"))
+                        }
+                    })
             }) { padding ->
                 Column(Modifier.fillMaxSize().padding(padding).padding(horizontal = 12.dp)) {
                     SelectionContainer { Text(path, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(vertical = 8.dp)) }
@@ -410,7 +420,7 @@ private fun GitDiffDialog(sessionId: String, path: String, staged: Boolean, open
                             if (result!!.binary) Text(stringResource(R.string.chat_git_sheet_003), Modifier.padding(vertical = 8.dp))
                             if (result!!.truncated) Text(stringResource(R.string.chat_git_sheet_002), color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
                             if (result!!.text.isBlank() && !result!!.binary) Text(stringResource(R.string.chat_git_sheet_001))
-                            else BoxWithConstraints(Modifier.weight(1f).fillMaxWidth().padding(bottom = 12.dp)) { SelectionContainer { DiffBlock(result!!.text, maxHeight = (maxHeight.value.toInt() - 40).coerceAtLeast(100)) } }
+                            else DiffCodeView(result!!.text, path, wrapLines, Modifier.weight(1f).padding(bottom = 12.dp))
                         }
                     }
                 }

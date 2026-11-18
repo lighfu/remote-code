@@ -154,23 +154,82 @@ fun highlightCode(text: String, language: CodeLanguage): List<CodeLine> {
 
 data class DiffLine(val text: String, val kind: Char, val old: Int? = null, val new: Int? = null)
 
+internal data class DiffCodeRow(val line: DiffLine, val code: CodeLine)
+internal data class DiffCodeDocument(val rows: List<DiffCodeRow>, val totalLines: Int)
+
+/** Color each side separately so an opening comment on a deleted line cannot color an addition. */
+internal fun highlightDiff(text: String, path: String, maxLines: Int = Int.MAX_VALUE): DiffCodeDocument {
+    val parsed = parseDiff(text)
+    val rows = parsed.take(maxLines).mapTo(ArrayList()) { DiffCodeRow(it, CodeLine(it.text, emptyList())) }
+    var oldPath = path
+    var newPath = path
+    var start = 0
+    fun colorSide(end: Int, addition: Boolean) {
+        val language = codeLanguage(if (addition) newPath else oldPath)
+        if (language.family == "plain") return
+        val change = if (addition) '+' else '-'
+        val indices = (start until end).filter { rows[it].line.kind == ' ' || rows[it].line.kind == change }
+        if (indices.isEmpty()) return
+        val side = indices.joinToString("\n", postfix = "\n") { rows[it].line.text }
+        val code = highlightCode(side, language)
+        for ((index, row) in indices.withIndex()) rows[row] = rows[row].copy(code = code[index])
+    }
+    fun flush(end: Int) {
+        if (start < end) {
+            colorSide(end, false)
+            colorSide(end, true)
+        }
+    }
+    for ((index, row) in rows.withIndex()) {
+        if (row.line.kind != '@') continue
+        val header = row.line.text
+        // The marker describes the preceding line. Keep multiline syntax across it.
+        if (header.startsWith("\\ ")) continue
+        flush(index)
+        when {
+            header.startsWith("── ") -> {
+                oldPath = fileChangePath(header.removePrefix("── "))
+                newPath = oldPath
+            }
+            header.startsWith("diff --git ") -> {
+                val paths = header.removePrefix("diff --git ")
+                val split = Regex("""\s+"?b/""").find(paths)
+                oldPath = split?.let { paths.take(it.range.first).trim('"') } ?: path
+                newPath = split?.let { paths.drop(it.range.last + 1).trim('"') } ?: oldPath
+            }
+            header.startsWith("--- ") -> oldPath = header.drop(4).substringBefore('\t').trim('"')
+            header.startsWith("+++ ") -> newPath = header.drop(4).substringBefore('\t').trim('"')
+        }
+        start = index + 1
+    }
+    flush(rows.size)
+    return DiffCodeDocument(rows, parsed.size)
+}
+
 /** 位置情報のない差分には行番号を付けない。 */
 fun parseDiff(text: String): List<DiffLine> {
     var old: Int? = null
     var new: Int? = null
     var inHunk = false
-    val hunk = Regex("^@@ -(\\d+)(?:,\\d+)? \\+(\\d+)(?:,\\d+)? @@.*")
+    var untilOld = 0L
+    var untilNew = 0L
+    val hunk = Regex("^@@ -(\\d+)(?:,(\\d+))? \\+(\\d+)(?:,(\\d+))? @@.*")
     return text.lineSequence().map { line ->
         val match = hunk.matchEntire(line)
         when {
             match != null -> {
-                old = match.groupValues[1].toIntOrNull(); new = match.groupValues[2].toIntOrNull(); inHunk = true
+                old = match.groupValues[1].toIntOrNull(); new = match.groupValues[3].toIntOrNull(); inHunk = true
+                untilOld = (old ?: 0).toLong() + (match.groupValues[2].toIntOrNull() ?: 1)
+                untilNew = (new ?: 0).toLong() + (match.groupValues[4].toIntOrNull() ?: 1)
                 DiffLine(line, '@')
             }
             line.startsWith("──") || line == "⋯" || line.startsWith("diff --git") -> {
                 old = null; new = null; inHunk = false; DiffLine(line, '@')
             }
-            !inHunk && (line.startsWith("+++") || line.startsWith("---")) -> DiffLine(line, '@')
+            (!inHunk || (old?.toLong() == untilOld && new?.toLong() == untilNew)) &&
+                (line.startsWith("+++ ") || line.startsWith("--- ")) -> {
+                old = null; new = null; inHunk = false; DiffLine(line, '@')
+            }
             line.startsWith("\\") -> DiffLine(line, '@')
             line.startsWith("+") -> DiffLine(line.drop(if (inHunk) 1 else if (line.startsWith("+ ")) 2 else 1), '+', new = new).also { new = new?.plus(1) }
             line.startsWith("-") -> DiffLine(line.drop(if (inHunk) 1 else if (line.startsWith("- ")) 2 else 1), '-', old = old).also { old = old?.plus(1) }
