@@ -27,7 +27,10 @@ data class AppSettings(
     val footerDisplay: ChatFooterDisplay = ChatFooterDisplay(),
     val codeWrap: Boolean = true,
     val desktop: DesktopPreferences = DesktopPreferences(),
+    val toolWrap: ToolWrapPreferences = ToolWrapPreferences(),
 )
+
+data class ToolWrapPreferences(val input: Boolean = true, val output: Boolean = false)
 
 enum class DesktopResolution(val wire: String) {
     Standard("normal"), High("high"), Native("native");
@@ -92,6 +95,8 @@ class SettingsStore(private val context: Context) {
         val thinking = stringPreferencesKey("thinking_mode")
         val toolDetail = booleanPreferencesKey("tool_detail")
         val codeWrap = booleanPreferencesKey("code_wrap")
+        val toolInputWrap = booleanPreferencesKey("tool_input_wrap")
+        val toolOutputWrap = booleanPreferencesKey("tool_output_wrap")
         val footerContext = booleanPreferencesKey("chat_footer_context")
         val footerCache = booleanPreferencesKey("chat_footer_cache")
         val footerUsage = booleanPreferencesKey("chat_footer_usage")
@@ -140,6 +145,10 @@ class SettingsStore(private val context: Context) {
             thinking = p[Keys.thinking] ?: "full",
             toolDetail = p[Keys.toolDetail] ?: true,
             codeWrap = p[Keys.codeWrap] ?: true,
+            toolWrap = ToolWrapPreferences(
+                input = p[Keys.toolInputWrap] ?: true,
+                output = p[Keys.toolOutputWrap] ?: false,
+            ),
             desktop = DesktopPreferences(
                 fps = p[Keys.desktopFps]?.takeIf { it in DesktopPreferences.frameRates } ?: 10,
                 resolution = DesktopResolution.restore(p[Keys.desktopResolution], p[Keys.desktopHighDetail] ?: false),
@@ -245,6 +254,14 @@ class SettingsStore(private val context: Context) {
 
     suspend fun setCodeWrap(on: Boolean) {
         context.dataStore.edit { it[Keys.codeWrap] = on }
+    }
+
+    suspend fun setToolInputWrap(on: Boolean) {
+        context.dataStore.edit { it[Keys.toolInputWrap] = on }
+    }
+
+    suspend fun setToolOutputWrap(on: Boolean) {
+        context.dataStore.edit { it[Keys.toolOutputWrap] = on }
     }
 
     suspend fun setDesktop(prefs: DesktopPreferences, pairedToken: String?) {

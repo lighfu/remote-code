@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="settings_wrap_tool_input">도구 입력 자동 줄바꿈</string>
+    <string name="settings_wrap_tool_output">도구 출력 자동 줄바꿈</string>
+    <string name="settings_wrap_files_and_diffs">파일 및 Git diff 자동 줄바꿈</string>
+</resources>

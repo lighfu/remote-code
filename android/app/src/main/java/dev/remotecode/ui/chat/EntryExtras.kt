@@ -60,6 +60,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.dp
 import dev.remotecode.data.Entry
+import dev.remotecode.data.ToolWrapPreferences
 import dev.remotecode.data.agentSections
 import dev.remotecode.data.isActiveAgent
 import dev.remotecode.ui.common.EntryMedia
@@ -164,10 +165,8 @@ private fun fileParts(path: String): Pair<String, String> {
 }
 
 @Composable
-fun DetailedToolCard(e: Entry) {
+fun DetailedToolCard(e: Entry, wrap: ToolWrapPreferences) {
     var open by rememberSaveable(e.id) { mutableStateOf(false) }
-    var inputWrap by rememberSaveable(e.id) { mutableStateOf(true) }
-    var outputWrap by rememberSaveable(e.id) { mutableStateOf(false) }
     val isEdit = e.tool in EDIT_TOOLS
     val isCommand = e.tool in COMMAND_TOOLS
     val isTodo = e.tool == "TodoWrite"
@@ -181,7 +180,6 @@ fun DetailedToolCard(e: Entry) {
         modifier = Modifier.fillMaxWidth().then(toolFileGesture(e) { open = !open }).animateContentSize(),
     ) {
         Column(Modifier.padding(horizontal = 14.dp, vertical = 10.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            if (!isEdit && !isTodo && (isCommand || open)) ToolWrapControls(inputWrap, { inputWrap = it }, outputWrap, { outputWrap = it })
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Icon(toolIcon(e.tool), null, Modifier.size(20.dp), tint = MaterialTheme.colorScheme.primary)
                 Spacer(Modifier.size(10.dp))
@@ -199,8 +197,8 @@ fun DetailedToolCard(e: Entry) {
                                 if (isCommand) commandCodeLanguage(e.tool, e.title.orEmpty()) else codeLanguage("plain.txt"),
                             ),
                             style = MaterialTheme.typography.bodyMedium.copy(fontFamily = Mono),
-                            softWrap = inputWrap,
-                            modifier = if (inputWrap) Modifier else Modifier.horizontalScroll(rememberScrollState()),
+                            softWrap = wrap.input,
+                            modifier = if (wrap.input) Modifier else Modifier.horizontalScroll(rememberScrollState()),
                             maxLines = if (open) 8 else if (isCommand) 3 else 1,
                             overflow = TextOverflow.Ellipsis,
                         )
@@ -221,16 +219,16 @@ fun DetailedToolCard(e: Entry) {
                 StatusIcon(e.status)
             }
             when {
-                isEdit && !e.detail.isNullOrBlank() -> EditPreview(e, maxLines = if (open) Int.MAX_VALUE else 12)
+                isEdit && !e.detail.isNullOrBlank() -> EditPreview(e, maxLines = if (open) Int.MAX_VALUE else 12, wrapLines = wrap.input)
                 isTodo && !e.detail.isNullOrBlank() -> Text(e.detail, style = MaterialTheme.typography.bodyMedium)
                 isCommand -> {
-                    if (open && e.detail.isNullOrBlank() && !e.title.isNullOrBlank()) CodeBlock(e.title, diff = false, language = commandCodeLanguage(e.tool, e.title), wrapLines = inputWrap)
-                    if (open && !e.detail.isNullOrBlank()) CodeBlock(e.detail, diff = false, language = commandCodeLanguage(e.tool, e.detail), wrapLines = inputWrap)
-                    if (!e.output.isNullOrBlank()) CodeBlock(e.output, diff = false, maxLines = if (open) Int.MAX_VALUE else 6, tail = true, wrapLines = outputWrap)
+                    if (open && e.detail.isNullOrBlank() && !e.title.isNullOrBlank()) CodeBlock(e.title, diff = false, language = commandCodeLanguage(e.tool, e.title), wrapLines = wrap.input)
+                    if (open && !e.detail.isNullOrBlank()) CodeBlock(e.detail, diff = false, language = commandCodeLanguage(e.tool, e.detail), wrapLines = wrap.input)
+                    if (!e.output.isNullOrBlank()) CodeBlock(e.output, diff = false, maxLines = if (open) Int.MAX_VALUE else 6, tail = true, wrapLines = wrap.output)
                 }
                 open -> {
-                    if (!e.detail.isNullOrBlank()) CodeBlock(e.detail, diff = false, wrapLines = inputWrap)
-                    if (!e.output.isNullOrBlank()) CodeBlock(e.output, diff = false, wrapLines = outputWrap)
+                    if (!e.detail.isNullOrBlank()) CodeBlock(e.detail, diff = false, wrapLines = wrap.input)
+                    if (!e.output.isNullOrBlank()) CodeBlock(e.output, diff = false, wrapLines = wrap.output)
                     if (e.detail.isNullOrBlank() && e.output.isNullOrBlank()) {
                         Text(stringResource(R.string.chat_entry_extras_013), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
@@ -292,7 +290,7 @@ fun AgentCard(e: Entry, children: List<Entry>, display: Display, respond: Respon
             if (open) {
                 if (!e.detail.isNullOrBlank()) {
                     Text(stringResource(R.string.chat_entry_extras_009), style = MaterialTheme.typography.labelMedium)
-                    CodeBlock(e.detail, diff = false, maxHeight = 200)
+                    CodeBlock(e.detail, diff = false, maxHeight = 200, wrapLines = display.toolWrap.input)
                 }
                 if (children.isEmpty()) {
                     Text(if (running) stringResource(R.string.chat_entry_extras_008) else stringResource(R.string.chat_entry_extras_007), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -309,7 +307,7 @@ fun AgentCard(e: Entry, children: List<Entry>, display: Display, respond: Respon
                 }
                 if (!e.output.isNullOrBlank()) {
                     Text(stringResource(R.string.chat_entry_extras_005), style = MaterialTheme.typography.labelMedium)
-                    CodeBlock(e.output, diff = false, maxHeight = 260)
+                    CodeBlock(e.output, diff = false, maxHeight = 260, wrapLines = display.toolWrap.output)
                 }
             }
         }
@@ -342,7 +340,7 @@ fun AgentsSheet(agents: List<Entry>, children: Map<String, List<Entry>>, display
 }
 
 @Composable
-fun ChangedFilesSheet(edits: List<Entry>, onDismiss: () -> Unit) {
+fun ChangedFilesSheet(edits: List<Entry>, wrap: ToolWrapPreferences, onDismiss: () -> Unit) {
     val x = Extra.colors
     ModalBottomSheet(modifier = dev.remotecode.ui.common.hapticArea(), onDismissRequest = onDismiss, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
         val total = edits.fold(0 to 0) { acc, e -> diffStats(e.detail).let { (a, d) -> acc.first + a to acc.second + d } }
@@ -357,7 +355,7 @@ fun ChangedFilesSheet(edits: List<Entry>, onDismiss: () -> Unit) {
         }
         LazyColumn(Modifier.heightIn(max = 640.dp)) {
             items(edits.asReversed(), key = { it.id }) { e ->
-                Box(Modifier.padding(horizontal = 14.dp, vertical = 4.dp)) { DetailedToolCard(e) }
+                Box(Modifier.padding(horizontal = 14.dp, vertical = 4.dp)) { DetailedToolCard(e, wrap) }
             }
         }
         Surface(Modifier.padding(8.dp)) { TextButton(onClick = onDismiss) { Text(stringResource(R.string.chat_close)) } }

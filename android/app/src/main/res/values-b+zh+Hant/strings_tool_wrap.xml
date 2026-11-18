@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="settings_wrap_tool_input">工具輸入自動換行</string>
+    <string name="settings_wrap_tool_output">工具輸出自動換行</string>
+    <string name="settings_wrap_files_and_diffs">檔案與 Git 差異自動換行</string>
+</resources>

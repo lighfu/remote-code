@@ -20,6 +20,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
+import androidx.compose.material.icons.automirrored.rounded.WrapText
 import androidx.compose.material.icons.rounded.Build
 import androidx.compose.material.icons.rounded.AccountTree
 import androidx.compose.material.icons.rounded.Computer
@@ -226,6 +227,17 @@ fun SettingsScreen(onBack: () -> Unit, onChangeServer: () -> Unit, onAppearance:
                 trailingContent = { Switch(checked = s.toolDetail, onCheckedChange = null) },
             ) { Text(stringResource(R.string.screen_settings_029)) }
 
+            Spacer(Modifier.height(8.dp))
+            WrapSetting(R.string.settings_wrap_tool_input, s.toolWrap.input, 0) { on ->
+                scope.launch { repo.settingsStore.setToolInputWrap(on) }
+            }
+            WrapSetting(R.string.settings_wrap_tool_output, s.toolWrap.output, 1) { on ->
+                scope.launch { repo.settingsStore.setToolOutputWrap(on) }
+            }
+            WrapSetting(R.string.settings_wrap_files_and_diffs, s.codeWrap, 2) { on ->
+                scope.launch { repo.settingsStore.setCodeWrap(on) }
+            }
+
             Text(stringResource(R.string.screen_settings_030), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(start = 8.dp, top = 16.dp, bottom = 8.dp))
             AppUpdateItem(connected = conn is ConnState.Connected)
 
@@ -243,6 +255,18 @@ fun SettingsScreen(onBack: () -> Unit, onChangeServer: () -> Unit, onAppearance:
             }
         }
     }
+}
+
+@Composable
+private fun WrapSetting(title: Int, checked: Boolean, index: Int, onChange: (Boolean) -> Unit) {
+    val haptics = dev.remotecode.ui.common.rememberHaptics()
+    SegmentedListItem(
+        onClick = { haptics.toggle(!checked); onChange(!checked) },
+        shapes = ListItemDefaults.segmentedShapes(index, 3),
+        colors = ListItemDefaults.segmentedColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
+        leadingContent = { Icon(Icons.AutoMirrored.Rounded.WrapText, null) },
+        trailingContent = { Switch(checked = checked, onCheckedChange = null) },
+    ) { Text(stringResource(title)) }
 }
 
 private fun appVersion(context: android.content.Context): String =

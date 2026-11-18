@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="settings_wrap_tool_input">ツールの入力を折り返す</string>
+    <string name="settings_wrap_tool_output">ツールの出力を折り返す</string>
+    <string name="settings_wrap_files_and_diffs">ファイルと Git 差分を折り返す</string>
+</resources>

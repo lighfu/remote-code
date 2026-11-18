@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="settings_wrap_tool_input">Wrap tool input</string>
+    <string name="settings_wrap_tool_output">Wrap tool output</string>
+    <string name="settings_wrap_files_and_diffs">Wrap files and Git diffs</string>
+</resources>

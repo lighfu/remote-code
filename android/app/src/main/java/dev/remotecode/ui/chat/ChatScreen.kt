@@ -110,6 +110,7 @@ import androidx.compose.ui.unit.dp
 import dev.remotecode.RemoteCodeApp
 import dev.remotecode.data.ConnState
 import dev.remotecode.data.ChatFooterDisplay
+import dev.remotecode.data.ToolWrapPreferences
 import dev.remotecode.data.ChatFooterItem
 import dev.remotecode.data.CodeQuote
 import dev.remotecode.data.CodeQuoteDrafts
@@ -247,7 +248,11 @@ fun ChatScreen(sessionId: String, onBack: () -> Unit, onTerminals: (String) -> U
     var commands by remember { mutableStateOf<List<CommandInfo>?>(null) }
     var paletteOpen by remember { mutableStateOf(false) }
     val footerDisplay = settings?.footerDisplay ?: ChatFooterDisplay()
-    val display = Display(thinking = settings?.thinking ?: "full", toolDetail = settings?.toolDetail ?: true)
+    val display = Display(
+        thinking = settings?.thinking ?: "full",
+        toolDetail = settings?.toolDetail ?: true,
+        toolWrap = settings?.toolWrap ?: ToolWrapPreferences(),
+    )
 
     DisposableEffect(sessionId) {
         repo.visibleSession.value = sessionId
@@ -811,7 +816,7 @@ fun ChatScreen(sessionId: String, onBack: () -> Unit, onTerminals: (String) -> U
     }
     androidx.compose.runtime.CompositionLocalProvider(androidx.compose.ui.platform.LocalUriHandler provides linkHandler) {
         if (showAgents) AgentsSheet(agents, children, display, respond) { showAgents = false }
-        if (showFiles) ChangedFilesSheet(edits) { showFiles = false }
+        if (showFiles) ChangedFilesSheet(edits, display.toolWrap) { showFiles = false }
     }
     if (showContext) ContextSheet(sessionId) { showContext = false }
     if (showCache) CacheSheet(sessionId) { showCache = false }

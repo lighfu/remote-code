@@ -26,7 +26,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.rounded.WrapText
 import androidx.compose.material.icons.rounded.Block
 import androidx.compose.material.icons.rounded.Bolt
 import androidx.compose.material.icons.rounded.Build
@@ -55,7 +54,6 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconToggleButton
 import androidx.compose.material3.LoadingIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -89,6 +87,7 @@ import com.mikepenz.markdown.m3.markdownTypography
 import com.mikepenz.markdown.model.rememberMarkdownState
 import dev.remotecode.data.ApprovalOption
 import dev.remotecode.data.Entry
+import dev.remotecode.data.ToolWrapPreferences
 import dev.remotecode.data.crossSessionMessage
 import dev.remotecode.data.attachedFileText
 import dev.remotecode.data.Question
@@ -100,7 +99,11 @@ import dev.remotecode.ui.theme.Mono
 /** choice と answers はどちらか一方を渡す。 */
 typealias Responder = (requestId: String, choice: String?, answers: Map<String, List<String>>?) -> Unit
 
-data class Display(val thinking: String = "full", val toolDetail: Boolean = true)
+data class Display(
+    val thinking: String = "full",
+    val toolDetail: Boolean = true,
+    val toolWrap: ToolWrapPreferences = ToolWrapPreferences(),
+)
 
 /** null なら巻き戻し不可。 */
 val LocalRewind = androidx.compose.runtime.staticCompositionLocalOf<((Entry) -> Unit)?> { null }
@@ -135,8 +138,8 @@ fun EntryView(
                 e.tool == "Widget" && !e.html.isNullOrBlank() -> WidgetCard(e)
                 e.tool == "Artifact" -> ArtifactCard(e)
                 e.tool == "Agent" -> AgentCard(e, children[e.id].orEmpty(), display, respond, children)
-                display.toolDetail -> DetailedToolCard(e)
-                else -> ToolCard(e)
+                display.toolDetail -> DetailedToolCard(e, display.toolWrap)
+                else -> ToolCard(e, display.toolWrap)
             }
             "approval" -> ApprovalCard(e, respond)
             "question" -> QuestionCard(e, respond)
@@ -376,16 +379,13 @@ internal fun StatusIcon(status: String?) {
 }
 
 @Composable
-private fun ToolCard(e: Entry) {
+private fun ToolCard(e: Entry, wrap: ToolWrapPreferences) {
     var open by rememberSaveable(e.id) { mutableStateOf(false) }
-    var inputWrap by rememberSaveable(e.id) { mutableStateOf(true) }
-    var outputWrap by rememberSaveable(e.id) { mutableStateOf(false) }
     Card(
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
         shape = RoundedCornerShape(18.dp),
         modifier = Modifier.fillMaxWidth().then(toolFileGesture(e) { open = !open }).animateContentSize(),
     ) {
-        if (e.tool !in EDIT_TOOLS && e.tool != "TodoWrite" && (open || e.tool in setOf("Bash", "PowerShell", "command"))) ToolWrapControls(inputWrap, { inputWrap = it }, outputWrap, { outputWrap = it })
         Row(Modifier.padding(horizontal = 14.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
             Icon(toolIcon(e.tool), null, Modifier.size(20.dp), tint = MaterialTheme.colorScheme.primary)
             Spacer(Modifier.size(10.dp))
@@ -393,8 +393,8 @@ private fun ToolCard(e: Entry) {
                 Text(
                     highlightedCode(e.title ?: e.tool ?: "", if (e.tool in setOf("Bash", "PowerShell", "command")) commandCodeLanguage(e.tool, e.title.orEmpty()) else codeLanguage("plain.txt")),
                     style = MaterialTheme.typography.bodyMedium.copy(fontFamily = Mono),
-                    softWrap = inputWrap,
-                    modifier = if (inputWrap) Modifier else Modifier.horizontalScroll(rememberScrollState()),
+                    softWrap = wrap.input,
+                    modifier = if (wrap.input) Modifier else Modifier.horizontalScroll(rememberScrollState()),
                     maxLines = if (open) 6 else 1,
                     overflow = TextOverflow.Ellipsis,
                 )
@@ -411,11 +411,11 @@ private fun ToolCard(e: Entry) {
         if (open) {
             Column(Modifier.padding(start = 14.dp, end = 14.dp, bottom = 12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 if (!e.detail.isNullOrBlank()) {
-                    if (e.tool in EDIT_TOOLS) EditPreview(e) else CodeBlock(e.detail, diff = false, language = if (e.tool in setOf("Bash", "PowerShell", "command")) commandCodeLanguage(e.tool, e.detail) else null, wrapLines = inputWrap)
+                    if (e.tool in EDIT_TOOLS) EditPreview(e, wrapLines = wrap.input) else CodeBlock(e.detail, diff = false, language = if (e.tool in setOf("Bash", "PowerShell", "command")) commandCodeLanguage(e.tool, e.detail) else null, wrapLines = wrap.input)
                 }
                 if (!e.output.isNullOrBlank()) {
                     Text(stringResource(R.string.chat_entry_views_028), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    CodeBlock(e.output, diff = false, wrapLines = outputWrap)
+                    CodeBlock(e.output, diff = false, wrapLines = wrap.output)
                 }
                 if (e.detail.isNullOrBlank() && e.output.isNullOrBlank()) {
                     Text(stringResource(R.string.chat_entry_extras_013), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -426,23 +426,8 @@ private fun ToolCard(e: Entry) {
 }
 
 @Composable
-internal fun ToolWrapControls(inputWrap: Boolean, onInputWrap: (Boolean) -> Unit, outputWrap: Boolean, onOutputWrap: (Boolean) -> Unit) {
-    Row(Modifier.fillMaxWidth().padding(horizontal = 10.dp), horizontalArrangement = Arrangement.End, verticalAlignment = Alignment.CenterVertically) {
-        Text(stringResource(R.string.chat_input), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        IconToggleButton(checked = inputWrap, onCheckedChange = onInputWrap, modifier = Modifier.size(32.dp)) {
-            Icon(Icons.AutoMirrored.Rounded.WrapText, stringResource(if (inputWrap) R.string.chat_input_wrap_disable else R.string.chat_input_wrap_enable), Modifier.size(18.dp))
-        }
-        Spacer(Modifier.size(10.dp))
-        Text(stringResource(R.string.chat_output), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        IconToggleButton(checked = outputWrap, onCheckedChange = onOutputWrap, modifier = Modifier.size(32.dp)) {
-            Icon(Icons.AutoMirrored.Rounded.WrapText, stringResource(if (outputWrap) R.string.chat_output_wrap_disable else R.string.chat_output_wrap_enable), Modifier.size(18.dp))
-        }
-    }
-}
-
-@Composable
 fun CodeBlock(text: String, diff: Boolean, maxHeight: Int = 360, maxLines: Int = Int.MAX_VALUE, tail: Boolean = false, language: CodeLanguage? = null, wrapLines: Boolean = false) {
-    if (diff) { DiffBlock(text, maxHeight, maxLines); return }
+    if (diff) { DiffBlock(text, maxHeight, maxLines, wrapLines = wrapLines); return }
     val colored = highlightedCode(text, language)
     val shownText = remember(colored, maxLines, tail) {
         val lines = colored.text.lines()
