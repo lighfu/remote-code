@@ -47,6 +47,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.automirrored.rounded.Send
+import androidx.compose.material.icons.automirrored.rounded.WrapText
 import androidx.compose.material.icons.rounded.AddPhotoAlternate
 import androidx.compose.material.icons.rounded.Mic
 import androidx.compose.material.icons.rounded.Terminal
@@ -79,6 +80,7 @@ import androidx.compose.material3.SmallFloatingActionButton
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TextField
@@ -105,6 +107,11 @@ import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.toggleableState
+import androidx.compose.ui.state.ToggleableState
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import dev.remotecode.RemoteCodeApp
@@ -146,6 +153,20 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.flow.MutableStateFlow
 import java.io.ByteArrayOutputStream
+
+@Composable
+private fun WrapMenuItem(label: Int, checked: Boolean, onChange: (Boolean) -> Unit) {
+    DropdownMenuItem(
+        text = { Text(stringResource(label)) },
+        leadingIcon = { Icon(Icons.AutoMirrored.Rounded.WrapText, null) },
+        trailingIcon = { Switch(checked = checked, onCheckedChange = null) },
+        modifier = Modifier.semantics {
+            role = Role.Switch
+            toggleableState = ToggleableState(checked)
+        },
+        onClick = { onChange(!checked) },
+    )
+}
 
 private class Attachment(val payload: ImagePayload, val preview: Bitmap)
 private data class ChatSubmission(
@@ -599,7 +620,6 @@ fun ChatScreen(sessionId: String, onBack: () -> Unit, onTerminals: (String) -> U
                                 text = { Text(stringResource(R.string.chat_chat_screen_057, ThinkingModes.label(display.thinking))) },
                                 leadingIcon = { Icon(Icons.Rounded.Lightbulb, null) },
                                 onClick = {
-                                    moreMenu = false
                                     val next = when (display.thinking) { "full" -> "summary"; "summary" -> "off"; else -> "full" }
                                     scope.launch { repo.settingsStore.setThinking(next) }
                                 },
@@ -607,8 +627,17 @@ fun ChatScreen(sessionId: String, onBack: () -> Unit, onTerminals: (String) -> U
                             DropdownMenuItem(
                                 text = { Text(if (display.toolDetail) stringResource(R.string.chat_chat_screen_056) else stringResource(R.string.chat_chat_screen_055)) },
                                 leadingIcon = { Icon(Icons.Rounded.Build, null) },
-                                onClick = { moreMenu = false; scope.launch { repo.settingsStore.setToolDetail(!display.toolDetail) } },
+                                onClick = { scope.launch { repo.settingsStore.setToolDetail(!display.toolDetail) } },
                             )
+                            WrapMenuItem(R.string.settings_wrap_tool_input, display.toolWrap.input) { on ->
+                                scope.launch { repo.settingsStore.setToolInputWrap(on) }
+                            }
+                            WrapMenuItem(R.string.settings_wrap_tool_output, display.toolWrap.output) { on ->
+                                scope.launch { repo.settingsStore.setToolOutputWrap(on) }
+                            }
+                            WrapMenuItem(R.string.settings_wrap_files_and_diffs, settings?.codeWrap ?: true) { on ->
+                                scope.launch { repo.settingsStore.setCodeWrap(on) }
+                            }
                             DropdownMenuItem(
                                 text = {
                                     Column {
