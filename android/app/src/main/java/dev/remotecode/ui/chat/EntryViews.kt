@@ -383,7 +383,8 @@ private fun ToolCard(e: Entry, wrap: ToolWrapPreferences) {
     var open by rememberSaveable(e.id) { mutableStateOf(false) }
     val files = rememberToolFiles(e)
     val multipleEdits = e.tool in EDIT_TOOLS && files.size > 1
-    val title = if (multipleEdits) stringResource(R.string.chat_chat_screen_050, editFileCount(e, files)) else e.title ?: e.tool ?: ""
+    val input = remember(e, open) { toolCardInput(e, showDetail = open) }
+    val title = if (multipleEdits) stringResource(R.string.chat_chat_screen_050, editFileCount(e, files)) else input.heading
     Card(
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
         shape = RoundedCornerShape(18.dp),
@@ -393,8 +394,8 @@ private fun ToolCard(e: Entry, wrap: ToolWrapPreferences) {
             Icon(toolIcon(e.tool), null, Modifier.size(20.dp), tint = MaterialTheme.colorScheme.primary)
             Spacer(Modifier.size(10.dp))
             Column(Modifier.weight(1f)) {
-                Text(
-                    highlightedCode(title, if (e.tool in setOf("Bash", "PowerShell", "command")) commandCodeLanguage(e.tool, e.title.orEmpty()) else codeLanguage("plain.txt")),
+                if (title != null) Text(
+                    highlightedCode(title, if (e.tool in COMMAND_TOOLS) commandCodeLanguage(e.tool, title) else codeLanguage("plain.txt")),
                     style = MaterialTheme.typography.bodyMedium.copy(fontFamily = Mono),
                     softWrap = wrap.input,
                     modifier = if (wrap.input) Modifier else Modifier.horizontalScroll(rememberScrollState()),
@@ -404,8 +405,8 @@ private fun ToolCard(e: Entry, wrap: ToolWrapPreferences) {
                 if (multipleEdits && !e.title.isNullOrBlank() && !isFileChangeSummary(e.title)) {
                     Text(e.title, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
-                if (!e.text.isNullOrBlank()) {
-                    Text(e.text, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                if (input.description != null) {
+                    Text(input.description, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
             }
             Spacer(Modifier.size(8.dp))
@@ -418,14 +419,14 @@ private fun ToolCard(e: Entry, wrap: ToolWrapPreferences) {
             Column(Modifier.padding(start = 14.dp, end = 14.dp, bottom = 12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 if (multipleEdits || (e.tool in EDIT_TOOLS && e.hasToolDetail)) {
                     EditPreview(e, maxLines = if (open) Int.MAX_VALUE else 12, wrapLines = wrap.input, files = files)
-                } else if (!e.detail.isNullOrBlank()) {
-                    CodeBlock(e.detail, diff = false, language = if (e.tool in setOf("Bash", "PowerShell", "command")) commandCodeLanguage(e.tool, e.detail) else null, wrapLines = wrap.input)
+                } else if (input.detail != null) {
+                    CodeBlock(input.detail, diff = false, language = if (e.tool in COMMAND_TOOLS) commandCodeLanguage(e.tool, input.detail) else null, wrapLines = wrap.input)
                 }
                 if (open && !e.output.isNullOrBlank()) {
                     Text(stringResource(R.string.chat_entry_views_028), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     CodeBlock(e.output, diff = false, wrapLines = wrap.output)
                 }
-                if (open && !e.hasToolDetail && e.output.isNullOrBlank()) {
+                if (open && input.detail == null && !e.hasToolDetail && e.output.isNullOrBlank()) {
                     Text(stringResource(R.string.chat_entry_extras_013), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
@@ -475,6 +476,7 @@ fun CodeBlock(text: String, diff: Boolean, maxHeight: Int = 360, maxLines: Int =
 @Composable
 private fun ApprovalCard(e: Entry, respond: Responder, wrapInput: Boolean) {
     val pending = e.status == "pending"
+    val input = remember(e, pending) { toolCardInput(e, showDetail = pending) }
     var sent by remember(e.id) { mutableStateOf(false) }
     val container = if (pending) MaterialTheme.colorScheme.tertiaryContainer else MaterialTheme.colorScheme.surfaceContainer
     val onContainer = if (pending) MaterialTheme.colorScheme.onTertiaryContainer else MaterialTheme.colorScheme.onSurface
@@ -496,9 +498,9 @@ private fun ApprovalCard(e: Entry, respond: Responder, wrapInput: Boolean) {
             e.text?.lineSequence()?.drop(1)?.joinToString("\n")?.takeIf { it.isNotBlank() && pending }?.let {
                 Text(it, style = MaterialTheme.typography.bodySmall)
             }
-            if (!e.title.isNullOrBlank()) {
+            if (!e.title.isNullOrBlank() && input.heading != null) {
                 Text(
-                    e.title, style = MaterialTheme.typography.bodyMedium.copy(fontFamily = Mono),
+                    input.heading, style = MaterialTheme.typography.bodyMedium.copy(fontFamily = Mono),
                     maxLines = if (pending) 8 else 1, overflow = TextOverflow.Ellipsis,
                     softWrap = wrapInput,
                     modifier = if (wrapInput) Modifier else Modifier.horizontalScroll(rememberScrollState()),
@@ -506,8 +508,8 @@ private fun ApprovalCard(e: Entry, respond: Responder, wrapInput: Boolean) {
             }
             if (pending && e.tool in EDIT_TOOLS) {
                 EditPreview(e, wrapLines = wrapInput)
-            } else if (pending && !e.detail.isNullOrBlank()) {
-                CodeBlock(e.detail, diff = false, maxHeight = 280, wrapLines = wrapInput)
+            } else if (pending && input.detail != null) {
+                CodeBlock(input.detail, diff = false, maxHeight = 280, wrapLines = wrapInput)
             }
             if (pending) {
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {

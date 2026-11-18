@@ -69,7 +69,31 @@ import dev.remotecode.ui.theme.ChatFont
 import dev.remotecode.ui.theme.Mono
 
 val EDIT_TOOLS = setOf("Edit", "MultiEdit", "Write", "NotebookEdit", "fileChange")
-private val COMMAND_TOOLS = setOf("Bash", "PowerShell", "command")
+internal val COMMAND_TOOLS = setOf("Bash", "PowerShell", "command")
+
+internal data class ToolCardInput(val heading: String?, val description: String?, val detail: String?)
+
+internal fun toolCardInput(entry: Entry, showDetail: Boolean): ToolCardInput {
+    val title = entry.title?.takeIf { it.isNotBlank() } ?: entry.tool
+    val detail = if (showDetail && entry.tool !in EDIT_TOOLS) {
+        entry.detail?.takeIf { it.isNotBlank() } ?: entry.title?.takeIf { entry.tool in COMMAND_TOOLS && it.isNotBlank() }
+    } else null
+    val heading = if (title != null && detail != null && title.previewsInput(detail)) {
+        entry.tool?.takeUnless { it == detail }
+    } else title
+    val description = entry.text?.takeUnless { it.isBlank() || it == title || it == heading || it == detail }
+    return ToolCardInput(heading, description, detail)
+}
+
+private fun String.previewsInput(input: String): Boolean {
+    if (this == input) return true
+    val prefix = when {
+        endsWith('…') -> dropLast(1)
+        endsWith("...") -> dropLast(3)
+        else -> return false
+    }
+    return prefix.isNotBlank() && input.startsWith(prefix)
+}
 
 fun diffStats(diff: String?): Pair<Int, Int> {
     if (diff.isNullOrEmpty()) return 0 to 0
@@ -176,6 +200,7 @@ fun DetailedToolCard(e: Entry, wrap: ToolWrapPreferences) {
     val isEdit = e.tool in EDIT_TOOLS
     val isCommand = e.tool in COMMAND_TOOLS
     val isTodo = e.tool == "TodoWrite"
+    val input = remember(e, open) { toolCardInput(e, showDetail = open || isTodo) }
     val files = rememberToolFiles(e)
     val multipleEdits = isEdit && files.size > 1
     val editPath = files.singleOrNull()
@@ -196,13 +221,10 @@ fun DetailedToolCard(e: Entry, wrap: ToolWrapPreferences) {
                         Text(name, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
                         if (dir.isNotBlank()) Text(dir, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.StartEllipsis)
                     } else {
-                        Text(
-                            highlightedCode(
-                                if (changedCount != null) stringResource(R.string.chat_chat_screen_050, changedCount)
-                                else if (e.tool == "fileChange") localizedServerMessage(e.title.orEmpty())
-                                else e.title ?: e.tool ?: "",
-                                if (isCommand) commandCodeLanguage(e.tool, e.title.orEmpty()) else codeLanguage("plain.txt"),
-                            ),
+                        val heading = if (changedCount != null) stringResource(R.string.chat_chat_screen_050, changedCount)
+                            else if (e.tool == "fileChange") localizedServerMessage(e.title.orEmpty()) else input.heading
+                        if (heading != null) Text(
+                            highlightedCode(heading, if (isCommand) commandCodeLanguage(e.tool, heading) else codeLanguage("plain.txt")),
                             style = MaterialTheme.typography.bodyMedium.copy(fontFamily = Mono),
                             softWrap = wrap.input,
                             modifier = if (wrap.input) Modifier else Modifier.horizontalScroll(rememberScrollState()),
@@ -212,8 +234,8 @@ fun DetailedToolCard(e: Entry, wrap: ToolWrapPreferences) {
                         if (multipleEdits && !e.title.isNullOrBlank() && !isFileChangeSummary(e.title)) {
                             Text(e.title, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
-                        if (!e.text.isNullOrBlank()) {
-                            Text(e.text, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        if (input.description != null) {
+                            Text(input.description, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
                         }
                     }
                 }
@@ -230,14 +252,13 @@ fun DetailedToolCard(e: Entry, wrap: ToolWrapPreferences) {
             }
             when {
                 multipleEdits || (isEdit && e.hasToolDetail) -> EditPreview(e, maxLines = if (open) Int.MAX_VALUE else 12, wrapLines = wrap.input, files = files)
-                isTodo && !e.detail.isNullOrBlank() -> Text(e.detail, style = MaterialTheme.typography.bodyMedium)
+                isTodo && input.detail != null -> Text(input.detail, style = MaterialTheme.typography.bodyMedium)
                 isCommand -> {
-                    if (open && e.detail.isNullOrBlank() && !e.title.isNullOrBlank()) CodeBlock(e.title, diff = false, language = commandCodeLanguage(e.tool, e.title), wrapLines = wrap.input)
-                    if (open && !e.detail.isNullOrBlank()) CodeBlock(e.detail, diff = false, language = commandCodeLanguage(e.tool, e.detail), wrapLines = wrap.input)
+                    if (input.detail != null) CodeBlock(input.detail, diff = false, language = commandCodeLanguage(e.tool, input.detail), wrapLines = wrap.input)
                     if (!e.output.isNullOrBlank()) CodeBlock(e.output, diff = false, maxLines = if (open) Int.MAX_VALUE else 6, tail = true, wrapLines = wrap.output)
                 }
                 open -> {
-                    if (!e.detail.isNullOrBlank()) CodeBlock(e.detail, diff = false, wrapLines = wrap.input)
+                    if (input.detail != null) CodeBlock(input.detail, diff = false, wrapLines = wrap.input)
                     if (!e.output.isNullOrBlank()) CodeBlock(e.output, diff = false, wrapLines = wrap.output)
                     if (e.detail.isNullOrBlank() && e.output.isNullOrBlank()) {
                         Text(stringResource(R.string.chat_entry_extras_013), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
