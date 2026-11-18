@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"image/png"
 	"io"
 	"net/http"
 	"net/url"
@@ -57,8 +58,27 @@ type desktopBackend struct {
 type desktopFrameOptions struct {
 	highDetail, native, separateCursor bool
 	capture, codec, previousETag       string
+	jpegQuality                        int
+	pngCompression                     string
 	regions                            *desktopRegionState
 	rate                               *desktopStreamRate
+}
+
+// The zero-value selection retains the fast PNG encoding used by older clients.
+var desktopPNGLevels = map[string]png.CompressionLevel{
+	"": png.BestSpeed, "speed": png.BestSpeed, "none": png.NoCompression,
+	"balanced": png.DefaultCompression, "best": png.BestCompression,
+}
+
+// Conditional requests must refresh a static desktop when its encoding changes.
+func (o desktopFrameOptions) encodingKey() string {
+	if o.jpegQuality != 0 {
+		return o.codec + "-" + strconv.Itoa(o.jpegQuality)
+	}
+	if o.pngCompression != "" && o.pngCompression != "speed" {
+		return o.codec + "-" + o.pngCompression
+	}
+	return o.codec
 }
 
 type desktopFrame struct {
@@ -95,6 +115,19 @@ func parseDesktopFrameQuery(query url.Values) (string, desktopFrameOptions, erro
 		(opts.capture != "auto" && opts.capture != "gdi" && opts.capture != "dxgi") ||
 		(opts.codec != "jpeg" && opts.codec != "png") || (cursor != "" && cursor != "embedded" && !opts.separateCursor) {
 		return "", desktopFrameOptions{}, &HTTPError{http.StatusBadRequest, "Invalid desktop frame options"}
+	}
+	if query.Has("jpegQuality") {
+		quality, err := strconv.Atoi(query.Get("jpegQuality"))
+		if opts.codec != "jpeg" || err != nil || quality < 1 || quality > 100 {
+			return "", desktopFrameOptions{}, &HTTPError{http.StatusBadRequest, "jpegQuality requires JPEG and a value between 1 and 100"}
+		}
+		opts.jpegQuality = quality
+	}
+	if query.Has("pngCompression") {
+		opts.pngCompression = query.Get("pngCompression")
+		if _, ok := desktopPNGLevels[opts.pngCompression]; !ok || opts.codec != "png" || opts.pngCompression == "" {
+			return "", desktopFrameOptions{}, &HTTPError{http.StatusBadRequest, "pngCompression requires PNG and one of none, speed, balanced, best"}
+		}
 	}
 	return target, opts, nil
 }
@@ -312,7 +345,7 @@ func registerDesktop(mux *http.ServeMux, backend desktopBackend, serverDone ...<
 			return
 		}
 		writeJSON(w, http.StatusOK, M{"displays": displays, "layout": desktopLayoutID(displays), "captureMethods": backend.captureMethods(displays),
-			"codecs": []string{"jpeg", "png"}, "touchpad": true, "clipboard": true, "nativeResolution": true, "cursorMetadata": true, "conditionalFrames": true, "frameStream": true, "regionFrames": true, "streamBitrate": true})
+			"codecs": []string{"jpeg", "png"}, "touchpad": true, "clipboard": true, "nativeResolution": true, "cursorMetadata": true, "conditionalFrames": true, "frameStream": true, "regionFrames": true, "streamBitrate": true, "compressionControls": true})
 	})
 	mux.HandleFunc("GET /api/desktop/frame", func(w http.ResponseWriter, r *http.Request) {
 		if !supported(w) {

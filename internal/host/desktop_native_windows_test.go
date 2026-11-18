@@ -7,6 +7,7 @@ import (
 	"errors"
 	"image"
 	"image/color"
+	"image/png"
 	"os"
 	"testing"
 	"time"
@@ -142,6 +143,66 @@ func TestDesktopWindowsJPEG(t *testing.T) {
 	right := color.RGBAModel.Convert(img.At(width-3, 3)).(color.RGBA)
 	if left.R < 220 || left.B > 30 || right.B < 215 || right.R > 30 {
 		t.Fatalf("incorrect BGRX channels: %v %v", left, right)
+	}
+}
+
+func TestDesktopExplicitJPEGQualityOnKeyframeAndPatch(t *testing.T) {
+	const width, height = 640, 256
+	size := image.Pt(width, height)
+	full := image.Rectangle{Max: size}
+	for _, quality := range []int{1, 100} {
+		rate := &desktopStreamRate{bytesPerSecond: 500 * 125, targetPeriod: time.Second / 60, jpegDensity: 1}
+		opts := desktopFrameOptions{codec: "jpeg", jpegQuality: quality, rate: rate}
+		raw := make([]byte, width*height*4)
+		s := desktopRegionState{}
+		frame := desktopFrame{layout: "layout", capture: "dxgi"}
+		for _, area := range []image.Rectangle{full, image.Rect(128, 0, 256, 128)} {
+			paintDesktopTestRect(raw, size, area, byte(area.Min.X))
+			fresh := s.begin(size, &frame, opts.previousETag)
+			s.update(raw[(area.Min.Y*width+area.Min.X)*4:], width*4, area, fresh)
+			if err := encodeDesktopUpdate(&s, fresh, &frame, opts); err != nil {
+				t.Fatal(err)
+			}
+			if !fresh && (len(frame.regions) != 1 || frame.regions[0].dest != area) {
+				t.Fatalf("expected patch %v, got %v", area, frame.regions)
+			}
+			pixels := make([]byte, area.Dx()*area.Dy()*4)
+			copyDesktopRect(pixels, area.Dx()*4, image.Point{}, raw, width*4, area)
+			expected, err := encodeDesktopPixels(pixels, area.Size(), desktopFrameOptions{codec: "jpeg", jpegQuality: quality}, true)
+			if err != nil || !bytes.Equal(frame.data, expected) {
+				t.Fatalf("the bitrate budget changed explicit JPEG quality %d on %v", quality, area)
+			}
+			other, err := encodeDesktopPixels(pixels, area.Size(), desktopFrameOptions{codec: "jpeg"}, true)
+			if err != nil || bytes.Equal(frame.data, other) {
+				t.Fatalf("JPEG quality %d did not change the bytes on %v", quality, area)
+			}
+			opts.previousETag = frame.etag
+		}
+	}
+}
+
+func TestDesktopPNGEffort(t *testing.T) {
+	size := image.Pt(257, 135)
+	full := image.Rectangle{Max: size}
+	raw := make([]byte, size.X*size.Y*4)
+	paintDesktopTestRect(raw, size, full, 71)
+	img := image.NewRGBA(full)
+	for i := 0; i < len(raw); i += 4 {
+		img.Pix[i], img.Pix[i+1], img.Pix[i+2], img.Pix[i+3] = raw[i+2], raw[i+1], raw[i], 255
+	}
+	for option, level := range map[string]png.CompressionLevel{
+		"": png.BestSpeed, "speed": png.BestSpeed, "none": png.NoCompression,
+		"balanced": png.DefaultCompression, "best": png.BestCompression,
+	} {
+		got, err := encodeDesktopPixels(raw, size, desktopFrameOptions{codec: "png", pngCompression: option}, true)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var want bytes.Buffer
+		ref := png.Encoder{CompressionLevel: level}
+		if err := ref.Encode(&want, img); err != nil || !bytes.Equal(got, want.Bytes()) {
+			t.Fatalf("incorrect PNG encoding for %q: %v", option, err)
+		}
 	}
 }
 

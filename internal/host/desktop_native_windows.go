@@ -242,7 +242,7 @@ func captureDuplicatedFrame(frame *desktopFrame, monitors []desktopDisplay, disp
 	cursor := sampleDesktopCursor(frame, options.separateCursor, target, areas)
 	// Generation advances only for a new desktop image. A separately drawn
 	// pointer can change position without invalidating the image on the phone.
-	sum := sha256.Sum256([]byte(fmt.Sprintf("%s/%s/%s/%s/%v/%d/%v/%v/%x/%d/%d", desktopFrameEpoch, frame.layout, display, options.codec, size, generation, options.highDetail, options.native, cursor.handle, cursor.x, cursor.y)))
+	sum := sha256.Sum256([]byte(fmt.Sprintf("%s/%s/%s/%s/%v/%d/%v/%v/%x/%d/%d", desktopFrameEpoch, frame.layout, display, options.encodingKey(), size, generation, options.highDetail, options.native, cursor.handle, cursor.x, cursor.y)))
 	frame.etag = fmt.Sprintf(`"%x"`, sum[:16])
 	s := options.regions
 	if s != nil && s.tag == options.previousETag && s.sourceTag == frame.etag && s.tag != "" {
@@ -366,7 +366,7 @@ func renderDesktopFrame(frame *desktopFrame, cursor desktopCursorInfo, monitors 
 			// GDI supplies pixels even when the scene is idle. Compare their digest
 			// before encoding or transferring another complete desktop image.
 			sum := sha256.Sum256(raw)
-			frame.etag = fmt.Sprintf(`"g-%s-%dx%d-%s-%t-%x"`, frame.layout, size.X, size.Y, options.codec, options.highDetail || options.native, sum[:16])
+			frame.etag = fmt.Sprintf(`"g-%s-%dx%d-%s-%t-%x"`, frame.layout, size.X, size.Y, options.encodingKey(), options.highDetail || options.native, sum[:16])
 			if frame.etag == options.previousETag {
 				return nil
 			}
@@ -428,13 +428,19 @@ func encodeDesktopPixels(raw []byte, size image.Point, options desktopFrameOptio
 	if options.highDetail || options.native {
 		quality = 86
 	}
+	qualityRate := options.rate
 	if options.codec == "jpeg" {
-		if options.rate != nil {
-			quality = options.rate.jpegQuality(size.X*size.Y, quality)
+		if options.jpegQuality != 0 {
+			quality = options.jpegQuality
+			// An explicit quality stays fixed. The stream still paces the
+			// encoded bytes against its target using options.rate.nextPeriod.
+			qualityRate = nil
+		} else if qualityRate != nil {
+			quality = qualityRate.jpegQuality(size.X*size.Y, quality)
 		}
 		if encoded := desktopNativeJPEG(raw, size, uint32(quality)); encoded != nil {
-			if options.rate != nil {
-				options.rate.observeJPEG(size.X*size.Y, quality, len(encoded))
+			if qualityRate != nil {
+				qualityRate.observeJPEG(size.X*size.Y, quality, len(encoded))
 			}
 			return encoded, nil
 		}
@@ -451,12 +457,12 @@ func encodeDesktopPixels(raw []byte, size image.Point, options desktopFrameOptio
 	var out bytes.Buffer
 	var err error
 	if options.codec == "png" {
-		encoder := png.Encoder{CompressionLevel: png.BestSpeed}
+		encoder := png.Encoder{CompressionLevel: desktopPNGLevels[options.pngCompression]}
 		err = encoder.Encode(&out, img)
 	} else {
 		err = jpeg.Encode(&out, img, &jpeg.Options{Quality: quality})
-		if err == nil && options.rate != nil {
-			options.rate.observeJPEG(size.X*size.Y, quality, out.Len())
+		if err == nil && qualityRate != nil {
+			qualityRate.observeJPEG(size.X*size.Y, quality, out.Len())
 		}
 	}
 	return out.Bytes(), err

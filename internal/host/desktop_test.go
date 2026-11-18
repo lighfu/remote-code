@@ -88,9 +88,10 @@ func TestDesktopPairedRoutes(t *testing.T) {
 		Displays                                                                              []desktopDisplay
 		CaptureMethods, Codecs                                                                []string
 		Touchpad, Clipboard, NativeResolution, CursorMetadata, ConditionalFrames, FrameStream bool
+		CompressionControls                                                                   bool
 	}
 	if err := json.Unmarshal(list.Body.Bytes(), &result); err != nil || result.Layout != layout || len(result.Displays) != 2 || result.Displays[1].X != -1200 ||
-		!slices.Equal(result.Codecs, []string{"jpeg", "png"}) || !slices.Contains(result.CaptureMethods, "dxgi") || !result.Touchpad || !result.Clipboard || !result.NativeResolution || !result.CursorMetadata || !result.ConditionalFrames || !result.FrameStream {
+		!slices.Equal(result.Codecs, []string{"jpeg", "png"}) || !slices.Contains(result.CaptureMethods, "dxgi") || !result.Touchpad || !result.Clipboard || !result.NativeResolution || !result.CursorMetadata || !result.ConditionalFrames || !result.FrameStream || !result.CompressionControls {
 		t.Fatalf("display list: %s", list.Body)
 	}
 	request("HEAD", "/api/desktop/frame", "", true)
@@ -153,6 +154,38 @@ func TestDesktopPairedRoutes(t *testing.T) {
 	w = send(`"type":"text","text":"` + strings.Repeat("a", 33<<10) + `"`)
 	if w.Code != 413 {
 		t.Fatalf("oversize input returned %d", w.Code)
+	}
+}
+
+func TestDesktopCompressionRoutes(t *testing.T) {
+	mux := http.NewServeMux()
+	var captured desktopFrameOptions
+	registerDesktop(mux, desktopBackend{supported: true, frame: func(_ string, options desktopFrameOptions) (desktopFrame, error) {
+		captured = options
+		return desktopFrame{}, errDesktopDisplayChanged
+	}})
+	for _, endpoint := range []string{"frame", "stream"} {
+		for _, tc := range []struct{ query, key string }{
+			{"", "jpeg"}, {"jpegQuality=1", "jpeg-1"}, {"jpegQuality=85", "jpeg-85"}, {"jpegQuality=100", "jpeg-100"},
+			{"codec=png", "png"}, {"codec=png&pngCompression=speed", "png"}, {"codec=png&pngCompression=none", "png-none"},
+			{"codec=png&pngCompression=balanced", "png-balanced"}, {"codec=png&pngCompression=best", "png-best"},
+			{"jpegQuality=", ""}, {"jpegQuality=0", ""}, {"jpegQuality=101", ""}, {"jpegQuality=8.1", ""},
+			{"codec=png&jpegQuality=50", ""}, {"pngCompression=best", ""}, {"codec=png&pngCompression=unknown", ""},
+		} {
+			captured = desktopFrameOptions{}
+			r := httptest.NewRequest("GET", "/api/desktop/"+endpoint+"?"+tc.query+"&bitrateKbps=500", nil)
+			w := httptest.NewRecorder()
+			mux.ServeHTTP(w, r)
+			if tc.key == "" {
+				if w.Code != http.StatusBadRequest || captured.codec != "" {
+					t.Fatalf("%s %s: invalid compression reached capture (%d)", endpoint, tc.query, w.Code)
+				}
+				continue
+			}
+			if w.Code != http.StatusConflict || captured.encodingKey() != tc.key || (captured.rate != nil) != (endpoint == "stream") {
+				t.Fatalf("%s %s: status=%d options=%+v", endpoint, tc.query, w.Code, captured)
+			}
+		}
 	}
 }
 
