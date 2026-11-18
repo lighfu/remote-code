@@ -118,36 +118,34 @@ private fun MultiFilePreview(e: Entry, files: List<String>, detail: String, maxL
     val uriHandler = LocalUriHandler.current
     val haptics = dev.remotecode.ui.common.rememberHaptics()
     val sections = remember(files, detail) { fileChangeSections(files, detail) }
-    var selectedFile by rememberSaveable(e.id) { mutableStateOf<String?>(files.first()) }
-    val active = selectedFile?.let { if (it in files) it else files.first() }
     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        for (file in files) {
+        for (file in files) key(e.id, file) {
             val path = file.replace('\\', '/')
             val patch = sections[file]
-            val selectedFileRow = patch != null && file == active
+            var expanded by rememberSaveable { mutableStateOf(file == files.first()) }
             val openLabel = stringResource(R.string.tool_changes_open_file, file)
             val openFile = { uriHandler.openUri(file) }
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Row(
                     Modifier.weight(1f)
-                        .semantics { if (patch != null) selected = selectedFileRow }
+                        .semantics { if (patch != null) selected = expanded }
                         .combinedClickable(
                             onClickLabel = when {
-                                selectedFileRow -> stringResource(R.string.chat_close)
-                                patch != null -> stringResource(R.string.tool_changes_show_diff, file)
-                                else -> openLabel
+                                patch == null -> openLabel
+                                expanded -> stringResource(R.string.chat_close)
+                                else -> stringResource(R.string.tool_changes_show_diff, file)
                             },
                             onLongClickLabel = openLabel,
                             onLongClick = { haptics.tick(); openFile() },
                             onClick = {
                                 if (patch == null) openFile()
-                                else selectedFile = if (selectedFileRow) null else file
+                                else expanded = !expanded
                             },
                         ).padding(vertical = 6.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     if (patch != null) Icon(
-                        if (selectedFileRow) Icons.Rounded.ExpandLess else Icons.Rounded.ExpandMore,
+                        if (expanded) Icons.Rounded.ExpandLess else Icons.Rounded.ExpandMore,
                         null, Modifier.size(20.dp), tint = MaterialTheme.colorScheme.primary,
                     )
                     Column(Modifier.padding(start = 4.dp)) {
@@ -161,8 +159,8 @@ private fun MultiFilePreview(e: Entry, files: List<String>, detail: String, maxL
                     Icon(Icons.AutoMirrored.Rounded.OpenInNew, openLabel, Modifier.size(20.dp))
                 }
             }
-            if (selectedFileRow) key(file) {
-                DiffBlock(patch.orEmpty(), maxLines = maxLines, path = file, wrapLines = wrapLines)
+            if (expanded && patch != null) {
+                DiffBlock(patch, maxLines = maxLines, path = file, wrapLines = wrapLines)
             }
         }
         if (sections.isEmpty() && e.hasToolDetail) {
