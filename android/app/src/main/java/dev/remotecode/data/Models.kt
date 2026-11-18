@@ -257,7 +257,10 @@ data class HistoryItem(
     /** PC で読み込み済み・途中参加可能。 */
     val live: Boolean = false,
     val running: Boolean = false,
-)
+    @kotlinx.serialization.Transient val provider: String = "",
+) {
+    val listKey get() = "$provider:$externalId"
+}
 
 @Serializable
 data class FsDir(val name: String, val path: String, val git: Boolean = false)

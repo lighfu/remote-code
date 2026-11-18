@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.AutoAwesome
@@ -24,6 +25,7 @@ import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material.icons.rounded.ExpandLess
 import androidx.compose.material.icons.rounded.ExpandMore
 import androidx.compose.material.icons.rounded.Folder
+import androidx.compose.material.icons.rounded.History
 import androidx.compose.material.icons.rounded.SwapVert
 import androidx.compose.material3.FilterChip
 import androidx.compose.foundation.clickable
@@ -50,6 +52,7 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -66,9 +69,33 @@ import dev.remotecode.ui.common.ProviderBadge
 import dev.remotecode.ui.common.relativeTime
 import dev.remotecode.ui.common.shortPath
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
 
 private enum class HistorySort(val label: String) { NEWEST(appString(R.string.screen_history_001)), OLDEST(appString(R.string.screen_history_002)), NAME(appString(R.string.screen_history_003)) }
+
+private const val AllHistory = "all"
+private val historyFilters = listOf(AllHistory) + Providers.all
+
+/** Deliver each source as it finishes so a slow or unavailable CLI cannot hide the others. */
+internal suspend fun loadHistorySources(
+    providers: List<String>,
+    fetch: suspend (String) -> List<HistoryItem>,
+    onItems: (List<HistoryItem>) -> Unit,
+    onError: (String, Exception) -> Unit,
+) = coroutineScope {
+    for (source in providers) launch {
+        val rows = try {
+            fetch(source)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            onError(source, e)
+            return@launch
+        }
+        onItems(rows.distinctBy { it.externalId }.map { it.copy(provider = source) })
+    }
+}
 
 /** Claude のワークツリーは元プロジェクトにまとめる。 */
 private fun projectOf(cwd: String): String {
@@ -107,10 +134,10 @@ fun HistoryContent(
     val context = androidx.compose.ui.platform.LocalContext.current
     val prefs = remember { context.getSharedPreferences("history_view", android.content.Context.MODE_PRIVATE) }
     val haptics = dev.remotecode.ui.common.rememberHaptics()
-    var provider by rememberSaveable { mutableStateOf(Providers.CLAUDE) }
-    var items by remember { mutableStateOf<List<HistoryItem>>(emptyList()) }
-    var loading by remember { mutableStateOf(true) }
-    var error by remember { mutableStateOf<String?>(null) }
+    var provider by rememberSaveable { mutableStateOf(prefs.getString("provider", null)?.takeIf { it in historyFilters } ?: Providers.CLAUDE) }
+    var items by remember(provider, reloadKey) { mutableStateOf<List<HistoryItem>>(emptyList()) }
+    var loading by remember(provider, reloadKey) { mutableStateOf(true) }
+    var error by remember(provider, reloadKey) { mutableStateOf<String?>(null) }
     var query by rememberSaveable { mutableStateOf("") }
     var confirm by remember { mutableStateOf<HistoryItem?>(null) }
     var importing by remember { mutableStateOf(false) }
@@ -124,7 +151,7 @@ fun HistoryContent(
         importing = true
         scope.launch {
             val id = try {
-                repo.api.import(provider, h).id
+                repo.api.import(h.provider, h).id
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
@@ -148,24 +175,26 @@ fun HistoryContent(
     }
 
     LaunchedEffect(provider, reloadKey) {
-        loading = true
-        error = null
-        items = emptyList()
-        try {
-            items = repo.api.history(provider).distinctBy { it.externalId }
-        } catch (e: CancellationException) {
-            throw e
-        } catch (e: Exception) {
-            error = e.message
-        }
+        loadHistorySources(
+            if (provider == AllHistory) Providers.all else listOf(provider),
+            fetch = repo.api::history,
+            onItems = { items = items + it },
+            onError = { source, e ->
+                val message = e.localizedMessage ?: e.javaClass.simpleName
+                error = listOfNotNull(error, "${Providers.label(source)}: $message").joinToString("\n")
+            },
+        )
         loading = false
     }
 
-    val shown = items
-        .filter { query.isBlank() || it.title.contains(query, true) || it.cwd.contains(query, true) || it.preview.contains(query, true) }
-        .filter { !liveOnly || it.live }
-        .sortedBy(sort)
-    val groups = shown.groupBy { projectOf(it.cwd) }.entries.let { g ->
+    val shown = remember(items, query, liveOnly, sort) {
+        items.filter { query.isBlank() || it.title.contains(query, true) || it.cwd.contains(query, true) || it.preview.contains(query, true) }
+            .filter { !liveOnly || it.live }
+            .sortedBy(sort)
+    }
+    val groups = remember(shown, grouped, sort) {
+        if (!grouped) return@remember emptyList()
+        val g = shown.groupBy { projectOf(it.cwd) }.entries
         when (sort) {
             HistorySort.NEWEST -> g.sortedByDescending { e -> e.value.maxOf { it.updatedAt } }
             HistorySort.OLDEST -> g.sortedBy { e -> e.value.minOf { it.updatedAt } }
@@ -176,25 +205,30 @@ fun HistoryContent(
     run {
         Column(modifier.fillMaxSize()) {
             Row(
-                Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+                Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 16.dp),
                 horizontalArrangement = Arrangement.spacedBy(ButtonGroupDefaults.ConnectedSpaceBetween),
             ) {
-                Providers.all.forEachIndexed { i, p ->
+                historyFilters.forEachIndexed { i, p ->
                     ToggleButton(
                         checked = provider == p,
-                        onCheckedChange = { provider = p },
+                        onCheckedChange = {
+                            if (p != provider) {
+                                haptics.tick()
+                                provider = p
+                                prefs.edit().putString("provider", p).apply()
+                            }
+                        },
                         shapes = when (i) {
                             0 -> ButtonGroupDefaults.connectedLeadingButtonShapes()
-                            Providers.all.lastIndex -> ButtonGroupDefaults.connectedTrailingButtonShapes()
+                            historyFilters.lastIndex -> ButtonGroupDefaults.connectedTrailingButtonShapes()
                             else -> ButtonGroupDefaults.connectedMiddleButtonShapes()
                         },
-                        // 長い名前を一行に収めるため幅を広げる。
-                        modifier = Modifier.weight(if (p == Providers.ANTIGRAVITY) 1.45f else 1f),
-                        contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 10.dp),
+                        contentPadding = PaddingValues(horizontal = 8.dp),
                     ) {
-                        dev.remotecode.ui.common.BrandIcon(p, 18.dp)
-                        Spacer(Modifier.size(6.dp))
-                        Text(Providers.label(p), maxLines = 1, softWrap = false, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+                        if (p == AllHistory) Icon(Icons.Rounded.History, null, Modifier.size(18.dp))
+                        else dev.remotecode.ui.common.BrandIcon(p, 18.dp)
+                        Spacer(Modifier.size(4.dp))
+                        Text(if (p == AllHistory) stringResource(R.string.screen_net_log_046) else Providers.label(p), maxLines = 1)
                     }
                 }
             }
@@ -233,7 +267,14 @@ fun HistoryContent(
                 )
             }
             Box(Modifier.fillMaxSize()) {
-                LazyColumn(
+                val listState = key(provider) { rememberLazyListState() }
+                // On return, measuring just the headers would reset a restored scroll position.
+                val hasSavedScroll = remember(listState, reloadKey) {
+                    listState.firstVisibleItemIndex > 0 || listState.firstVisibleItemScrollOffset > 0
+                }
+                val restoringScroll = loading && hasSavedScroll
+                if (!restoringScroll) LazyColumn(
+                    state = listState,
                     contentPadding = PaddingValues(start = 12.dp, end = 12.dp, top = 6.dp, bottom = 24.dp),
                     verticalArrangement = Arrangement.spacedBy(ListItemDefaults.SegmentedGap),
                 ) {
@@ -250,21 +291,21 @@ fun HistoryContent(
                                 }
                             }
                             if (open) {
-                                itemsIndexed(list, key = { _, h -> h.externalId }) { i, h ->
-                                    HistoryRow(h, provider, i, list.size, showFolder = projectOf(h.cwd) != h.cwd.replace('\\', '/').trimEnd('/')) { open(h) }
+                                itemsIndexed(list, key = { _, h -> h.listKey }) { i, h ->
+                                    HistoryRow(h, i, list.size, showFolder = projectOf(h.cwd) != h.cwd.replace('\\', '/').trimEnd('/'), showProvider = provider == AllHistory) { open(h) }
                                 }
                             }
                         }
                     } else {
-                        itemsIndexed(shown, key = { _, h -> h.externalId }) { i, h ->
-                            HistoryRow(h, provider, i, shown.size, showFolder = true) { open(h) }
+                        itemsIndexed(shown, key = { _, h -> h.listKey }) { i, h ->
+                            HistoryRow(h, i, shown.size, showFolder = true, showProvider = provider == AllHistory) { open(h) }
                         }
                     }
                     if (!loading && shown.isEmpty() && error == null) {
                         item { Text(stringResource(R.string.screen_history_009), modifier = Modifier.padding(24.dp), color = MaterialTheme.colorScheme.onSurfaceVariant) }
                     }
                 }
-                if (loading || importing) LoadingIndicator(Modifier.align(Alignment.Center))
+                if (restoringScroll || (loading && items.isEmpty()) || importing) LoadingIndicator(Modifier.align(Alignment.Center))
             }
         }
     }
@@ -319,15 +360,16 @@ private fun ProjectHeader(project: String, list: List<HistoryItem>, open: Boolea
 }
 
 @Composable
-private fun HistoryRow(h: HistoryItem, provider: String, index: Int, count: Int, showFolder: Boolean, onClick: () -> Unit) {
+private fun HistoryRow(h: HistoryItem, index: Int, count: Int, showFolder: Boolean, showProvider: Boolean, onClick: () -> Unit) {
     SegmentedListItem(
         onClick = onClick,
         shapes = ListItemDefaults.segmentedShapes(index = index, count = count),
         colors = ListItemDefaults.segmentedColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
-        leadingContent = { ProviderBadge(provider, running = h.running, waiting = false, size = 40.dp) },
+        leadingContent = { ProviderBadge(h.provider, running = h.running, waiting = false, size = 40.dp) },
         overlineContent = {
             Text(
-                (if (showFolder) "${shortPath(h.cwd)} · " else "") + relativeTime(h.updatedAt),
+                (if (showProvider) "${Providers.label(h.provider)} · " else "") +
+                    (if (showFolder) "${shortPath(h.cwd)} · " else "") + relativeTime(h.updatedAt),
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
