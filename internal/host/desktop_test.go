@@ -76,7 +76,7 @@ func TestDesktopPairedRoutes(t *testing.T) {
 		return w
 	}
 	for _, endpoint := range []struct{ method, path string }{
-		{"GET", "/api/desktop/displays"}, {"GET", "/api/desktop/frame"}, {"POST", "/api/desktop/input"},
+		{"GET", "/api/desktop/displays"}, {"GET", "/api/desktop/frame"}, {"POST", "/api/desktop/input"}, {"GET", "/api/desktop/audio"},
 	} {
 		if w := request(endpoint.method, endpoint.path+"?token="+app.Config.Token, "", false); w.Code != http.StatusUnauthorized {
 			t.Fatalf("unpaired %s returned %d", endpoint.path, w.Code)

@@ -12,6 +12,7 @@ require (
 	github.com/hinshun/vt10x v0.0.0-20220301184237-5011da428d02
 	github.com/kirides/go-d3d v1.0.1
 	github.com/mattn/go-runewidth v0.0.16
+	github.com/moutend/go-wca v0.3.0
 	github.com/pelletier/go-toml/v2 v2.2.4
 	github.com/skip2/go-qrcode v0.0.0-20200617195104-da1b6568686e
 	golang.org/x/sys v0.50.0
@@ -20,6 +21,7 @@ require (
 
 require (
 	github.com/gdamore/encoding v1.0.1 // indirect
+	github.com/go-ole/go-ole v1.2.6 // indirect
 	github.com/lucasb-eyer/go-colorful v1.2.0 // indirect
 	github.com/rivo/uniseg v0.4.3 // indirect
 	golang.org/x/text v0.21.0 // indirect

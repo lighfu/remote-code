@@ -329,6 +329,7 @@ func registerDesktop(mux *http.ServeMux, backend desktopBackend, serverDone ...<
 	}
 	captureGate := make(desktopGate, 1)
 	registerDesktopStream(mux, backend, captureGate, shutdown)
+	registerDesktopAudio(mux, backend.supported, captureDesktopAudio, shutdown)
 	supported := func(w http.ResponseWriter) bool {
 		if !backend.supported {
 			apiError(w, &HTTPError{http.StatusNotImplemented, "Remote desktop requires Windows"})
@@ -345,7 +346,7 @@ func registerDesktop(mux *http.ServeMux, backend desktopBackend, serverDone ...<
 			return
 		}
 		writeJSON(w, http.StatusOK, M{"displays": displays, "layout": desktopLayoutID(displays), "captureMethods": backend.captureMethods(displays),
-			"codecs": []string{"jpeg", "png"}, "touchpad": true, "clipboard": true, "nativeResolution": true, "cursorMetadata": true, "conditionalFrames": true, "frameStream": true, "regionFrames": true, "streamBitrate": true, "compressionControls": true})
+			"codecs": []string{"jpeg", "png"}, "touchpad": true, "clipboard": true, "audio": true, "nativeResolution": true, "cursorMetadata": true, "conditionalFrames": true, "frameStream": true, "regionFrames": true, "streamBitrate": true, "compressionControls": true})
 	})
 	mux.HandleFunc("GET /api/desktop/frame", func(w http.ResponseWriter, r *http.Request) {
 		if !supported(w) {

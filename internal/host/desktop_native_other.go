@@ -2,7 +2,10 @@
 
 package host
 
-import "errors"
+import (
+	"context"
+	"errors"
+)
 
 var errDesktopUnsupported = errors.New("desktop control requires Windows")
 
@@ -13,3 +16,6 @@ func captureDesktopFrame(string, desktopFrameOptions) (desktopFrame, error) {
 	return desktopFrame{}, errDesktopUnsupported
 }
 func applyDesktopInput(input desktopInput) error { return errDesktopUnsupported }
+func captureDesktopAudio(context.Context, <-chan struct{}, func([]byte) error) error {
+	return errDesktopUnsupported
+}
