@@ -97,6 +97,38 @@ func TestGitCountsAllUntrackedFilesWhenLineStatsArePartial(t *testing.T) {
 	}
 }
 
+func TestGitStatusVerifiesWorktreeBeforeCaching(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git is not installed")
+	}
+	root := t.TempDir()
+	if _, err := gitRun(root, "", 12*time.Second, "init"); err != nil {
+		t.Fatal(err)
+	}
+	nested := filepath.Join(root, "nested")
+	// An empty .git directory is not a worktree. Git finds the parent repo.
+	if err := os.MkdirAll(filepath.Join(nested, ".git"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "root.txt"), []byte("one\ntwo"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	status, err := gitStatus(nested, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	canonical, err := filepath.EvalSymlinks(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if fileKey(S(status, "root")) != fileKey(canonical) || N(status, "additions") != 2 {
+		t.Fatalf("wrong root or line totals: %v", status)
+	}
+	if gitSnapshots.lookup(fileKey(nested), false) != nil || gitSnapshots.lookup(fileKey(canonical), false) == nil {
+		t.Fatal("stored snapshot under an unverified worktree path")
+	}
+}
+
 func BenchmarkGitStatusPoll(b *testing.B) {
 	if _, err := exec.LookPath("git"); err != nil {
 		b.Skip("git is not installed")
@@ -188,6 +220,26 @@ func TestGitNativeWorkflowAndLiteralPathspec(t *testing.T) {
 	}
 	if S(diff, "text") == "" {
 		t.Fatal("diff missing")
+	}
+	run("add", "--", name)
+	if err := os.WriteFile(filepath.Join(root, name), []byte("changed\nsecond\nthird\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	run("remote", "add", "origin", "https://example.invalid/first.git")
+	status, err = gitStatus(root, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	files, remotes := gitFiles(status), status["remotes"].([]M)
+	if len(files) != 1 || !B(files[0], "staged") || !B(files[0], "unstaged") ||
+		N(files[0], "additions") != 2 || N(files[0], "deletions") != 1 ||
+		len(remotes) != 1 || S(remotes[0], "url") != "https://example.invalid/first.git" {
+		t.Fatalf("incomplete working tree snapshot: %v", status)
+	}
+	run("remote", "set-url", "origin", "https://example.invalid/second.git")
+	status, err = gitStatus(root, true)
+	if err != nil || S(status["remotes"].([]M)[0], "url") != "https://example.invalid/second.git" {
+		t.Fatalf("refresh missed a remote change: %v %v", status, err)
 	}
 	logs, err := gitLog(root)
 	if err != nil || len(logs) != 1 {

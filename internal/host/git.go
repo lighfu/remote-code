@@ -3,6 +3,7 @@ package host
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -248,11 +249,22 @@ func gitLines(data []byte) int {
 	}
 	return count
 }
+
+var errGitResolveRoot = errors.New("resolve worktree root before reading status")
+
 func gitStatus(cwd string, force bool) (M, error) {
-	// Most sessions start at the worktree root. A poll there can reuse the
-	// snapshot (or pending read) without starting another Git process.
-	if pending := gitSnapshots.lookup(fileKey(filepath.Clean(cwd)), force); pending != nil {
-		return pending.wait()
+	key := fileKey(filepath.Clean(cwd))
+	var status M
+	err := errGitResolveRoot
+	if pending := gitSnapshots.lookup(key, force); pending != nil {
+		status, err = pending.wait()
+	} else if _, statErr := os.Lstat(filepath.Join(cwd, ".git")); cwd != "" && statErr == nil {
+		// A .git marker is a hint only: verify the root alongside the snapshot.
+		// Git can resolve symlinks or a core.worktree override to another path.
+		status, err = gitSnapshots.read(key, force, func() (M, error) { return gitReadStatus(cwd, true) })
+	}
+	if err != errGitResolveRoot {
+		return status, err
 	}
 	root, err := gitRoot(cwd)
 	if err != nil {
@@ -261,7 +273,7 @@ func gitStatus(cwd string, force bool) (M, error) {
 	if root == "" {
 		return gitEmpty(), nil
 	}
-	return gitSnapshots.read(fileKey(root), force, func() (M, error) { return gitReadStatus(root) })
+	return gitSnapshots.read(fileKey(root), force, func() (M, error) { return gitReadStatus(root, false) })
 }
 
 func gitReadPorcelain(root string) (M, error) {
@@ -295,26 +307,59 @@ func gitReadPorcelain(root string) (M, error) {
 	return status, nil
 }
 
-func gitReadStatus(root string) (M, error) {
+func gitReadStatus(root string, verifyRoot bool) (M, error) {
+	// The remote list is independent of both porcelain and line statistics.
+	var remotes []M
+	var remoteErr error
+	var reads sync.WaitGroup
+	actualRoot := root
+	var rootErr error
+	if verifyRoot {
+		reads.Go(func() {
+			actualRoot, rootErr = gitRoot(root)
+			if rootErr == nil && (actualRoot == "" || fileKey(actualRoot) != fileKey(filepath.Clean(root))) {
+				rootErr = errGitResolveRoot
+			}
+		})
+	}
+	reads.Go(func() { remotes, remoteErr = gitRemotes(root) })
 	status, err := gitReadPorcelain(root)
+	reads.Wait()
+	if rootErr != nil {
+		return nil, rootErr
+	}
 	if err != nil {
 		return nil, err
 	}
+	if remoteErr != nil {
+		return nil, remoteErr
+	}
+	status["remotes"] = remotes
+	status["root"] = actualRoot
 	files := gitFiles(status)
-	stats := []map[string]M{}
-	for _, cached := range []bool{true, false} {
-		if (cached && N(status, "stagedFiles") == 0) || (!cached && N(status, "unstagedFiles") == 0) {
+	var stats [2]map[string]M
+	var statErrors [2]error
+	for i, count := range []string{"stagedFiles", "unstagedFiles"} {
+		if N(status, count) == 0 {
 			continue
 		}
-		args := []string{"diff", "--numstat", "-z", "--no-ext-diff", "--no-textconv", "--find-renames"}
-		if cached {
-			args = append(args, "--cached")
-		}
-		text, err := gitRun(root, "", 12*time.Second, args...)
+		reads.Go(func() {
+			args := []string{"diff", "--numstat", "-z", "--no-ext-diff", "--no-textconv", "--find-renames"}
+			if i == 0 {
+				args = append(args, "--cached")
+			}
+			var out string
+			out, statErrors[i] = gitRun(root, "", 12*time.Second, args...)
+			if statErrors[i] == nil {
+				stats[i] = gitNumstat(out)
+			}
+		})
+	}
+	reads.Wait()
+	for _, err := range statErrors {
 		if err != nil {
 			return nil, err
 		}
-		stats = append(stats, gitNumstat(text))
 	}
 	budget, scanned := 2*1024*1024, 0
 	for _, file := range files {
@@ -331,7 +376,7 @@ func gitReadStatus(root string) (M, error) {
 				continue
 			}
 			scanned++
-			content, truncated, err := gitWorking(root, S(file, "path"), min(256*1024, budget))
+			content, truncated, err := gitWorking(actualRoot, S(file, "path"), min(256*1024, budget))
 			if err != nil {
 				status["lineStatsPartial"] = true
 				continue
@@ -351,11 +396,6 @@ func gitReadStatus(root string) (M, error) {
 			status[key] = int(N(status, key) + N(file, key))
 		}
 	}
-	remotes, err := gitRemotes(root)
-	if err != nil {
-		return nil, err
-	}
-	status["remotes"] = remotes
 	return status, nil
 }
 
