@@ -471,7 +471,7 @@ fun ChatScreen(sessionId: String, onBack: () -> Unit, onTerminals: (String) -> U
     val effectiveMode = session?.mode?.ifBlank { null } ?: pcMode
     val modeLabel = modes.firstOrNull { it.id == effectiveMode && it.id.isNotBlank() }?.let(::localizedModeLabel)
         ?: effectiveMode
-        ?: appString(R.string.chat_chat_screen_063)
+        ?: appString(R.string.core_mode_pc_default)
     // 空のモードは PC の既定値として表示する。
     val visibleModes = modes.filter { it.id.isNotBlank() }
 
