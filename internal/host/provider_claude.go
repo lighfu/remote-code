@@ -331,17 +331,22 @@ func claudeUserTextEntries(msg M, fromPC bool) []M {
 func (p *nativeProvider) claudeUserMessage(sid string, fromPC bool, msg M) {
 	content := providerMap(msg["message"])["content"]
 	blocks := providerRows(content)
+	toolResult := false
 	for _, block := range blocks {
 		if S(block, "type") != "tool_result" {
 			continue
 		}
 		id := S(block, "tool_use_id")
+		toolResult = true
 		status := "done"
 		if B(block, "is_error") {
 			status = "error"
 		}
 		p.store.Patch(sid, id, M{"output": providerText(block["content"]), "status": status})
 		p.addToolMedia(sid, id, block["content"])
+	}
+	if toolResult {
+		p.store.repairClaudeWrapUpCards(sid)
 	}
 	entries := claudeUserTextEntries(msg, fromPC)
 	if media, videos := p.claudeBlockMedia(sid, blocks); len(media) > 0 || len(videos) > 0 {
