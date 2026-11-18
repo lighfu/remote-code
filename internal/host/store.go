@@ -287,6 +287,39 @@ func (s *Store) FindExternal(provider, externalID string) *Record {
 	}
 	return nil
 }
+
+type historySession struct {
+	id            string
+	live, running bool
+}
+
+// History only needs the live session state, even when a transcript has thousands of entries.
+func (s *Store) historySessions(provider string) map[string]historySession {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	byExternal := make(map[string]historySession)
+	for _, rec := range s.records {
+		info := rec.Info
+		if S(info, "provider") == provider {
+			byExternal[S(info, "externalId")] = historySession{
+				id: S(info, "id"), live: B(info, "live"),
+				running: S(info, "status") == "running" || S(info, "status") == "waiting",
+			}
+		}
+	}
+	return byExternal
+}
+
+func (s *Store) applyHistoryActivity(provider string, rows []M) {
+	byExternal := s.historySessions(provider)
+	for _, row := range rows {
+		if session, ok := byExternal[S(row, "externalId")]; ok {
+			row["sessionId"] = session.id
+			row["live"] = session.live
+			row["running"] = session.running
+		}
+	}
+}
 func (s *Store) emitLocked(event M) {
 	switch S(event, "type") {
 	case "entry", "delta", "entries_removed":

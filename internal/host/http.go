@@ -323,10 +323,11 @@ func (a *App) handler(serverDone <-chan struct{}) http.Handler {
 			if item.action == "listHistory" {
 				rows := maps(v)
 				a.rememberFolderHistory(name, rows)
+				sessions := a.Store.historySessions(name)
 				for _, row := range rows {
 					row["sessionId"] = nil
-					if rec := a.Store.FindExternal(name, S(row, "externalId")); rec != nil {
-						row["sessionId"] = rec.Info["id"]
+					if session, ok := sessions[S(row, "externalId")]; ok {
+						row["sessionId"] = session.id
 					}
 				}
 				return rows, nil

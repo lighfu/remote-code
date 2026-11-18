@@ -58,6 +58,7 @@ type nativeProvider struct {
 	historyMu        sync.Mutex
 	history          []M
 	historyUntil     time.Time
+	claudeHistory    map[string]claudeHistoryEntry
 	transcriptMu     sync.Mutex
 	transcriptSeen   map[string]map[string]bool
 	transcriptSizes  map[string]int64

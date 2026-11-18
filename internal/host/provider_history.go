@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -35,7 +36,7 @@ func (p *nativeProvider) listHistory(ctx context.Context) ([]M, error) {
 	p.historyMu.Lock()
 	defer p.historyMu.Unlock()
 	if p.history != nil && time.Now().Before(p.historyUntil) {
-		rows := clone(p.history)
+		rows := copyHistoryRows(p.history)
 		if p.name == "claude" {
 			p.updateClaudeHistoryActivity(ctx, rows)
 		}
@@ -43,46 +44,13 @@ func (p *nativeProvider) listHistory(ctx context.Context) ([]M, error) {
 	}
 	rows := []M{}
 	if p.name == "claude" {
-		root := filepath.Join(providerHome("claude"), "projects")
-		dirs, err := os.ReadDir(root)
+		var err error
+		rows, err = p.listClaudeHistoryFiles(ctx)
 		if err != nil {
-			if os.IsNotExist(err) {
-				return rows, nil
-			}
 			return nil, err
 		}
-		type file struct {
-			path string
-			at   int64
-		}
-		files := []file{}
-		for _, dir := range dirs {
-			if !dir.IsDir() {
-				continue
-			}
-			entries, e := os.ReadDir(filepath.Join(root, dir.Name()))
-			if e != nil {
-				continue
-			}
-			for _, entry := range entries {
-				if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".jsonl") {
-					continue
-				}
-				info, e := entry.Info()
-				if e == nil {
-					files = append(files, file{filepath.Join(root, dir.Name(), entry.Name()), info.ModTime().UnixMilli()})
-				}
-			}
-		}
-		sort.Slice(files, func(i, j int) bool { return files[i].at > files[j].at })
-		if len(files) > 200 {
-			files = files[:200]
-		}
-		for _, f := range files {
-			row := p.claudeHistoryRow(f.path, f.at)
-			if row != nil {
-				rows = append(rows, row)
-			}
+		if rows == nil {
+			return []M{}, nil
 		}
 	} else {
 		w, err := p.ensureRPC(ctx)
@@ -125,22 +93,112 @@ func (p *nativeProvider) listHistory(ctx context.Context) ([]M, error) {
 		}
 	}
 	if p.name != "claude" {
-		for _, row := range rows {
-			if rec := p.store.FindExternal(p.name, S(row, "externalId")); rec != nil {
-				row["sessionId"] = rec.Info["id"]
-				row["live"] = B(rec.Info, "live")
-				row["running"] = S(rec.Info, "status") == "running" || S(rec.Info, "status") == "waiting"
-			}
-		}
+		p.store.applyHistoryActivity(p.name, rows)
 	}
 	sort.Slice(rows, func(i, j int) bool { return N(rows[i], "updatedAt") > N(rows[j], "updatedAt") })
 	p.history = rows
 	p.historyUntil = time.Now().Add(10 * time.Second)
-	rows = clone(rows)
+	rows = copyHistoryRows(rows)
 	if p.name == "claude" {
 		p.updateClaudeHistoryActivity(ctx, rows)
 	}
 	return rows, nil
+}
+
+type claudeHistoryEntry struct {
+	modified time.Time
+	size     int64
+	row      M
+}
+
+// Called under historyMu. Keep only the current page's transcript summaries.
+func (p *nativeProvider) listClaudeHistoryFiles(ctx context.Context) ([]M, error) {
+	root := filepath.Join(providerHome("claude"), "projects")
+	dirs, err := os.ReadDir(root)
+	if os.IsNotExist(err) {
+		p.claudeHistory = nil
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	type file struct {
+		path     string
+		complete bool
+		claudeHistoryEntry
+	}
+	var files []file
+	for _, dir := range dirs {
+		if !dir.IsDir() {
+			continue
+		}
+		project := filepath.Join(root, dir.Name())
+		entries, err := os.ReadDir(project)
+		if err != nil {
+			continue
+		}
+		for _, entry := range entries {
+			if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".jsonl") {
+				continue
+			}
+			info, err := entry.Info()
+			if err == nil {
+				files = append(files, file{path: filepath.Join(project, entry.Name()), claudeHistoryEntry: claudeHistoryEntry{modified: info.ModTime(), size: info.Size()}})
+			}
+		}
+	}
+	sort.Slice(files, func(i, j int) bool { return files[i].modified.UnixMilli() > files[j].modified.UnixMilli() })
+	if len(files) > 200 {
+		files = files[:200]
+	}
+	if len(files) > 0 {
+		p.claudePC.refresh(ctx)
+	}
+	pending := make(chan *file, len(files))
+	for i := range files {
+		f := &files[i]
+		if cached, ok := p.claudeHistory[f.path]; ok && f.modified.Equal(cached.modified) && f.size == cached.size {
+			f.row, f.complete = cached.row, true
+		} else {
+			pending <- f
+		}
+	}
+	close(pending)
+	var workers sync.WaitGroup
+	for range min(4, len(pending)) {
+		workers.Go(func() {
+			for f := range pending {
+				if ctx.Err() != nil {
+					return
+				}
+				f.row, f.complete = readClaudeHistoryRow(f.path, f.modified, f.size)
+			}
+		})
+	}
+	workers.Wait()
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	rows := make([]M, 0, len(files))
+	next := make(map[string]claudeHistoryEntry, len(files))
+	for _, f := range files {
+		if f.row != nil {
+			rows = append(rows, f.row)
+			if f.complete {
+				next[f.path] = f.claudeHistoryEntry
+			}
+		}
+	}
+	p.claudeHistory = next
+	return rows, nil
+}
+
+func copyHistoryRows(rows []M) []M {
+	result := make([]M, len(rows))
+	for i, row := range rows {
+		result[i] = snapshotMap(row)
+	}
+	return result
 }
 
 func (p *nativeProvider) updateClaudeHistoryActivity(ctx context.Context, rows []M) {
@@ -155,47 +213,54 @@ func (p *nativeProvider) updateClaudeHistoryActivity(ctx context.Context, rows [
 	} else {
 		p.claudePC.refresh(context.WithoutCancel(ctx))
 	}
+	p.store.applyHistoryActivity(p.name, rows)
 	for _, row := range rows {
 		external := S(row, "externalId")
-		if rec := p.store.FindExternal(p.name, external); rec != nil {
-			row["sessionId"] = rec.Info["id"]
-			row["live"] = B(rec.Info, "live")
-			row["running"] = S(rec.Info, "status") == "running" || S(rec.Info, "status") == "waiting"
-		}
 		if agent, ok := agents[external]; ok {
 			row["live"] = true
 			row["running"] = B(row, "running") || agent.status != "idle"
 		}
 	}
 }
-func (p *nativeProvider) claudeHistoryRow(path string, at int64) M {
+func readClaudeHistoryRow(path string, modified time.Time, size int64) (M, bool) {
 	file, err := os.Open(path)
 	if err != nil {
-		return nil
+		return nil, false
 	}
 	defer file.Close()
 	id := strings.TrimSuffix(filepath.Base(path), ".jsonl")
-	row := M{"externalId": id, "title": "(Untitled)", "cwd": "", "updatedAt": at, "preview": "", "sessionId": nil, "live": false, "running": false}
-	read := func(reader io.Reader) {
+	row := M{"externalId": id, "title": "(Untitled)", "cwd": "", "updatedAt": modified.UnixMilli(), "preview": "", "sessionId": nil, "live": false, "running": false}
+	read := func(reader io.Reader) error {
 		scanner := bufio.NewScanner(reader)
 		scanner.Buffer(make([]byte, 4096), 2*1024*1024)
 		for scanner.Scan() {
-			var msg M
-			if json.Unmarshal(scanner.Bytes(), &msg) != nil {
-				continue
+			var msg struct {
+				Type, Cwd, CustomTitle, Summary string
+				IsMeta                          bool
 			}
-			if cwd := S(msg, "cwd"); cwd != "" {
-				row["cwd"] = cwd
+			line := scanner.Bytes()
+			if err := json.Unmarshal(line, &msg); err != nil {
+				// Older transcripts can use another type for an optional field.
+				// The decoder still filled the other matching fields on a type error.
+				if _, ok := err.(*json.UnmarshalTypeError); !ok {
+					continue
+				}
 			}
-			if title := S(msg, "customTitle"); title != "" {
-				row["title"] = title
+			if msg.Cwd != "" {
+				row["cwd"] = msg.Cwd
 			}
-			if S(row, "title") == "(Untitled)" && S(msg, "summary") != "" {
-				row["title"] = providerTruncate(S(msg, "summary"), 160)
+			if msg.CustomTitle != "" {
+				row["title"] = msg.CustomTitle
 			}
-			if S(msg, "type") == "user" && !B(msg, "isMeta") {
-				text := providerText(providerMap(msg["message"])["content"])
-				if text != "" && S(row, "preview") == "" {
+			if S(row, "title") == "(Untitled)" && msg.Summary != "" {
+				row["title"] = providerTruncate(msg.Summary, 160)
+			}
+			if msg.Type == "user" && !msg.IsMeta && S(row, "preview") == "" {
+				var user struct{ Message struct{ Content any } }
+				if json.Unmarshal(line, &user) != nil {
+					continue
+				}
+				if text := providerText(user.Message.Content); text != "" {
 					row["preview"] = providerTruncate(text, 140)
 					if S(row, "title") == "(Untitled)" {
 						row["title"] = providerTruncate(text, 100)
@@ -203,13 +268,14 @@ func (p *nativeProvider) claudeHistoryRow(path string, at int64) M {
 				}
 			}
 		}
+		return scanner.Err()
 	}
-	read(io.LimitReader(file, 256*1024))
-	if stat, e := file.Stat(); e == nil && stat.Size() > 256*1024 {
-		_, _ = file.Seek(max(0, stat.Size()-128*1024), 0)
-		read(file)
+	firstErr := read(io.LimitReader(file, min(size, 256*1024)))
+	if size > 256*1024 {
+		lastErr := read(io.NewSectionReader(file, size-128*1024, 128*1024))
+		return row, firstErr == nil && lastErr == nil
 	}
-	return row
+	return row, firstErr == nil
 }
 func (p *nativeProvider) transcriptPath(external string) string {
 	if external == "" || filepath.Base(external) != external {
