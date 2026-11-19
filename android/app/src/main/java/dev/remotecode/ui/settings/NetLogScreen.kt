@@ -15,6 +15,8 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import dev.remotecode.ui.common.LazyListScrollbar
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -201,7 +203,7 @@ fun NetLogScreen(onBack: () -> Unit) {
         }
     }
     val list = rememberLazyListState()
-    LaunchedEffect(entries.size) { if (list.firstVisibleItemIndex <= 1) list.scrollToItem(0) }
+    LaunchedEffect(entries.size) { if (!list.isScrollInProgress && list.firstVisibleItemIndex == 0 && list.firstVisibleItemScrollOffset == 0) list.scrollToItem(0) }
 
     Scaffold(
         topBar = {
@@ -218,25 +220,31 @@ fun NetLogScreen(onBack: () -> Unit) {
             )
         },
     ) { pad ->
-        LazyColumn(state = list, contentPadding = PaddingValues(start = 12.dp, end = 12.dp, top = 4.dp, bottom = 32.dp), modifier = Modifier.padding(pad).fillMaxSize(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            item { Summary(entries, conn, route, paused, meta) }
-            item {
-                Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(vertical = 4.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Filter.entries.forEach { f ->
-                        val n = when (f) {
-                            Filter.ALL -> entries.size
-                            Filter.API -> entries.count { it.kind == NetKind.API }
-                            Filter.LIVE -> entries.count { it.kind != NetKind.API }
-                            Filter.ERROR -> entries.count { !it.ok }
+        Box(Modifier.padding(pad).fillMaxSize()) {
+            LazyColumn(state = list, contentPadding = PaddingValues(start = 12.dp, end = 24.dp, top = 4.dp, bottom = 32.dp), modifier = Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                item { Summary(entries, conn, route, paused, meta) }
+                item {
+                    Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(vertical = 4.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Filter.entries.forEach { f ->
+                            val n = when (f) {
+                                Filter.ALL -> entries.size
+                                Filter.API -> entries.count { it.kind == NetKind.API }
+                                Filter.LIVE -> entries.count { it.kind != NetKind.API }
+                                Filter.ERROR -> entries.count { !it.ok }
+                            }
+                            FilterChip(selected = filter == f, onClick = { haptics.tick(); filter = f }, label = { Text("${f.label} $n") })
                         }
-                        FilterChip(selected = filter == f, onClick = { haptics.tick(); filter = f }, label = { Text("${f.label} $n") })
                     }
                 }
+                if (shown.isEmpty()) {
+                    item { Text(stringResource(R.string.screen_net_log_055), color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(24.dp)) }
+                }
+                items(shown, key = { it.id }) { e -> LogRow(e) }
             }
-            if (shown.isEmpty()) {
-                item { Text(stringResource(R.string.screen_net_log_055), color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(24.dp)) }
-            }
-            items(shown, key = { it.id }) { e -> LogRow(e) }
+            LazyListScrollbar(
+                list, stringResource(R.string.screen_net_log_049),
+                Modifier.align(Alignment.CenterEnd).fillMaxHeight().padding(vertical = 4.dp),
+            )
         }
     }
 }

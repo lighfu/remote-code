@@ -1,5 +1,7 @@
 package dev.remotecode.ui.chat
 
+import dev.remotecode.ui.common.scrollWindow
+
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -11,17 +13,17 @@ class CodeMinimapTest {
     )
 
     @Test fun scrollWithinSingleWrappedLineMovesTheThumb() {
-        val middle = minimapWindow(1, 0, -400, 1000, 0, -400, 1000, 0, 200)
+        val middle = scrollWindow(1, 0, -400, 1000, 0, -400, 1000, 0, 200)
         assertEquals(0.4f, middle.start, 0.0001f)
         assertEquals(0.6f, middle.end, 0.0001f)
         assertEquals(0.5f, middle.progress, 0.0001f)
-        val bottom = minimapWindow(1, 0, -800, 1000, 0, -800, 1000, 0, 200)
+        val bottom = scrollWindow(1, 0, -800, 1000, 0, -800, 1000, 0, 200)
         assertEquals(1f, bottom.progress, 0.0001f)
         assertEquals(20f, bottom.thumb(50f, 20f), 0.0001f)
     }
 
     @Test fun fileThatFitsHasAFullHeightThumbEvenWithPadding() {
-        val window = minimapWindow(2, 0, 0, 24, 1, 24, 24, -8, 100)
+        val window = scrollWindow(2, 0, 0, 24, 1, 24, 24, -8, 100)
         assertEquals(0f, window.progress, 0f)
         assertEquals(100f, window.thumb(100f, 20f), 0f)
     }
