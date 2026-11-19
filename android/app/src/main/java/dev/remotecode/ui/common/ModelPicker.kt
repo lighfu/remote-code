@@ -262,7 +262,7 @@ fun ModelPicker(
                                     },
                             )
                             Spacer(Modifier.size(10.dp))
-                            Column(Modifier.weight(1f)) {
+                            Column(Modifier.weight(1f).padding(end = 16.dp)) {
                                 UltraText("Ultra", MaterialTheme.typography.titleSmall)
                                 Text(
                                     if (selUltra != null) appString(R.string.screen_model_picker_011)
@@ -299,7 +299,7 @@ fun ModelPicker(
                         modifier = Modifier.size(22.dp),
                     )
                     Spacer(Modifier.size(10.dp))
-                    Column(Modifier.weight(1f)) {
+                    Column(Modifier.weight(1f).padding(end = 16.dp)) {
                         Text(
                             "Fast mode · ${if (fastOn) "ON" else if (!fastSupported || selFast != null) "OFF" else appString(R.string.screen_model_picker_013)}",
                             style = MaterialTheme.typography.titleSmall,
