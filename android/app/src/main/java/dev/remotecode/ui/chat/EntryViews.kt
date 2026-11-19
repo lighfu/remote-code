@@ -255,14 +255,13 @@ private fun UserBubble(e: Entry) {
 private fun AssistantText(e: Entry) {
     val text = e.text.orEmpty()
     if (text.isBlank() && !e.streaming && e.media.isNullOrEmpty() && e.videos.isNullOrEmpty()) return
-    val t = MaterialTheme.typography
     val md = remember(text, e.streaming, e.media) {
         // 画像を別表示するため、本文から重複する画像記法を除く。
         val body = if (e.media.isNullOrEmpty()) text.replace(Regex("""!\[[^\]]*]\((?!\s*<?https?://)[^)]*\)"""), "")
             else text.replace(Regex("""!\[[^\]]*]\([^)]*\)"""), "")
-        keepLineBreaks(if (e.streaming) "$body ▍" else body)
+        if (e.streaming) "$body ▍" else body
     }
-    val state = rememberMarkdownState(content = md, retainState = true)
+    val state = rememberMarkdownState(content = md, retainState = true, flavour = ChatMathFlavour)
     if (!e.media.isNullOrEmpty() || !e.videos.isNullOrEmpty()) {
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             MarkdownBody(state)
@@ -275,16 +274,18 @@ private fun AssistantText(e: Entry) {
 
 @Composable
 fun MarkdownText(text: String) {
-    val md = remember(text) { keepLineBreaks(text) }
-    MarkdownBody(rememberMarkdownState(content = md, retainState = true))
+    MarkdownBody(rememberMarkdownState(content = text, retainState = true, flavour = ChatMathFlavour))
 }
 
 @Composable
 private fun MarkdownBody(state: com.mikepenz.markdown.model.MarkdownState) {
     val t = MaterialTheme.typography
+    val math = rememberChatMath(state, t.bodyLarge.fontSize)
     ChatSelectionContainer {
         Markdown(
             markdownState = state,
+            annotator = math.annotator,
+            inlineContent = math.content,
             modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp).animateContentSize(),
             typography = markdownTypography(
                 h1 = t.titleLarge.copy(fontFamily = ChatFont),
@@ -298,24 +299,10 @@ private fun MarkdownBody(state: com.mikepenz.markdown.model.MarkdownState) {
                 code = t.bodySmall.copy(fontFamily = Mono),
             ),
             components = com.mikepenz.markdown.compose.components.markdownComponents(
+                paragraph = { model -> ChatMathParagraph(model, math) },
                 table = { model -> WrappingMarkdownTable(model.content, model.node, t.bodyMedium.copy(fontFamily = ChatFont)) },
             ),
         )
-    }
-}
-
-/** コードブロック以外の改行を Markdown の強制改行に変換する。 */
-private fun keepLineBreaks(text: String): String {
-    var inFence = false
-    return text.lineSequence().joinToString("\n") { line ->
-        if (line.trimStart().startsWith("```")) {
-            inFence = !inFence
-            line
-        } else if (!inFence && line.isNotBlank() && !line.endsWith("  ")) {
-            "$line  "
-        } else {
-            line
-        }
     }
 }
 
