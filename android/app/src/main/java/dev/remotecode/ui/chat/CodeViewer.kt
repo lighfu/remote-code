@@ -74,6 +74,15 @@ internal fun CodeViewerContent(info: LinkFileInfo, sessionId: String, onDismiss:
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
     var saving by remember { mutableStateOf(false) }
+    fun download() {
+        saving = true
+        scope.launch {
+            val result = runCatching { saveRemoteToDownloads(info, sessionId, sourceServer) }
+            saving = false
+            Toast.makeText(context, result.fold({ appString(R.string.chat_code_viewer_015, info.name) },
+                { appString(R.string.chat_code_viewer_014, it.message) }), Toast.LENGTH_LONG).show()
+        }
+    }
     val quoteHandler = LocalCodeQuote.current
     var selecting by remember(info) { mutableStateOf(false) }
     var anchor by remember(info) { mutableStateOf<Int?>(null) }
@@ -123,26 +132,23 @@ internal fun CodeViewerContent(info: LinkFileInfo, sessionId: String, onDismiss:
                     Icon(Icons.Rounded.FormatQuote, stringResource(R.string.chat_code_viewer_017), tint = if (selecting) MaterialTheme.colorScheme.primary else LocalContentColor.current)
                 }
                 if (onEdit != null) IconButton(onClick = onEdit, enabled = !saving) { Icon(Icons.Rounded.Edit, stringResource(R.string.chat_code_viewer_016)) }
-                IconButton(enabled = !saving, onClick = {
-                    saving = true
-                    scope.launch {
-                        val result = runCatching {
-                            saveRemoteToDownloads(info, sessionId, sourceServer)
-                        }
-                        saving = false
-                        Toast.makeText(context, result.fold({ appString(R.string.chat_code_viewer_015, info.name) }, { appString(R.string.chat_code_viewer_014, it.message) }), Toast.LENGTH_LONG).show()
+                if (saving || onViewHex == null) {
+                    IconButton(onClick = ::download, enabled = !saving) {
+                        if (saving) CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
+                        else Icon(Icons.Rounded.Download, stringResource(R.string.chat_code_viewer_013))
                     }
-                }) {
-                    if (saving) CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
-                    else Icon(Icons.Rounded.Download, stringResource(R.string.chat_code_viewer_013))
-                }
-                if (onViewHex != null) {
+                } else {
                     var more by remember(info.path) { mutableStateOf(false) }
                     Box {
                         IconButton(onClick = { more = true }) {
                             Icon(Icons.Rounded.MoreVert, stringResource(R.string.chat_more))
                         }
                         AppDropdownMenu(expanded = more, onDismissRequest = { more = false }) {
+                            DropdownMenuItem(text = { Text(stringResource(R.string.chat_code_viewer_013)) },
+                                leadingIcon = { Icon(Icons.Rounded.Download, null) }, onClick = {
+                                    more = false
+                                    download()
+                                })
                             DropdownMenuItem(text = { Text(stringResource(R.string.file_view_as_hex)) }, onClick = {
                                 more = false
                                 onViewHex()
