@@ -40,8 +40,6 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 internal data class DraftMedia(val uri: Uri, val name: String, val video: Boolean, val imagePayload: ImagePayload? = null)
-internal class DraftMediaGallery(val items: List<DraftMedia>, val initialPage: Int)
-
 internal fun SelectedFile.previewMedia(): DraftMedia? {
     val type = if (mime == "application/octet-stream") {
         MimeTypeMap.getSingleton().getMimeTypeFromExtension(name.substringAfterLast('.', "").lowercase()).orEmpty()
@@ -54,7 +52,7 @@ internal fun SelectedFile.previewMedia(): DraftMedia? {
 }
 
 @Composable
-internal fun DraftMediaViewer(gallery: DraftMediaGallery, onClose: () -> Unit) {
+internal fun DraftMediaViewer(gallery: DraftMediaGallery<DraftMedia>, onClose: () -> Unit) {
     val pager = rememberPagerState(initialPage = gallery.initialPage) { gallery.items.size }
     val scope = rememberCoroutineScope()
     val page = pager.currentPage

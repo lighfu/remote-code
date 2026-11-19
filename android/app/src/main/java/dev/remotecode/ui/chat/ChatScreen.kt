@@ -1072,18 +1072,16 @@ private fun Composer(
     btwUnread: Boolean = false,
 ) {
     var plusMenu by remember { mutableStateOf(false) }
-    var gallery by remember { mutableStateOf<DraftMediaGallery?>(null) }
+    var gallery by remember { mutableStateOf<DraftMediaGallery<DraftMedia>?>(null) }
     fun openPreview(item: DraftAttachment) {
         val imageName = appString(R.string.screen_remote_image_003)
-        val previews = attachments.mapNotNull { attachment ->
-            val media = when (attachment) {
+        val previews = attachments.map { attachment ->
+            when (attachment) {
                 is ImageAttachment -> DraftMedia(attachment.uri, imageName, video = false, imagePayload = attachment.payload)
                 is FileAttachment -> attachment.file.previewMedia()
             }
-            media?.let { attachment to it }
         }
-        val page = previews.indexOfFirst { it.first === item }
-        if (page >= 0) gallery = DraftMediaGallery(previews.map { it.second }, page)
+        gallery = DraftMediaGallery.open(previews, attachments.indexOf(item))
     }
     gallery?.let { DraftMediaViewer(it) { gallery = null } }
     val light = MaterialTheme.colorScheme.surface.luminance() > 0.5f

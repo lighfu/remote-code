@@ -30,3 +30,13 @@ internal class ComposerSubmission<A>(
         currentAttachments.removeAll { current -> attachments.any { it === current } }
     }
 }
+
+internal class DraftMediaGallery<T : Any> private constructor(val items: List<T>, val initialPage: Int) {
+    companion object {
+        fun <T : Any> open(previews: List<T?>, selectedIndex: Int): DraftMediaGallery<T>? {
+            if (previews.getOrNull(selectedIndex) == null) return null
+            val page = previews.subList(0, selectedIndex).count { it != null }
+            return DraftMediaGallery(previews.filterNotNull(), page)
+        }
+    }
+}
