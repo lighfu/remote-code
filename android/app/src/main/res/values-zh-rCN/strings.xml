@@ -1393,8 +1393,6 @@
     <string name="screen_terminals_007">"返回"</string>
     <string name="screen_terminals_008">"正在打开…"</string>
     <string name="screen_terminals_009">"新建终端"</string>
-    <string name="screen_terminals_010">"可以查看和操作 Claude、Codex、Antigravity 应用打开的终端以及在此新建的终端。"</string>
-    <string name="screen_terminals_011">"输入的命令将直接在 PC 上执行。"</string>
     <string name="screen_terminals_012">"没有打开的终端"</string>
     <string name="screen_terminals_013">"在此打开"</string>
     <string name="screen_terminals_014">"PC 端应用打开的终端"</string>

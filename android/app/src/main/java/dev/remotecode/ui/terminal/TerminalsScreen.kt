@@ -186,14 +186,6 @@ fun TerminalsScreen(cwd: String, onBack: () -> Unit, onOpen: (String) -> Unit) {
             contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 96.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
-            item {
-                Text(
-                    stringResource(R.string.screen_terminals_010) +
-                        appString(R.string.screen_terminals_011),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
             error?.let { e -> item { Text(e, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium) } }
             val l = list
             if (l != null && l.isEmpty()) {

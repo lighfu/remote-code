@@ -645,8 +645,6 @@
     <string name="screen_terminals_007">"戻る"</string>
     <string name="screen_terminals_008">"開いています…"</string>
     <string name="screen_terminals_009">"新しいターミナル"</string>
-    <string name="screen_terminals_010">"Claude・Codex・Antigravity のアプリが開いたターミナルと、ここで開いたターミナルを見て操作できます。"</string>
-    <string name="screen_terminals_011">"打ったコマンドはそのまま PC で動きます。"</string>
     <string name="screen_terminals_012">"開いているターミナルはありません"</string>
     <string name="screen_terminals_013">"ここで開く"</string>
     <string name="screen_terminals_014">"PC のアプリが開いたターミナル"</string>
