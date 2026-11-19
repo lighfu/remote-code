@@ -19,7 +19,7 @@
 <h2><img src="docs/assets/readme/ko/heading-download.svg" width="360" height="66" alt="다운로드"></h2>
 
 <p align="center">
-  <a href="https://github.com/lighfu/remote-code/releases/download/v0.19.11/remote-code-v0.19.11-win32-x64.zip"><img src="docs/assets/readme/ko/download-windows.svg" width="400" height="180" alt="Windows x64용 ZIP 다운로드 (0.19.11)"></a>
+  <a href="https://github.com/lighfu/remote-code/releases/download/v0.19.12/remote-code-v0.19.12-win32-x64.zip"><img src="docs/assets/readme/ko/download-windows.svg" width="400" height="180" alt="Windows x64용 ZIP 다운로드 (0.19.12)"></a>
 </p>
 
 Windows용 배포판은 [GitHub Releases](https://github.com/lighfu/remote-code/releases)에서 다운로드할 수 있습니다.
@@ -95,5 +95,5 @@ APK는 `android/app/build/outputs/apk/release/app-release.apk`에 생성됩니�
 <h2><img src="docs/assets/readme/ko/heading-docs.svg" width="360" height="66" alt="문서"></h2>
 
 <p>
-  <a href="docs/releases/ko/0.19.11.md"><img src="docs/assets/readme/ko/card-notes.svg" width="360" height="128" alt="0.19.11 릴리스 노트"></a>
+  <a href="docs/releases/ko/0.19.12.md"><img src="docs/assets/readme/ko/card-notes.svg" width="360" height="128" alt="0.19.12 릴리스 노트"></a>
 </p>
