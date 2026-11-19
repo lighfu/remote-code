@@ -19,7 +19,7 @@
 <h2><img src="docs/assets/readme/zh-Hant/heading-download.svg" width="360" height="66" alt="下載"></h2>
 
 <p align="center">
-  <a href="https://github.com/lighfu/remote-code/releases/download/v0.19.8/remote-code-v0.19.8-win32-x64.zip"><img src="docs/assets/readme/zh-Hant/download-windows.svg" width="400" height="180" alt="取得 Windows x64 版 ZIP（0.19.8）"></a>
+  <a href="https://github.com/lighfu/remote-code/releases/download/v0.19.10/remote-code-v0.19.10-win32-x64.zip"><img src="docs/assets/readme/zh-Hant/download-windows.svg" width="400" height="180" alt="取得 Windows x64 版 ZIP（0.19.10）"></a>
 </p>
 
 Windows 套件可於 [GitHub Releases](https://github.com/lighfu/remote-code/releases) 下載。
@@ -95,5 +95,5 @@ APK 會產生於 `android/app/build/outputs/apk/release/app-release.apk`。設�
 <h2><img src="docs/assets/readme/zh-Hant/heading-docs.svg" width="360" height="66" alt="文件"></h2>
 
 <p>
-  <a href="docs/releases/zh-Hant/0.19.8.md"><img src="docs/assets/readme/zh-Hant/card-notes.svg" width="360" height="128" alt="0.19.8 版本說明"></a>
+  <a href="docs/releases/zh-Hant/0.19.10.md"><img src="docs/assets/readme/zh-Hant/card-notes.svg" width="360" height="128" alt="0.19.10 版本說明"></a>
 </p>
