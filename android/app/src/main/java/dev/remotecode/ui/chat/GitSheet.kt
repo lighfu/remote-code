@@ -27,6 +27,9 @@ import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.automirrored.rounded.WrapText
+import androidx.compose.material.icons.rounded.ArrowUpward
+import androidx.compose.material.icons.automirrored.rounded.Sort
+import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.ContentCopy
 import androidx.compose.material.icons.rounded.AccountTree
 import androidx.compose.material.icons.rounded.AutoAwesome
@@ -49,6 +52,7 @@ import androidx.compose.material.icons.rounded.SwapHoriz
 import androidx.compose.material.icons.rounded.WarningAmber
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
@@ -75,6 +79,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -94,6 +99,10 @@ import dev.remotecode.data.GitLogEntry
 import dev.remotecode.data.GitStatus
 import dev.remotecode.data.branchLabel
 import dev.remotecode.data.connectionIdentity
+import dev.remotecode.data.projectFileSize
+import dev.remotecode.ui.common.AppDropdownMenu
+import java.text.DateFormat
+import java.util.Date
 import dev.remotecode.ui.theme.Mono
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
@@ -114,6 +123,9 @@ fun GitSheet(sessionId: String, onDismiss: () -> Unit) {
     val sameServer = openedServer != null && activeServer == openedServer
     val sameProject = openedCwd != null && sessions.firstOrNull { it.id == sessionId }?.cwd == openedCwd
     val status = states[sessionId]
+    var fileSort by rememberSaveable(sessionId) { mutableStateOf(GitFileSort.Name) }
+    var ascending by rememberSaveable(sessionId) { mutableStateOf(true) }
+    val sortedFiles = remember(status?.files, fileSort, ascending) { fileSort.sorted(status?.files.orEmpty(), ascending) }
     val connected = connection is ConnState.Connected && sameServer && sameProject
     var tab by remember(sessionId, openedServer) { mutableIntStateOf(0) }
     var epoch by remember(sessionId, openedServer) { mutableIntStateOf(0) }
@@ -293,11 +305,12 @@ fun GitSheet(sessionId: String, onDismiss: () -> Unit) {
                                                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.horizontalScroll(rememberScrollState())) {
                                                     OutlinedButton(onClick = { action("stage", paths = chosen.filter { it.unstaged || it.untracked || it.conflict }.map { it.path }) }, enabled = canOperate && chosen.any { it.unstaged || it.untracked || it.conflict }) { GitActionLabel(Icons.Rounded.PlaylistAdd, appString(R.string.chat_git_sheet_036)) }
                                                     OutlinedButton(onClick = { action("unstage", paths = chosen.filter { it.staged }.map { it.path }) }, enabled = canOperate && chosen.any { it.staged }) { GitActionLabel(Icons.Rounded.PlaylistRemove, appString(R.string.chat_git_sheet_035)) }
+                                                    GitSortControls(fileSort, ascending, { fileSort = it }, { ascending = !ascending })
                                                 }
                                             }
                                         }
-                                        items(status.files, key = { it.path }) { file ->
-                                            GitFileRow(file, file.path in selected, !busy, { checked -> selected = if (checked) selected + file.path else selected - file.path }, { staged -> diff = file.path to staged })
+                                        items(sortedFiles, key = { it.path }) { file ->
+                                            GitFileRow(file, fileSort, file.path in selected, !busy, { checked -> selected = if (checked) selected + file.path else selected - file.path }, { staged -> diff = file.path to staged })
                                         }
                                         if (status.files.isEmpty()) item("clean") { Row(Modifier.padding(20.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) { Icon(Icons.Rounded.CheckCircle, null, Modifier.size(24.dp), tint = MaterialTheme.colorScheme.primary); Text(stringResource(R.string.chat_git_sheet_034), color = MaterialTheme.colorScheme.onSurfaceVariant) } }
                                         item("space") { Box(Modifier.padding(bottom = 14.dp)) }
@@ -365,7 +378,30 @@ private fun GitOverview(status: GitStatus) {
 }
 
 @Composable
-private fun GitFileRow(file: GitFile, selected: Boolean, enabled: Boolean, onSelect: (Boolean) -> Unit, onDiff: (Boolean) -> Unit) {
+private fun GitSortControls(sort: GitFileSort, ascending: Boolean, onSort: (GitFileSort) -> Unit, onReverse: () -> Unit) {
+    var expanded by remember { mutableStateOf(false) }
+    Box {
+        TextButton(onClick = { expanded = true }) {
+            GitActionLabel(Icons.AutoMirrored.Rounded.Sort, stringResource(R.string.git_file_sort_by, stringResource(sort.label)))
+        }
+        AppDropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+            GitFileSort.entries.forEach { choice ->
+                DropdownMenuItem(
+                    text = { Text(stringResource(choice.label)) },
+                    trailingIcon = { if (choice == sort) Icon(Icons.Rounded.Check, null) },
+                    onClick = { expanded = false; onSort(choice) },
+                )
+            }
+        }
+    }
+    TextButton(onClick = onReverse) {
+        GitActionLabel(if (ascending) Icons.Rounded.ArrowUpward else Icons.Rounded.ArrowDownward,
+            stringResource(if (ascending) R.string.git_file_sort_ascending else R.string.git_file_sort_descending))
+    }
+}
+
+@Composable
+private fun GitFileRow(file: GitFile, sort: GitFileSort, selected: Boolean, enabled: Boolean, onSelect: (Boolean) -> Unit, onDiff: (Boolean) -> Unit) {
     val path = file.path.replace('\\', '/')
     val name = path.substringAfterLast('/')
     val directory = path.substringBeforeLast('/', "")
@@ -385,6 +421,12 @@ private fun GitFileRow(file: GitFile, selected: Boolean, enabled: Boolean, onSel
                 Text(name, style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 val location = file.originalPath?.let { "← $it" } ?: directory
                 if (location.isNotBlank()) Text(location, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.StartEllipsis)
+                if (sort == GitFileSort.Size || sort == GitFileSort.Modified) {
+                    val value = if (sort == GitFileSort.Size) file.sizeBytes?.let(::projectFileSize)
+                    else file.modifiedAt?.let { DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT).format(Date(it)) }
+                    Text("${stringResource(sort.label)} · ${value ?: "—"}", style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
                     Text(labels, Modifier.weight(1f), style = MaterialTheme.typography.labelSmall, maxLines = 1, overflow = TextOverflow.Ellipsis, color = if (file.conflict) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant)
                     Text("+${file.additions}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)

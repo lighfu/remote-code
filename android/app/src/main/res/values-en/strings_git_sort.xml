@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="git_file_sort_by">Sort by %1$s</string>
+    <string name="git_file_sort_name">File name</string>
+    <string name="git_file_sort_modified">Date modified</string>
+    <string name="git_file_sort_size">Size</string>
+    <string name="git_file_sort_lines">Changed lines</string>
+    <string name="git_file_sort_status">Git status</string>
+    <string name="git_file_sort_ascending">Ascending</string>
+    <string name="git_file_sort_descending">Descending</string>
+</resources>

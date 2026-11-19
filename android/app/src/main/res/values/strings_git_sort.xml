@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="git_file_sort_by">並べ替え（%1$s）</string>
+    <string name="git_file_sort_name">ファイル名</string>
+    <string name="git_file_sort_modified">更新日時</string>
+    <string name="git_file_sort_size">サイズ</string>
+    <string name="git_file_sort_lines">変更行数</string>
+    <string name="git_file_sort_status">Git の状態</string>
+    <string name="git_file_sort_ascending">昇順</string>
+    <string name="git_file_sort_descending">降順</string>
+</resources>

@@ -339,6 +339,19 @@ func gitReadStatus(root string, verifyRoot bool) (M, error) {
 	files := gitFiles(status)
 	var stats [2]map[string]M
 	var statErrors [2]error
+	reads.Go(func() {
+		for _, file := range files {
+			path := S(file, "path")
+			if gitPath(path) != nil {
+				continue
+			}
+			info, err := os.Lstat(filepath.Join(actualRoot, filepath.FromSlash(path)))
+			if err == nil && info.Mode().IsRegular() {
+				file["sizeBytes"] = info.Size()
+				file["modifiedAt"] = info.ModTime().UnixMilli()
+			}
+		}
+	})
 	for i, count := range []string{"stagedFiles", "unstagedFiles"} {
 		if N(status, count) == 0 {
 			continue
@@ -373,18 +386,21 @@ func gitReadStatus(root string, verifyRoot bool) (M, error) {
 		if B(file, "untracked") {
 			if budget <= 0 || scanned >= 256 {
 				status["lineStatsPartial"] = true
+				file["lineStatsPartial"] = true
 				continue
 			}
 			scanned++
 			content, truncated, err := gitWorking(actualRoot, S(file, "path"), min(256*1024, budget))
 			if err != nil {
 				status["lineStatsPartial"] = true
+				file["lineStatsPartial"] = true
 				continue
 			}
 			budget -= len(content)
 			file["binary"] = bytes.IndexByte(content, 0) >= 0
 			if truncated {
 				status["lineStatsPartial"] = true
+				file["lineStatsPartial"] = true
 			} else if !B(file, "binary") {
 				file["additions"] = gitLines(content)
 			}

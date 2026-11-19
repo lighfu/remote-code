@@ -95,6 +95,12 @@ func TestGitCountsAllUntrackedFilesWhenLineStatsArePartial(t *testing.T) {
 	if N(status, "untrackedFiles") != 9 || N(status, "changedFiles") != 9 || !B(status, "lineStatsPartial") {
 		t.Fatalf("partial line scan lost files: %v", status)
 	}
+	for _, file := range gitFiles(status) {
+		info, err := os.Stat(filepath.Join(root, S(file, "path")))
+		if err != nil || int64(N(file, "sizeBytes")) != info.Size() || int64(N(file, "modifiedAt")) != info.ModTime().UnixMilli() {
+			t.Fatalf("incorrect metadata for %v: %v", file, err)
+		}
+	}
 }
 
 func TestGitStatusVerifiesWorktreeBeforeCaching(t *testing.T) {

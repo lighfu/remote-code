@@ -41,6 +41,9 @@ data class GitFile(
     val additions: Int = 0,
     val deletions: Int = 0,
     val binary: Boolean = false,
+    val sizeBytes: Long? = null,
+    val modifiedAt: Long? = null,
+    val lineStatsPartial: Boolean = false,
 )
 
 @Serializable
