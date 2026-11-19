@@ -35,7 +35,7 @@ Android 앱을 설치하려면 PC에서 `start.cmd`를 실행한 뒤, 휴대전�
 </p>
 
 <p align="center">
-  <img src="docs/assets/readme/ko/card-resources.svg" width="780" height="310" alt="적은 자원으로 동작하도록 설계했습니다. 대화별로 기록 수를 제한하고, 작은 Go 네이티브 포터블 패키지로 배포하며, 원격 화면이 그대로면 재인코딩을 생략합니다.">
+  <img src="docs/assets/readme/ko/card-resources.svg" width="780" height="154" alt="경량 설계. 메모리 절약 · 작은 설치 용량 · 낮은 CPU 부하">
 </p>
 
 - **대화** — 대화 전송 및 재개, 도구 실행 승인, 서브에이전트 확인, 백그라운드 알림.

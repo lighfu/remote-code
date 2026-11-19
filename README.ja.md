@@ -35,7 +35,7 @@ Android アプリは、PC で `start.cmd` を開き、ターミナルの **App Q
 </p>
 
 <p align="center">
-  <img src="docs/assets/readme/card-resources.svg" width="780" height="310" alt="少ないリソースで動く設計。会話ごとに履歴の件数を制限し、Go 製のポータブル形式で配布。リモート画面が変化しなければ再圧縮を省略します。">
+  <img src="docs/assets/readme/card-resources.svg" width="780" height="154" alt="省リソース設計。省メモリ · 小さな配布物 · 低 CPU 負荷">
 </p>
 
 - **会話** — 送信・再開、ツールの承認、サブエージェントの確認、バックグラウンド通知。

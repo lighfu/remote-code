@@ -35,7 +35,7 @@ Windows 发行版可从 [GitHub Releases](https://github.com/lighfu/remote-code/
 </p>
 
 <p align="center">
-  <img src="docs/assets/readme/zh-CN/card-resources.svg" width="780" height="310" alt="以低资源占用为设计目标。限制每个会话的历史条数，提供小巧的 Go 原生便携包，远程桌面画面无变化时省去重新编码。">
+  <img src="docs/assets/readme/zh-CN/card-resources.svg" width="780" height="154" alt="轻量设计。节省内存 · 小巧的安装包 · 低 CPU 负载">
 </p>
 
 - **对话** — 发送与恢复对话、审批工具调用、查看子智能体、接收后台通知。

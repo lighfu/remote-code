@@ -35,7 +35,7 @@ Windows 套件可於 [GitHub Releases](https://github.com/lighfu/remote-code/rel
 </p>
 
 <p align="center">
-  <img src="docs/assets/readme/zh-Hant/card-resources.svg" width="780" height="310" alt="以低資源用量為設計目標。限制每個對話的歷史筆數，提供精簡的 Go 原生可攜套件，遠端桌面畫面無變化時省去重新編碼。">
+  <img src="docs/assets/readme/zh-Hant/card-resources.svg" width="780" height="154" alt="輕量設計。節省記憶體 · 精簡的安裝套件 · 低 CPU 負載">
 </p>
 
 - **對話** — 傳送與繼續對話、核准工具呼叫、檢視子代理，並接收背景通知。
