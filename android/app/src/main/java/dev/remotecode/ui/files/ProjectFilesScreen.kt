@@ -23,6 +23,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
@@ -64,10 +65,12 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -99,13 +102,16 @@ fun ProjectFilesScreen(sessionId: String, onBack: () -> Unit, onEdit: (String) -
     val connection by repo.connection.collectAsState()
     val targetIdentity = remember(settings?.server, route, connection) { repo.api.server?.connectionIdentity() }
     val connected = connection is ConnState.Connected
-    var path by remember(sessionId, targetIdentity) { mutableStateOf("") }
+    // A file editor covers this destination. Keep the browser position in its back stack state.
+    val browserServer = remember(settings?.server) { settings?.server?.connectionIdentity() }
+    var path by key(sessionId, browserServer) { rememberSaveable { mutableStateOf("") } }
+    var query by key(sessionId, browserServer) { rememberSaveable { mutableStateOf("") } }
+    val listState = key(sessionId, browserServer, path, query) { rememberLazyListState() }
     var directory by remember(sessionId, targetIdentity) { mutableStateOf<ProjectDirectory?>(null) }
     var loadedServer by remember(sessionId, targetIdentity) { mutableStateOf<ServerConfig?>(null) }
     var loading by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
     var refresh by remember { mutableIntStateOf(0) }
-    var query by remember(sessionId, targetIdentity) { mutableStateOf("") }
     var addMenu by remember(sessionId, targetIdentity) { mutableStateOf(false) }
     var creating by remember(sessionId, targetIdentity) { mutableStateOf<String?>(null) }
     var createDirectory by remember(sessionId, targetIdentity) { mutableStateOf<ProjectDirectory?>(null) }
@@ -214,7 +220,7 @@ fun ProjectFilesScreen(sessionId: String, onBack: () -> Unit, onEdit: (String) -
             val dir = directory
             if (dir != null && error == null) {
                 val entries = dir.entries
-                LazyColumn(Modifier.weight(1f), contentPadding = PaddingValues(bottom = 12.dp)) {
+                LazyColumn(Modifier.weight(1f), state = listState, contentPadding = PaddingValues(bottom = 12.dp)) {
                     if (dir.truncated) item { Text(stringResource(R.string.screen_project_files_015), Modifier.padding(12.dp), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
                     if (entries.isEmpty()) item { Text(if (query.isBlank()) appString(R.string.screen_project_files_016) else appString(R.string.screen_project_files_017), Modifier.padding(16.dp), color = MaterialTheme.colorScheme.onSurfaceVariant) }
                     items(entries, key = { it.path }) { entry ->

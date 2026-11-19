@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -40,6 +41,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.material3.toShape
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
@@ -51,6 +53,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.rememberTextMeasurer
@@ -346,9 +349,18 @@ fun AgentCard(e: Entry, children: List<Entry>, display: Display, respond: Respon
 }
 
 @Composable
+private fun ChatEntrySheet(onDismiss: () -> Unit, content: @Composable ColumnScope.() -> Unit) {
+    val chatLinks = LocalUriHandler.current
+    ModalBottomSheet(modifier = dev.remotecode.ui.common.hapticArea(), onDismissRequest = onDismiss, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
+        // The sheet has its own Android window. Resolve file paths with the chat's handler.
+        CompositionLocalProvider(LocalUriHandler provides chatLinks) { content() }
+    }
+}
+
+@Composable
 fun AgentsSheet(agents: List<Entry>, children: Map<String, List<Entry>>, display: Display, respond: Responder, onDismiss: () -> Unit) {
     val sections = remember(agents) { agentSections(agents) }
-    ModalBottomSheet(modifier = dev.remotecode.ui.common.hapticArea(), onDismissRequest = onDismiss, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
+    ChatEntrySheet(onDismiss) {
         Text(stringResource(R.string.chat_chat_screen_051, agents.size), style = MaterialTheme.typography.headlineSmall, modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp))
         if (agents.isEmpty()) {
             Text(stringResource(R.string.chat_entry_extras_004), modifier = Modifier.padding(20.dp), color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -373,7 +385,7 @@ fun AgentsSheet(agents: List<Entry>, children: Map<String, List<Entry>>, display
 @Composable
 fun ChangedFilesSheet(edits: List<Entry>, wrap: ToolWrapPreferences, onDismiss: () -> Unit) {
     val x = Extra.colors
-    ModalBottomSheet(modifier = dev.remotecode.ui.common.hapticArea(), onDismissRequest = onDismiss, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
+    ChatEntrySheet(onDismiss) {
         val total = remember(edits) { edits.fold(0 to 0) { acc, e -> editStats(e).let { (a, d) -> acc.first + a to acc.second + d } } }
         Row(Modifier.padding(horizontal = 20.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
             Text(stringResource(R.string.chat_chat_screen_050, remember(edits) { changedFileCount(edits) }), style = MaterialTheme.typography.headlineSmall, modifier = Modifier.weight(1f))
