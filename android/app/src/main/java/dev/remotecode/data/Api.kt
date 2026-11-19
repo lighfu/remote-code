@@ -370,7 +370,8 @@ class Api(private val client: OkHttpClient, private val strings: AppStringResolv
         }
     }
 
-    suspend fun cacheDetail(id: String): CacheDetail = get("/api/sessions/$id/cache", CacheDetail.serializer())
+    suspend fun cacheDetail(id: String, expectedServer: ServerConfig? = null): CacheDetail =
+        projectGet("/api/sessions/$id/cache", CacheDetail.serializer(), expectedServer)
 
     /** null はモデル既定の長さ。 */
     suspend fun setCompactWindow(id: String, tokens: Long?) {

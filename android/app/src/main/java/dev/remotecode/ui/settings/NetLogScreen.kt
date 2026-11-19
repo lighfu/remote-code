@@ -150,7 +150,7 @@ private fun lookOf(e: NetLogEntry): Look = when (e.feature) {
     "failed" -> Look(appString(R.string.screen_net_log_029), Icons.Rounded.LinkOff, Red)
     "closed" -> Look(appString(R.string.screen_net_log_030), Icons.Rounded.LinkOff, Red)
     "ev:hello" -> Look(appString(R.string.screen_net_log_015), Icons.Rounded.List, Green)
-    "ev:session" -> Look(appString(R.string.screen_net_log_031), Icons.Rounded.Update, Teal)
+    "ev:session", "ev:session_details" -> Look(appString(R.string.screen_net_log_031), Icons.Rounded.Update, Teal)
     "ev:entry" -> Look(entryLabel(e.note), Icons.Rounded.CallReceived, Blue)
     "ev:delta" -> Look(appString(R.string.screen_net_log_032), Icons.Rounded.ShortText, Gray)
     "ev:usage" -> Look(appString(R.string.screen_net_log_033), Icons.Rounded.BarChart, Orange)

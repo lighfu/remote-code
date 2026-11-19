@@ -41,9 +41,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -52,11 +50,10 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import dev.remotecode.RemoteCodeApp
-import dev.remotecode.data.CacheDetail
 import dev.remotecode.data.CacheRequest
 import dev.remotecode.data.CacheSummary
+import dev.remotecode.data.SessionDetailField
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -134,29 +131,21 @@ fun CachePill(cache: CacheSummary?, onClick: () -> Unit, compact: Boolean = fals
 @Composable
 fun CacheSheet(sessionId: String, onDismiss: () -> Unit) {
     val repo = RemoteCodeApp.instance.repository
-    val scope = rememberCoroutineScope()
     val meta by repo.meta.collectAsState()
     val money = rememberUsageMoney(meta)
-    var detail by remember { mutableStateOf<CacheDetail?>(null) }
-    var error by remember { mutableStateOf<String?>(null) }
-    fun load() = scope.launch {
-        runCatching { repo.api.cacheDetail(sessionId) }.onSuccess { detail = it; error = null }.onFailure { error = it.message }
-    }
-    LaunchedEffect(sessionId) {
-        while (true) {
-            load()
-            delay(5000)
-        }
+    val state = rememberLiveSessionDetail(sessionId, SessionDetailField.Cache, 5_000) { target ->
+        repo.api.cacheDetail(sessionId, expectedServer = target)
     }
     val now = rememberNow()
     ModalBottomSheet(modifier = dev.remotecode.ui.common.hapticArea(), onDismissRequest = onDismiss, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
         Row(Modifier.padding(start = 24.dp, end = 12.dp), verticalAlignment = Alignment.CenterVertically) {
             Text(stringResource(R.string.chat_cache_sheet_020), style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f))
-            IconButton(onClick = { load() }) { Icon(Icons.Rounded.Refresh, stringResource(R.string.chat_refresh)) }
+            IconButton(onClick = state::refresh) { Icon(Icons.Rounded.Refresh, stringResource(R.string.chat_refresh)) }
         }
-        val d = detail
+        val d = state.detail
+        val error = state.error
         when {
-            d == null && error != null -> Text(localizedServerMessage(error!!), color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(24.dp))
+            d == null && error != null -> Text(localizedServerMessage(error), color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(24.dp))
             d == null -> Box(Modifier.fillMaxWidth().padding(48.dp), contentAlignment = Alignment.Center) { LoadingIndicator() }
             else -> LazyColumn(contentPadding = PaddingValues(start = 20.dp, end = 20.dp, bottom = 32.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 item { LiveCard(d.summary, now) }

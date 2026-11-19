@@ -7,11 +7,12 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.coroutineScope
-import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.isActive
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.channels.BufferOverflow
+import kotlinx.coroutines.flow.filter
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -21,6 +22,8 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
 import kotlinx.serialization.builtins.ListSerializer
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.jsonObject
@@ -64,6 +67,14 @@ class Repository(context: Context, private val scope: CoroutineScope) {
     val api = Api(client)
     private val apiIdentity = MutableStateFlow<ConnectionIdentity?>(null)
     internal val activeServerIdentity = apiIdentity.asStateFlow()
+    private val detailEvents = MutableSharedFlow<DetailChange>(extraBufferCapacity = 16, onBufferOverflow = BufferOverflow.DROP_OLDEST)
+    internal fun detailChanges(id: String, field: SessionDetailField) =
+        detailEvents.filter { change -> session(id)?.let { change.affects(it, field) } == true }.map { Unit }
+
+    private fun detailChanged(id: String, fields: Set<SessionDetailField>, cwd: String?) {
+        if (fields.isNotEmpty()) detailEvents.tryEmit(DetailChange(id, cwd, fields))
+    }
+
     private val gitSnapshots = GitSnapshots(scope)
     val git: StateFlow<Map<String, GitStatus>> = gitSnapshots.values
     val settingsStore = SettingsStore(context)
@@ -173,7 +184,7 @@ class Repository(context: Context, private val scope: CoroutineScope) {
     /** 通知の抑制対象。 */
     val visibleSession = MutableStateFlow<String?>(null)
     val appForeground = MutableStateFlow(false)
-    private data class GitWatch(val id: String?, val cwd: String?, val active: Boolean, val connected: Boolean, val foreground: Boolean, val server: ConnectionIdentity?)
+    private data class GitWatch(val id: String?, val cwd: String?, val connected: Boolean, val foreground: Boolean, val server: ConnectionIdentity?)
     private data class ContextWatch(val id: String, val server: ConnectionIdentity)
 
     private val timelines = ConcurrentHashMap<String, MutableStateFlow<Timeline>>()
@@ -212,14 +223,15 @@ class Repository(context: Context, private val scope: CoroutineScope) {
             }
         }
         scope.launch {
-            combine(visibleSession, appForeground, _conn, sessions) { id, foreground, connection, sessions ->
+            combine(visibleSession, appForeground, _conn, sessions, apiIdentity) { id, foreground, connection, sessions, server ->
                 val session = sessions.firstOrNull { it.id == id }
-                GitWatch(id, session?.cwd, session?.status == "running", connection is ConnState.Connected, foreground, api.server?.connectionIdentity())
+                GitWatch(id, session?.cwd, connection is ConnState.Connected, foreground, server)
             }.distinctUntilChanged().collectLatest { watch ->
-                if (watch.id == null || watch.cwd == null || !watch.connected || !watch.foreground) return@collectLatest
-                while (currentCoroutineContext().isActive) {
-                    refreshGit(watch.id)
-                    delay(if (watch.active) 10_000 else 30_000)
+                if (watch.id == null || watch.cwd == null || watch.server == null || !watch.connected || !watch.foreground) return@collectLatest
+                val interval = { if (session(watch.id)?.isRunning == true) 10_000L else 30_000L }
+                detailChanges(watch.id, SessionDetailField.Git).refreshOnChanges(interval) { changed ->
+                    if (changed) gitSnapshots.invalidate(watch.id)
+                    refreshGit(watch.id, force = changed)
                 }
             }
         }
@@ -227,7 +239,7 @@ class Repository(context: Context, private val scope: CoroutineScope) {
             combine(visibleSession, appForeground, _conn, sessions, apiIdentity) { id, foreground, connection, sessions, server ->
                 val session = sessions.firstOrNull { it.id == id }
                 if (id != null && session?.provider == "codex" && server != null && foreground && connection is ConnState.Connected) ContextWatch(id, server) else null
-            }.pollForegroundSession(intervalMs = 30_000) { watch ->
+            }.pollForegroundSession(intervalMs = 30_000, changes = { detailChanges(it.id, SessionDetailField.Context) }) { watch ->
                 val target = api.server?.takeIf { it.connectionIdentity() == watch.server } ?: return@pollForegroundSession
                 // ローカル記録の増分を読み、利用量・キャッシュを session 配信で受け取る。
                 api.contextDetail(watch.id, expectedServer = target)
@@ -391,7 +403,14 @@ class Repository(context: Context, private val scope: CoroutineScope) {
             }
             "session" -> {
                 val s = AppJson.decodeFromJsonElement(SessionInfo.serializer(), obj["session"]!!)
+                val previous = if (s.id == visibleSession.value) session(s.id) else null
                 sessionSnapshots.receive(s)
+                if (previous != null) detailChanged(s.id, changedDetails(previous, s), s.cwd)
+            }
+            "session_details" -> {
+                val id = obj.str("sessionId") ?: return
+                val names = (obj["fields"] as? JsonArray)?.mapNotNull { (it as? JsonPrimitive)?.contentOrNull }.orEmpty()
+                detailChanged(id, SessionDetailField.entries.filterTo(mutableSetOf()) { it.wireName in names }, obj.str("cwd"))
             }
             "usage" -> {
                 val p = obj.str("provider") ?: return
@@ -438,6 +457,7 @@ class Repository(context: Context, private val scope: CoroutineScope) {
                 val sid = obj.str("sessionId") ?: return
                 val e = AppJson.decodeFromJsonElement(Entry.serializer(), obj["entry"]!!)
                 receiveTimelineChange(sid, timelineRevision, TimelineChange.Put(e))
+                if (visibleSession.value == sid) detailChanged(sid, entryDetails(e), session(sid)?.cwd)
                 if (e.isPendingAsk || e.kind == "result" || e.kind == "user" && e.clientMessageId != null) {
                     _events.tryEmit(EntryEvent(sid, e))
                 }

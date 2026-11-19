@@ -97,9 +97,11 @@ import dev.remotecode.data.GitDiff
 import dev.remotecode.data.GitFile
 import dev.remotecode.data.GitLogEntry
 import dev.remotecode.data.GitStatus
+import dev.remotecode.data.SessionDetailField
 import dev.remotecode.data.branchLabel
 import dev.remotecode.data.connectionIdentity
 import dev.remotecode.data.projectFileSize
+import dev.remotecode.data.refreshOnChanges
 import dev.remotecode.ui.common.AppDropdownMenu
 import java.text.DateFormat
 import java.util.Date
@@ -469,10 +471,10 @@ private fun GitActionLabel(icon: ImageVector, text: String) {
 internal fun GitDiffDialog(sessionId: String, path: String, staged: Boolean, openedServer: dev.remotecode.data.ConnectionIdentity?, openedCwd: String?, onDismiss: () -> Unit) {
     val repo = RemoteCodeApp.instance.repository
     val settings by repo.settings.collectAsState()
-    val route by repo.route.collectAsState()
+    val activeServer by repo.activeServerIdentity.collectAsState()
     val connection by repo.connection.collectAsState()
+    val foreground by repo.appForeground.collectAsState()
     val sessions by repo.sessions.collectAsState()
-    val activeServer = remember(settings?.server, route, connection) { repo.api.server?.connectionIdentity() }
     val sameServer = openedServer != null && activeServer == openedServer
     val sameProject = openedCwd != null && sessions.firstOrNull { it.id == sessionId }?.cwd == openedCwd
     var result by remember(sessionId, path, staged, openedServer) { mutableStateOf<GitDiff?>(null) }
@@ -480,13 +482,17 @@ internal fun GitDiffDialog(sessionId: String, path: String, staged: Boolean, ope
     var retry by remember { mutableIntStateOf(0) }
     val scope = rememberCoroutineScope()
     val wrapLines = settings?.codeWrap ?: true
-    LaunchedEffect(sessionId, path, staged, openedServer, sameServer, sameProject, retry) {
+    LaunchedEffect(sessionId, path, staged, openedServer, sameServer, sameProject, foreground, connection is ConnState.Connected, retry) {
         val target = repo.api.server?.takeIf { it.connectionIdentity() == openedServer } ?: return@LaunchedEffect
-        if (!sameServer || !sameProject || repo.session(sessionId)?.cwd != openedCwd) return@LaunchedEffect
-        result = null; error = null
-        try { result = repo.api.gitDiff(sessionId, path, staged, expectedServer = target) }
-        catch (e: CancellationException) { throw e }
-        catch (e: Exception) { error = e.message ?: appString(R.string.chat_git_sheet_008) }
+        if (!foreground || !sameServer || !sameProject) return@LaunchedEffect
+        repo.detailChanges(sessionId, SessionDetailField.Git).refreshOnChanges({ 30_000L }, minIntervalMs = 2_000) {
+            if (repo.session(sessionId)?.cwd != openedCwd) return@refreshOnChanges
+            try {
+                result = repo.api.gitDiff(sessionId, path, staged, expectedServer = target)
+                error = null
+            } catch (e: CancellationException) { throw e }
+            catch (e: Exception) { error = e.message ?: appString(R.string.chat_git_sheet_008) }
+        }
     }
     Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
         Surface(Modifier.fillMaxSize()) {
@@ -501,16 +507,20 @@ internal fun GitDiffDialog(sessionId: String, path: String, staged: Boolean, ope
             }) { padding ->
                 Column(Modifier.fillMaxSize().padding(padding).padding(horizontal = 12.dp)) {
                     SelectionContainer { Text(path, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(vertical = 8.dp)) }
+                    if (sameServer && sameProject && error != null) Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(error.orEmpty(), Modifier.weight(1f), color = MaterialTheme.colorScheme.error)
+                        TextButton(onClick = { retry++ }) { Text(stringResource(R.string.chat_git_sheet_004)) }
+                    }
                     when {
                         !sameServer || !sameProject -> Text(stringResource(R.string.chat_git_sheet_005), color = MaterialTheme.colorScheme.error)
-                        error != null -> Column { Text(error.orEmpty(), color = MaterialTheme.colorScheme.error); TextButton(onClick = { retry++ }) { Text(stringResource(R.string.chat_git_sheet_004)) } }
-                        result == null -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { LoadingIndicator() }
-                        else -> {
+                        result == null && error == null -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { LoadingIndicator() }
+                        result != null -> {
                             if (result!!.binary) Text(stringResource(R.string.chat_git_sheet_003), Modifier.padding(vertical = 8.dp))
                             if (result!!.truncated) Text(stringResource(R.string.chat_git_sheet_002), color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
                             if (result!!.text.isBlank() && !result!!.binary) Text(stringResource(R.string.chat_git_sheet_001))
                             else DiffCodeView(result!!.text, path, wrapLines, Modifier.weight(1f).padding(bottom = 12.dp))
                         }
+                        else -> Unit
                     }
                 }
             }

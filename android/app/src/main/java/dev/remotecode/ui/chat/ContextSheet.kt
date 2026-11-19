@@ -35,7 +35,6 @@ import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -52,6 +51,7 @@ import dev.remotecode.RemoteCodeApp
 import dev.remotecode.data.ContextCategory
 import dev.remotecode.data.ContextDetail
 import dev.remotecode.data.NamedTokens
+import dev.remotecode.data.SessionDetailField
 import kotlinx.coroutines.launch
 
 fun tokensText(n: Long): String = when {
@@ -85,35 +85,19 @@ private val Palette = listOf(
 @Composable
 fun ContextSheet(sessionId: String, onDismiss: () -> Unit) {
     val repo = RemoteCodeApp.instance.repository
-    val scope = rememberCoroutineScope()
-    var detail by remember { mutableStateOf<ContextDetail?>(null) }
-    var error by remember { mutableStateOf<String?>(null) }
-    var loading by remember { mutableStateOf(true) }
-
-    fun load() {
-        loading = true
-        error = null
-        scope.launch {
-            try {
-                detail = repo.api.contextDetail(sessionId)
-            } catch (e: Exception) {
-                if (detail == null) error = e.message ?: appString(R.string.chat_context_sheet_030)
-            }
-            loading = false
-        }
-    }
-    LaunchedEffect(sessionId) {
-        // Codex は前景ポーリングとローカル読み取りを共有する。
-        if (repo.session(sessionId)?.provider != "codex") runCatching { repo.api.contextDetail(sessionId, cached = true) }.onSuccess { if (detail == null) detail = it }
-        load()
-    }
+    val state = rememberLiveSessionDetail(sessionId, SessionDetailField.Context, 30_000, cached = { target ->
+        if (repo.session(sessionId)?.provider == "codex") null
+        else repo.api.contextDetail(sessionId, cached = true, expectedServer = target)
+    }) { target -> repo.api.contextDetail(sessionId, expectedServer = target) }
 
     ModalBottomSheet(modifier = dev.remotecode.ui.common.hapticArea(), onDismissRequest = onDismiss, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
         Row(Modifier.padding(start = 24.dp, end = 12.dp), verticalAlignment = Alignment.CenterVertically) {
             Text(stringResource(R.string.chat_context), style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f))
-            IconButton(onClick = { load() }, enabled = !loading) { Icon(Icons.Rounded.Refresh, stringResource(R.string.chat_refresh)) }
+            IconButton(onClick = state::refresh, enabled = !state.loading) { Icon(Icons.Rounded.Refresh, stringResource(R.string.chat_refresh)) }
         }
-        val d = detail
+        val d = state.detail
+        val error = state.error
+        val loading = state.loading
         if (loading && d != null) {
             Text(
                 stringResource(R.string.chat_context_sheet_029),
@@ -124,8 +108,8 @@ fun ContextSheet(sessionId: String, onDismiss: () -> Unit) {
         }
         when {
             loading && d == null -> Box(Modifier.fillMaxWidth().padding(48.dp), contentAlignment = Alignment.Center) { LoadingIndicator() }
-            error != null && d == null -> Text(localizedServerMessage(error!!), color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(24.dp))
-            d != null -> ContextBody(d, header = { ContextControls(sessionId, onChanged = { load() }, onCompacted = onDismiss) })
+            error != null && d == null -> Text(localizedServerMessage(error), color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(24.dp))
+            d != null -> ContextBody(d, header = { ContextControls(sessionId, onChanged = state::refresh, onCompacted = onDismiss) })
         }
     }
 }
