@@ -363,17 +363,58 @@ fun GitSheet(sessionId: String, onDismiss: () -> Unit) {
 
 @Composable
 private fun GitOverview(status: GitStatus) {
-    Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        SelectionContainer { Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) { Icon(Icons.Rounded.Folder, null, Modifier.size(16.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant); Text(status.root.orEmpty(), style = MaterialTheme.typography.labelSmall, maxLines = 2, overflow = TextOverflow.Ellipsis, color = MaterialTheme.colorScheme.onSurfaceVariant) } }
-        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp)) { Icon(Icons.Rounded.InsertDriveFile, null, Modifier.size(18.dp)); Text(stringResource(R.string.chat_git_sheet_022, status.changedFiles), style = MaterialTheme.typography.labelLarge) }
-            Text("+${status.additions}", color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelLarge)
-            Text("−${status.deletions}", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.labelLarge)
+    val colors = MaterialTheme.colorScheme
+    val labelStyle = MaterialTheme.typography.labelMedium
+    FlowRow(
+        Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+        horizontalArrangement = Arrangement.spacedBy(16.dp),
+        verticalArrangement = Arrangement.spacedBy(4.dp),
+        itemVerticalAlignment = Alignment.CenterVertically,
+    ) {
+        SelectionContainer {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                Icon(Icons.Rounded.Folder, null, Modifier.size(16.dp), tint = colors.onSurfaceVariant)
+                Text(
+                    status.root.orEmpty(),
+                    style = labelStyle,
+                    maxLines = 1,
+                    overflow = TextOverflow.MiddleEllipsis,
+                    color = colors.onSurfaceVariant,
+                )
+            }
         }
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) { Icon(Icons.Rounded.Cloud, null, Modifier.size(16.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant); Text(status.upstream?.let { "$it  ↑${status.ahead} ↓${status.behind}" } ?: stringResource(R.string.chat_git_sheet_021), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
-        if (status.detached) Text(stringResource(R.string.chat_git_sheet_019), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
-        if (status.lineStatsPartial) Text(stringResource(R.string.chat_git_sheet_018), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        if (status.remotes.isEmpty()) Text(stringResource(R.string.chat_git_sheet_017), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        FlowRow(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(2.dp),
+            itemVerticalAlignment = Alignment.CenterVertically,
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+                Icon(Icons.Rounded.InsertDriveFile, null, Modifier.size(16.dp))
+                Text(stringResource(R.string.chat_git_sheet_022, status.changedFiles), style = labelStyle)
+            }
+            Text("+${status.additions}", color = colors.primary, style = labelStyle)
+            Text("−${status.deletions}", color = colors.error, style = labelStyle)
+        }
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            Icon(Icons.Rounded.Cloud, null, Modifier.size(16.dp), tint = colors.onSurfaceVariant)
+            val upstream = status.upstream
+            if (upstream == null) {
+                Text(stringResource(R.string.chat_git_sheet_021), style = labelStyle, color = colors.onSurfaceVariant)
+            } else {
+                Text(
+                    upstream,
+                    Modifier.weight(1f, fill = false),
+                    style = labelStyle,
+                    maxLines = 1,
+                    overflow = TextOverflow.MiddleEllipsis,
+                    color = colors.onSurfaceVariant,
+                )
+                Text("↑${status.ahead} ↓${status.behind}", style = labelStyle, color = colors.onSurfaceVariant)
+            }
+        }
+        if (status.detached) Text(stringResource(R.string.chat_git_sheet_019), style = labelStyle, color = colors.error)
+        if (status.lineStatsPartial) Text(stringResource(R.string.chat_git_sheet_018), style = labelStyle, color = colors.onSurfaceVariant)
+        if (status.remotes.isEmpty()) Text(stringResource(R.string.chat_git_sheet_017), style = labelStyle, color = colors.onSurfaceVariant)
     }
 }
 
