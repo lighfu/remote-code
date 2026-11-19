@@ -1,0 +1,12 @@
+<resources>
+    <string name="cache_heatmap_title">快取命中率紀錄</string>
+    <string name="cache_heatmap_order">由舊到新 · 每格最多 %1$d 次請求</string>
+    <string name="cache_heatmap_recent">最近 %1$d 次請求 · 由舊到新</string>
+    <string name="cache_heatmap_selection">請求 %1$s · %2$s</string>
+    <string name="cache_heatmap_percent">%1$.1f%%</string>
+    <string name="cache_heatmap_no_input">無輸入權杖</string>
+    <string name="cache_heatmap_marks">紅色標記表示該區間含命中率低於 90% 的請求。</string>
+    <string name="cache_heatmap_low">%1$d 次請求的命中率低於 90%%</string>
+    <string name="cache_heatmap_previous">上一區間</string>
+    <string name="cache_heatmap_next">下一區間</string>
+</resources>

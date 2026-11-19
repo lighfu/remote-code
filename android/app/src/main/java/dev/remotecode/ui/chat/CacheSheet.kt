@@ -174,6 +174,9 @@ fun CacheSheet(sessionId: String, onDismiss: () -> Unit) {
                         }
                     }
                 }
+                if (d.heatmap?.cells?.isNotEmpty() == true || d.recent.isNotEmpty()) {
+                    item(key = "cache-heatmap") { CacheHitHeatmap(d) }
+                }
                 item { Text(stringResource(R.string.chat_cache_sheet_011), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(top = 6.dp)) }
                 items(d.recent) { q -> RequestRow(q, d.summary?.ttlMs ?: 300_000) }
             }

@@ -30,8 +30,8 @@ android {
         minSdk = 29
         targetSdk = 36
         // 更新時はバージョン番号とビルド番号を両方上げる。
-        versionCode = 73
-        versionName = "0.18.14"
+        versionCode = 74
+        versionName = "0.18.15"
     }
 
     signingConfigs {

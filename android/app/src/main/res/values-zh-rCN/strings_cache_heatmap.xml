@@ -1,0 +1,12 @@
+<resources>
+    <string name="cache_heatmap_title">缓存命中率历史</string>
+    <string name="cache_heatmap_order">按时间从早到晚 · 每格最多 %1$d 次请求</string>
+    <string name="cache_heatmap_recent">最近 %1$d 次请求 · 按时间从早到晚</string>
+    <string name="cache_heatmap_selection">请求 %1$s · %2$s</string>
+    <string name="cache_heatmap_percent">%1$.1f%%</string>
+    <string name="cache_heatmap_no_input">无输入令牌</string>
+    <string name="cache_heatmap_marks">红色标记表示该区间含命中率低于 90% 的请求。</string>
+    <string name="cache_heatmap_low">%1$d 次请求的命中率低于 90%%</string>
+    <string name="cache_heatmap_previous">上一区间</string>
+    <string name="cache_heatmap_next">下一区间</string>
+</resources>

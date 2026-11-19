@@ -1,0 +1,12 @@
+<resources>
+    <string name="cache_heatmap_title">Cache hit history</string>
+    <string name="cache_heatmap_order">Oldest first · up to %1$d requests per cell</string>
+    <string name="cache_heatmap_recent">Last %1$d requests · oldest first</string>
+    <string name="cache_heatmap_selection">Requests %1$s · %2$s</string>
+    <string name="cache_heatmap_percent">%1$.1f%%</string>
+    <string name="cache_heatmap_no_input">No input tokens</string>
+    <string name="cache_heatmap_marks">Red marks flag requests with hit rates under 90%.</string>
+    <string name="cache_heatmap_low">%1$d requests under 90%%</string>
+    <string name="cache_heatmap_previous">Previous group</string>
+    <string name="cache_heatmap_next">Next group</string>
+</resources>

@@ -8,9 +8,42 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 )
+
+func TestCacheHeatmapKeepsOlderRequestsAndAppliesCorrections(t *testing.T) {
+	var series analyticsSeries
+	const count = 3657
+	for i := range count {
+		usage := analyticsUsage{Read: 99, Fresh: 1, At: int64(i + 1)}
+		if i == 0 {
+			usage.Read, usage.Fresh = 0, 100
+		}
+		series.add("codex", strconv.Itoa(i), usage, nil)
+	}
+	_, detail := series.result(0)
+	heatmap := detail["heatmap"].(cacheHeatmap)
+	if heatmap.RequestsPerCell != 32 || len(heatmap.Cells) != (count+31)/32 || len(detail["recent"].([]M)) != 200 {
+		t.Fatalf("incorrect grouping: %d per cell, %d cells", heatmap.RequestsPerCell, len(heatmap.Cells))
+	}
+	if first := heatmap.Cells[0]; first != (cacheHeatmapCell{Read: 31 * 99, Input: 3200, Low: 1}) {
+		t.Fatalf("the first request disappeared when grouping: %+v", first)
+	}
+	if last := heatmap.Cells[len(heatmap.Cells)-1]; last.Input != (count%32)*100 {
+		t.Fatalf("unexpected input for final partial group: %+v", last)
+	}
+	series.add("codex", "0", analyticsUsage{Read: 95, Fresh: 5}, nil)
+	series.add("codex", "3", analyticsUsage{Output: 10}, nil)
+	_, updated := series.result(0)
+	if first := updated["heatmap"].(cacheHeatmap).Cells[0]; first != (cacheHeatmapCell{Read: 30*99 + 95, Input: 3100}) {
+		t.Fatalf("incorrect correction after the request left recent history: %+v", first)
+	}
+	if heatmap.Cells[0].Low != 1 || N(providerMap(updated["totals"]), "requests") != count {
+		t.Fatal("a correction modified the previous response or duplicated a request")
+	}
+}
 
 func TestAnalyticsIncrementalReadAcrossBufferAndAppendBoundaries(t *testing.T) {
 	var s analyticsState

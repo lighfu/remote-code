@@ -233,6 +233,14 @@ data class CacheRequest(
 data class CacheTotals(val read: Long = 0, val write5m: Long = 0, val write1h: Long = 0, val uncached: Long = 0, val requests: Int = 0, val hitRate: Double = 0.0)
 
 @Serializable
+data class CacheHeatmapCell(val read: Double = 0.0, val input: Double = 0.0, val low: Int = 0) {
+    val hitRate: Double? get() = (read / input).coerceIn(0.0, 1.0).takeIf { input > 0 && it.isFinite() }
+}
+
+@Serializable
+data class CacheHeatmap(val requestsPerCell: Int = 1, val cells: List<CacheHeatmapCell> = emptyList())
+
+@Serializable
 data class CacheDetail(
     val summary: CacheSummary? = null,
     val totals: CacheTotals = CacheTotals(),
@@ -241,6 +249,7 @@ data class CacheDetail(
     val savedPartial: Boolean = false,
     val expiredCount: Int = 0,
     val recent: List<CacheRequest> = emptyList(),
+    val heatmap: CacheHeatmap? = null,
 )
 
 @Serializable

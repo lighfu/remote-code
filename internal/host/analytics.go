@@ -48,15 +48,22 @@ type analyticsUsage struct {
 	Read, Write5, Write1, Fresh, Output float64
 	CodexWrite12h                       float64 // included in Write5, the legacy Codex write-total field
 }
+
+type analyticsSample struct {
+	usage analyticsUsage
+	index int
+}
+
 type analyticsSeries struct {
 	requests                                           []analyticsUsage
-	seen                                               map[string]analyticsUsage
+	seen                                               map[string]analyticsSample
 	count                                              int
 	input, cached, write5, write1, output, cost, saved float64
 	pricedRequests, savingsSamples                     int
 	missingCost, missingSavings                        bool
 	last                                               analyticsUsage
 	cacheBeforeRecent                                  analyticsCacheHistory
+	heatmap                                            cacheHeatmap
 	provider                                           string
 }
 
@@ -226,14 +233,18 @@ func analyticsCharge(provider string, u analyticsUsage, config M) (float64, floa
 func (s *analyticsSeries) add(provider, id string, u analyticsUsage, config M) {
 	s.provider = provider
 	u.ID = id
-	old, updated := s.seen[id]
+	sample, updated := s.seen[id]
+	index := s.count
 	if updated {
+		old := sample.usage
+		index = sample.index
 		if old.At > 0 {
 			u.At = old.At
 		}
 		if old == u {
 			return
 		}
+		s.heatmap.replace(index, old, u)
 		s.input -= old.Fresh + old.Read + old.Write5 + old.Write1
 		s.cached -= old.Read
 		s.write5 -= old.Write5
@@ -251,9 +262,9 @@ func (s *analyticsSeries) add(provider, id string, u analyticsUsage, config M) {
 	}
 	if id != "" {
 		if s.seen == nil {
-			s.seen = map[string]analyticsUsage{}
+			s.seen = map[string]analyticsSample{}
 		}
-		s.seen[id] = u
+		s.seen[id] = analyticsSample{usage: u, index: index}
 	}
 	s.input += u.Fresh + u.Read + u.Write5 + u.Write1
 	s.cached += u.Read
@@ -282,6 +293,7 @@ func (s *analyticsSeries) add(provider, id string, u analyticsUsage, config M) {
 		return
 	}
 	s.last = u
+	s.heatmap.append(index, u)
 	s.requests = append(s.requests, u)
 	if len(s.requests) > 200 {
 		s.cacheBeforeRecent.observe(provider, s.requests[0])
@@ -576,6 +588,12 @@ func (s *analyticsSeries) result(size int64) (M, M) {
 		hit = s.cached / s.input
 	}
 	detail := M{"summary": summary, "totals": M{"read": s.cached, "write5m": s.write5, "write1h": s.write1, "uncached": max(0, s.input-s.cached-s.write5-s.write1), "requests": s.count, "hitRate": hit}, "expiredCount": cache.expired, "recent": recent}
+	if len(s.heatmap.Cells) > 0 {
+		detail["heatmap"] = cacheHeatmap{
+			RequestsPerCell: s.heatmap.RequestsPerCell,
+			Cells:           append([]cacheHeatmapCell(nil), s.heatmap.Cells...),
+		}
+	}
 	detail["savedKnown"], detail["savedPartial"] = s.savingsSamples > 0, s.savingsSamples < s.count || s.missingSavings
 	stats["savedKnown"], stats["savedPartial"] = detail["savedKnown"], detail["savedPartial"]
 	if s.savingsSamples > 0 {

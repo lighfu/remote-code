@@ -1,0 +1,12 @@
+<resources>
+    <string name="cache_heatmap_title">캐시 적중률 기록</string>
+    <string name="cache_heatmap_order">오래된 순 · 칸당 최대 %1$d개 요청</string>
+    <string name="cache_heatmap_recent">최근 %1$d개 요청 · 오래된 순</string>
+    <string name="cache_heatmap_selection">요청 %1$s · %2$s</string>
+    <string name="cache_heatmap_percent">%1$.1f%%</string>
+    <string name="cache_heatmap_no_input">입력 토큰 없음</string>
+    <string name="cache_heatmap_marks">빨간 표시가 있는 구간에는 적중률이 90% 미만인 요청이 있습니다.</string>
+    <string name="cache_heatmap_low">적중률 90%% 미만 요청 %1$d개</string>
+    <string name="cache_heatmap_previous">이전 구간</string>
+    <string name="cache_heatmap_next">다음 구간</string>
+</resources>
