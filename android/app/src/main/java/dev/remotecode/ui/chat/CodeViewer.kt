@@ -21,6 +21,7 @@ import androidx.compose.material.icons.automirrored.rounded.WrapText
 import androidx.compose.material.icons.rounded.Download
 import androidx.compose.material.icons.rounded.Edit
 import androidx.compose.material.icons.rounded.FormatQuote
+import androidx.compose.material.icons.rounded.MoreVert
 import androidx.compose.material.icons.rounded.Visibility
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -46,6 +47,7 @@ import dev.remotecode.data.ConnectionIdentity
 import dev.remotecode.data.connectionIdentity
 import dev.remotecode.data.codeQuoteFromLines
 import dev.remotecode.data.isProjectMarkdown
+import dev.remotecode.ui.common.AppDropdownMenu
 import dev.remotecode.ui.files.ProjectMarkdownPreview
 import dev.remotecode.ui.theme.CodeScale
 import dev.remotecode.ui.theme.Extra
@@ -134,11 +136,24 @@ internal fun CodeViewerContent(info: LinkFileInfo, sessionId: String, onDismiss:
                     if (saving) CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
                     else Icon(Icons.Rounded.Download, stringResource(R.string.chat_code_viewer_013))
                 }
+                if (onViewHex != null) {
+                    var more by remember(info.path) { mutableStateOf(false) }
+                    Box {
+                        IconButton(onClick = { more = true }) {
+                            Icon(Icons.Rounded.MoreVert, stringResource(R.string.chat_more))
+                        }
+                        AppDropdownMenu(expanded = more, onDismissRequest = { more = false }) {
+                            DropdownMenuItem(text = { Text(stringResource(R.string.file_view_as_hex)) }, onClick = {
+                                more = false
+                                onViewHex()
+                            })
+                        }
+                    }
+                }
             }
-            Row(Modifier.fillMaxWidth().padding(start = 16.dp, end = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                Text(info.path, Modifier.weight(1f).padding(vertical = 4.dp), style = MaterialTheme.typography.labelSmall, maxLines = 2, overflow = TextOverflow.Ellipsis, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                if (onViewHex != null) TextButton(onClick = onViewHex) { Text(stringResource(R.string.file_view_as_hex)) }
-            }
+            Text(info.path, Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
+                style = MaterialTheme.typography.labelSmall, maxLines = 2, overflow = TextOverflow.Ellipsis,
+                color = MaterialTheme.colorScheme.onSurfaceVariant)
             if (changes != null) FileChangeButtons(changes) { staged -> showDiff = changes to staged }
             if (info.truncated) Text(stringResource(R.string.chat_code_viewer_012), Modifier.padding(horizontal = 16.dp, vertical = 4.dp), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.tertiary)
             if (lines?.any { it.text.length > MAX_LINE_CHARS } == true) Text(stringResource(R.string.chat_code_viewer_011, MAX_LINE_CHARS), Modifier.padding(horizontal = 16.dp), style = MaterialTheme.typography.labelSmall)
