@@ -278,6 +278,7 @@
     <string name="chat_footer_output_tokens">Output tokens</string>
     <string name="chat_footer_cached_tokens">Cached input tokens</string>
     <string name="chat_footer_cache_rate">Input cache hit rate</string>
+    <string name="chat_footer_cost">Cost</string>
     <string name="chat_footer_cost_usd">Cost in USD</string>
     <string name="chat_footer_cost_local">Cost in local currency</string>
     <string name="chat_footer_display_dialog_001">"Move down"</string>

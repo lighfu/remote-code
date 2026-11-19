@@ -278,6 +278,7 @@
     <string name="chat_footer_output_tokens">输出 Token</string>
     <string name="chat_footer_cached_tokens">缓存输入 Token</string>
     <string name="chat_footer_cache_rate">输入缓存命中率</string>
+    <string name="chat_footer_cost">费用</string>
     <string name="chat_footer_cost_usd">美元费用</string>
     <string name="chat_footer_cost_local">本地货币费用</string>
     <string name="chat_footer_display_dialog_001">"下移"</string>

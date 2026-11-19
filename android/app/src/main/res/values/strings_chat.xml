@@ -278,6 +278,7 @@
     <string name="chat_footer_output_tokens">出力トークン</string>
     <string name="chat_footer_cached_tokens">キャッシュ済み入力トークン</string>
     <string name="chat_footer_cache_rate">入力キャッシュヒット率</string>
+    <string name="chat_footer_cost">料金</string>
     <string name="chat_footer_cost_usd">料金（米ドル）</string>
     <string name="chat_footer_cost_local">料金（地域通貨）</string>
     <string name="chat_footer_display_dialog_001">下に移動</string>

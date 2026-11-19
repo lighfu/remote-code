@@ -278,6 +278,7 @@
     <string name="chat_footer_output_tokens">輸出 Token</string>
     <string name="chat_footer_cached_tokens">快取輸入 Token</string>
     <string name="chat_footer_cache_rate">輸入快取命中率</string>
+    <string name="chat_footer_cost">費用</string>
     <string name="chat_footer_cost_usd">美元費用</string>
     <string name="chat_footer_cost_local">當地貨幣費用</string>
     <string name="chat_footer_display_dialog_001">"下移"</string>

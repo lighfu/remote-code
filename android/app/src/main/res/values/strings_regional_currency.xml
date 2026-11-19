@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="settings_local_currency">地域通貨</string>
+    <string name="settings_local_currency_automatic">表示言語に合わせる（%1$s）</string>
+    <string name="settings_local_currency_search">通貨名またはコードで検索</string>
+    <string name="settings_local_currency_no_match">一致する通貨がありません</string>
+    <string name="settings_local_currency_rate_unavailable">換算レートを取得できていません</string>
+</resources>

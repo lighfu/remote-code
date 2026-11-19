@@ -29,6 +29,7 @@ data class AppSettings(
     val codeWrap: Boolean = true,
     val desktop: DesktopPreferences = DesktopPreferences(),
     val toolWrap: ToolWrapPreferences = ToolWrapPreferences(),
+    val localCurrency: String? = null,
 )
 
 data class ToolWrapPreferences(val input: Boolean = true, val output: Boolean = false)
@@ -131,6 +132,7 @@ class SettingsStore(private val context: Context) {
         val footerCacheRate = booleanPreferencesKey("chat_footer_cache_rate")
         val footerCostUsd = booleanPreferencesKey("chat_footer_cost_usd")
         val footerCostLocal = booleanPreferencesKey("chat_footer_cost_local")
+        val localCurrency = stringPreferencesKey("local_currency")
         val themeMode = stringPreferencesKey("theme_mode")
         val dynamicColor = booleanPreferencesKey("dynamic_color")
         val accent = stringPreferencesKey("accent")
@@ -205,6 +207,7 @@ class SettingsStore(private val context: Context) {
             thinking = p[Keys.thinking] ?: "full",
             toolDetail = p[Keys.toolDetail] ?: true,
             codeWrap = p[Keys.codeWrap] ?: true,
+            localCurrency = p[Keys.localCurrency]?.takeIf(::isMonetaryCurrency),
             toolWrap = ToolWrapPreferences(
                 input = p[Keys.toolInputWrap] ?: true,
                 output = p[Keys.toolOutputWrap] ?: false,
@@ -284,6 +287,14 @@ class SettingsStore(private val context: Context) {
 
     suspend fun setThinking(mode: String) {
         context.dataStore.edit { it[Keys.thinking] = mode }
+    }
+
+    suspend fun setLocalCurrency(code: String?) {
+        require(code == null || isMonetaryCurrency(code))
+        context.dataStore.edit { prefs ->
+            if (code == null) prefs.remove(Keys.localCurrency)
+            else prefs[Keys.localCurrency] = code
+        }
     }
 
     suspend fun setAppearance(a: Appearance) {

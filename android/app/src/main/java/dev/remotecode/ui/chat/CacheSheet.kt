@@ -162,7 +162,7 @@ fun CacheSheet(sessionId: String, onDismiss: () -> Unit) {
                             Text(
                                 stringResource(
                                     if (d.savedPartial && d.savedKnown != false && d.savedUsd != null) R.string.chat_cache_savings_partial else R.string.chat_cache_sheet_014,
-                                    money.savings(d.savedUsd.takeUnless { d.savedKnown == false }),
+                                    money.format(d.savedUsd.takeUnless { d.savedKnown == false }),
                                 ),
                                 style = MaterialTheme.typography.bodyMedium,
                             )

@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="settings_local_currency">Local currency</string>
+    <string name="settings_local_currency_automatic">Follow app language (%1$s)</string>
+    <string name="settings_local_currency_search">Search by currency or code</string>
+    <string name="settings_local_currency_no_match">No matching currencies</string>
+    <string name="settings_local_currency_rate_unavailable">Exchange rate unavailable</string>
+</resources>

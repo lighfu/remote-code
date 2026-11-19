@@ -188,6 +188,7 @@ fun SettingsScreen(onBack: () -> Unit, onChangeServer: () -> Unit, onAppearance:
                 supportingContent = { Text(stringResource(R.string.screen_settings_025)) },
             ) { Text(stringResource(R.string.screen_settings_026)) }
             LanguageSettingsItem()
+            RegionalCurrencySettingsItem(s.localCurrency, meta, repo.settingsStore::setLocalCurrency)
             Spacer(Modifier.height(8.dp))
             Box {
                 SegmentedListItem(

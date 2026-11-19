@@ -245,6 +245,28 @@ class Repository(context: Context, private val scope: CoroutineScope) {
                 api.contextDetail(watch.id, expectedServer = target)
             }
         }
+        scope.launch {
+            combine(appForeground, _conn, apiIdentity, _meta) { foreground, connection, server, meta ->
+                val rates = meta?.usdRates
+                if (foreground && connection is ConnState.Connected && server != null && rates != null) {
+                    server to (rates.size > 2)
+                } else null
+            }.distinctUntilChanged().collectLatest { watch ->
+                val (server, hasRateTable) = watch ?: return@collectLatest
+                // The PC can finish its first exchange-rate fetch after the WebSocket connects.
+                val interval = if (hasRateTable) 30 * 60_000L else 5 * 60_000L
+                delay(if (hasRateTable) interval else 15_000L)
+                while (true) {
+                    val target = api.server?.takeIf { it.connectionIdentity() == server } ?: return@collectLatest
+                    try {
+                        refreshMeta(target)
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (_: Exception) { /* Preserve the last table during transient connection failures. */ }
+                    delay(interval)
+                }
+            }
+        }
     }
 
     private fun applyServer() {

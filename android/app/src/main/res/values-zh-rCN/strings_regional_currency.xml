@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="settings_local_currency">本地货币</string>
+    <string name="settings_local_currency_automatic">跟随应用语言（%1$s）</string>
+    <string name="settings_local_currency_search">按货币名称或代码搜索</string>
+    <string name="settings_local_currency_no_match">没有匹配的货币</string>
+    <string name="settings_local_currency_rate_unavailable">暂时无法获取汇率</string>
+</resources>

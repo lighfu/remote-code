@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="settings_local_currency">지역 통화</string>
+    <string name="settings_local_currency_automatic">앱 언어 따르기(%1$s)</string>
+    <string name="settings_local_currency_search">통화 이름 또는 코드로 검색</string>
+    <string name="settings_local_currency_no_match">일치하는 통화가 없습니다</string>
+    <string name="settings_local_currency_rate_unavailable">환율을 가져올 수 없습니다</string>
+</resources>

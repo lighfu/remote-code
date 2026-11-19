@@ -1,13 +1,18 @@
 package dev.remotecode.ui.chat
 
-import android.content.res.Resources
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.platform.LocalConfiguration
 import dev.remotecode.R
+import dev.remotecode.RemoteCodeApp
 import dev.remotecode.data.ChatFooterDisplay
 import dev.remotecode.data.Meta
 import dev.remotecode.data.SessionStats
+import dev.remotecode.data.inferRegionalCurrency
+import dev.remotecode.data.monetaryCurrency
+import dev.remotecode.data.regionalCurrencyRate
 import java.text.NumberFormat
 import java.util.Currency
 import java.util.Locale
@@ -15,45 +20,43 @@ import kotlin.math.abs
 
 internal data class UsageMetric(val label: Int, val value: String)
 
-internal class UsageMoney(private val locale: Locale, region: Locale, meta: Meta?) {
+internal class UsageMoney(private val locale: Locale, currencyCode: String?, meta: Meta?) {
     private val usd = Currency.getInstance("USD")
-    private val local = runCatching { Currency.getInstance(region) }.getOrNull()?.takeIf { it.defaultFractionDigits >= 0 }
-    private val rate = when (local?.currencyCode) {
-        null -> null
-        "USD" -> 1.0
-        "JPY" -> if (meta?.usdRates == null) meta?.usdJpy else meta.usdRates["JPY"]
-        else -> meta?.usdRates?.get(local.currencyCode)
-    }?.takeIf { it.isFinite() && it > 0 }
+    private val local = currencyCode?.let(::monetaryCurrency) ?: Currency.getInstance(inferRegionalCurrency(locale))
+    private val rate = regionalCurrencyRate(local.currencyCode, meta)
 
-    private fun amount(value: Double?, unit: Currency?, partial: Boolean): String {
-        if (unit == null || value == null || !value.isFinite()) return "—"
+    private fun amount(value: Double, unit: Currency): String {
         val formatter = NumberFormat.getCurrencyInstance(locale).apply {
             currency = unit
             minimumFractionDigits = unit.defaultFractionDigits
-            maximumFractionDigits = if (unit == usd && value < 10) 3 else unit.defaultFractionDigits
+            maximumFractionDigits = if (unit == usd && abs(value) < 10) 3 else unit.defaultFractionDigits
         }
         val smallest = Math.pow(10.0, -formatter.maximumFractionDigits.toDouble())
         if (value != 0.0 && abs(value) < smallest / 2) {
             return if (value < 0) "> " + formatter.format(-smallest) else "< " + formatter.format(smallest)
         }
-        return (if (partial) "≥ " else "") + formatter.format(value)
+        return formatter.format(value)
     }
 
-    fun dollars(value: Double?, partial: Boolean) = amount(value, usd, partial)
-    fun regional(value: Double?, partial: Boolean) = amount(if (value != null && rate != null) value * rate else null, local, partial)
-
-    fun savings(value: Double?): String {
-        val base = dollars(value, false)
-        val converted = regional(value, false)
-        return if (local == usd || converted == "—") base else "$base ($converted)"
+    fun format(value: Double?, showUsd: Boolean = true, showLocal: Boolean = true, partial: Boolean = false): String {
+        if (value == null || !value.isFinite()) return "—"
+        val dollars = value.takeIf { showUsd }?.let { amount(it, usd) }
+        val regional = rate?.takeIf { showLocal && (!showUsd || local != usd) }
+            ?.let { it * value }?.takeIf(Double::isFinite)?.let { amount(it, local) }
+        val display = when {
+            dollars != null && regional != null -> "$dollars ($regional)"
+            else -> dollars ?: regional ?: return "—"
+        }
+        return if (partial) "≥ $display" else display
     }
 }
 
 @Composable
 internal fun rememberUsageMoney(meta: Meta?): UsageMoney {
+    val settings by RemoteCodeApp.instance.repository.settings.collectAsState()
+    val currency = settings?.localCurrency
     val locale = LocalConfiguration.current.locales[0]
-    val region = Resources.getSystem().configuration.locales[0]
-    return remember(locale, region, meta) { UsageMoney(locale, region, meta) }
+    return remember(locale, currency, meta) { UsageMoney(locale, currency, meta) }
 }
 
 internal fun usageMetrics(stats: SessionStats?, display: ChatFooterDisplay, money: UsageMoney): List<UsageMetric> = buildList {
@@ -69,6 +72,7 @@ internal fun usageMetrics(stats: SessionStats?, display: ChatFooterDisplay, mone
         }
         add(UsageMetric(R.string.chat_footer_cache_rate, hit ?: "—"))
     }
-    if (display.costUsd) add(UsageMetric(R.string.chat_footer_cost_usd, money.dollars(stats?.costUsd, stats?.partial == true)))
-    if (display.costLocal) add(UsageMetric(R.string.chat_footer_cost_local, money.regional(stats?.costUsd, stats?.partial == true)))
+    if (display.costUsd || display.costLocal) {
+        add(UsageMetric(R.string.chat_footer_cost, money.format(stats?.costUsd, display.costUsd, display.costLocal, stats?.partial == true)))
+    }
 }

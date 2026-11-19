@@ -278,6 +278,7 @@
     <string name="chat_footer_output_tokens">출력 토큰</string>
     <string name="chat_footer_cached_tokens">캐시된 입력 토큰</string>
     <string name="chat_footer_cache_rate">입력 캐시 적중률</string>
+    <string name="chat_footer_cost">비용</string>
     <string name="chat_footer_cost_usd">USD 비용</string>
     <string name="chat_footer_cost_local">현지 통화 비용</string>
     <string name="chat_footer_display_dialog_001">"아래로 이동"</string>
