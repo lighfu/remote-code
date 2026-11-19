@@ -59,11 +59,17 @@ func TestProjectWritesRefreshGitOverEvents(t *testing.T) {
 	if status := request("GET", "/git", nil); !B(status, "isRepo") || N(status, "changedFiles") != 0 {
 		t.Fatal(status)
 	}
+	// The project browser sends the canonical root from its listing, which
+	// can differ from the session directory on Windows.
+	projectRoot := S(request("GET", "/project/files", nil), "root")
+	if projectRoot == "" {
+		t.Fatal("project listing has no root")
+	}
 	for _, step := range []struct {
 		path, count string
 		body        M
 	}{
-		{"/project/create", "untrackedFiles", M{"root": root, "path": "note.txt", "kind": "file"}},
+		{"/project/create", "untrackedFiles", M{"root": projectRoot, "path": "note.txt", "kind": "file"}},
 		{"/git/stage", "stagedFiles", M{"cwd": root, "paths": []string{"note.txt"}}},
 	} {
 		start := time.Now()
