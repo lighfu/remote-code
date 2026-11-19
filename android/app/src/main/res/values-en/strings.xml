@@ -313,7 +313,6 @@
     <string name="chat_git_sheet_017">"No remote configured. Push and fetch are unavailable."</string>
     <string name="chat_git_sheet_018">"* Includes changes not reflected in line count (e.g., binary or large files)."</string>
     <string name="chat_git_sheet_019">"Detached HEAD. Create or switch to a branch before pushing."</string>
-    <string name="chat_git_sheet_020">"Line count is the total of staged, unstaged, and untracked changes."</string>
     <string name="chat_git_sheet_021">"Upstream tracking not set"</string>
     <string name="chat_git_sheet_022">"%1$s files"</string>
     <string name="chat_git_sheet_023">"Create and switch"</string>
@@ -330,7 +329,6 @@
     <string name="chat_git_sheet_035">"Unstage"</string>
     <string name="chat_git_sheet_036">"Stage"</string>
     <string name="chat_git_sheet_037">"%1$s selected"</string>
-    <string name="chat_git_sheet_038">"Commits will only include staged changes. Use the separate button to push."</string>
     <string name="chat_git_sheet_039">"Commit (%1$s)"</string>
     <string name="chat_git_sheet_040">"There are conflicting files. Resolve conflicts before staging."</string>
     <string name="chat_git_sheet_041">"Commit message"</string>

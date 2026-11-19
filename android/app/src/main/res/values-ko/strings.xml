@@ -313,7 +313,6 @@
     <string name="chat_git_sheet_017">"원격 저장소가 설정되지 않았습니다. 푸시 및 패치를 사용할 수 없습니다."</string>
     <string name="chat_git_sheet_018">"* 바이너리나 대용량 파일 등 줄 수에 포함되지 않는 변경 사항이 있습니다."</string>
     <string name="chat_git_sheet_019">"Detached HEAD 상태입니다. 브랜치를 생성하거나 전환한 후 푸시해 주세요."</string>
-    <string name="chat_git_sheet_020">"줄 수는 스테이지됨, 스테이지 안 됨, 추적 안 됨 변경 사항의 합계입니다."</string>
     <string name="chat_git_sheet_021">"추적 대상이 설정되지 않았습니다"</string>
     <string name="chat_git_sheet_022">"%1$s개 파일"</string>
     <string name="chat_git_sheet_023">"생성 후 전환"</string>
@@ -330,7 +329,6 @@
     <string name="chat_git_sheet_035">"스테이지 취소"</string>
     <string name="chat_git_sheet_036">"스테이지"</string>
     <string name="chat_git_sheet_037">"%1$s개 선택됨"</string>
-    <string name="chat_git_sheet_038">"커밋에는 스테이지된 변경 사항만 포함됩니다. 푸시는 별도의 버튼으로 실행합니다."</string>
     <string name="chat_git_sheet_039">"커밋 (%1$s개)"</string>
     <string name="chat_git_sheet_040">"충돌이 발생한 파일이 있습니다. 내용을 해결한 후 스테이지해 주세요."</string>
     <string name="chat_git_sheet_041">"커밋 메시지"</string>

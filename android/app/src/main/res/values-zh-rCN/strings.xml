@@ -313,7 +313,6 @@
     <string name="chat_git_sheet_017">"未配置远程仓库。无法推送或抓取。"</string>
     <string name="chat_git_sheet_018">"* 存在未计入行数的更改（如二进制文件或大型文件）。"</string>
     <string name="chat_git_sheet_019">"处于 Detached HEAD 状态。请创建或切换分支后再推送。"</string>
-    <string name="chat_git_sheet_020">"行数为已暂存、未暂存及未跟踪更改的总和。"</string>
     <string name="chat_git_sheet_021">"未设置跟踪分支"</string>
     <string name="chat_git_sheet_022">"%1$s 个文件"</string>
     <string name="chat_git_sheet_023">"创建并切换"</string>
@@ -330,7 +329,6 @@
     <string name="chat_git_sheet_035">"取消暂存"</string>
     <string name="chat_git_sheet_036">"暂存"</string>
     <string name="chat_git_sheet_037">"已选择 %1$s 项"</string>
-    <string name="chat_git_sheet_038">"提交仅包含已暂存的更改。请使用其他按钮执行推送。"</string>
     <string name="chat_git_sheet_039">"提交 (%1$s 项)"</string>
     <string name="chat_git_sheet_040">"存在冲突文件。请解决冲突后再暂存。"</string>
     <string name="chat_git_sheet_041">"提交说明"</string>

@@ -313,7 +313,6 @@
     <string name="chat_git_sheet_017">"尚未設定遠端存放庫。無法進行 Push 或 Fetch。"</string>
     <string name="chat_git_sheet_018">"* 包含二進位或大型檔案等不計入行數的變更。"</string>
     <string name="chat_git_sheet_019">"目前處於 Detached HEAD 狀態。請先建立或切換分支後再 Push。"</string>
-    <string name="chat_git_sheet_020">"行數為已暫存、未暫存與未追蹤變更的總和。"</string>
     <string name="chat_git_sheet_021">"尚未設定上游追蹤目標"</string>
     <string name="chat_git_sheet_022">"%1$s 個檔案"</string>
     <string name="chat_git_sheet_023">"建立並切換"</string>
@@ -330,7 +329,6 @@
     <string name="chat_git_sheet_035">"取消暫存"</string>
     <string name="chat_git_sheet_036">"暫存"</string>
     <string name="chat_git_sheet_037">"已選取 %1$s 項"</string>
-    <string name="chat_git_sheet_038">"Commit 僅會包含已暫存的變更。Push 請使用另一個按鈕執行。"</string>
     <string name="chat_git_sheet_039">"Commit (%1$s 項)"</string>
     <string name="chat_git_sheet_040">"有檔案存在衝突。請先解決衝突內容後再進行暫存。"</string>
     <string name="chat_git_sheet_041">"Commit 訊息"</string>

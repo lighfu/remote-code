@@ -292,7 +292,6 @@ fun GitSheet(sessionId: String, onDismiss: () -> Unit) {
                                                 }
                                                 if (status.conflictedFiles > 0) Text(stringResource(R.string.chat_git_sheet_040), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
                                                 Button(onClick = { action("commit", commitMessage = message.trim()) }, enabled = canOperate && !status.detached && message.isNotBlank() && status.stagedFiles > 0 && status.conflictedFiles == 0) { GitActionLabel(Icons.Rounded.Commit, appString(R.string.chat_git_sheet_039, status.stagedFiles)) }
-                                                Text(stringResource(R.string.chat_git_sheet_038), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                             }
                                         }
                                         if (status.files.isNotEmpty()) item("selection") {
@@ -370,7 +369,6 @@ private fun GitOverview(status: GitStatus) {
             Text("−${status.deletions}", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.labelLarge)
         }
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) { Icon(Icons.Rounded.Cloud, null, Modifier.size(16.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant); Text(status.upstream?.let { "$it  ↑${status.ahead} ↓${status.behind}" } ?: stringResource(R.string.chat_git_sheet_021), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
-        Text(stringResource(R.string.chat_git_sheet_020), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         if (status.detached) Text(stringResource(R.string.chat_git_sheet_019), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
         if (status.lineStatsPartial) Text(stringResource(R.string.chat_git_sheet_018), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         if (status.remotes.isEmpty()) Text(stringResource(R.string.chat_git_sheet_017), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)

@@ -313,7 +313,6 @@
     <string name="chat_git_sheet_017">リモートが未設定です。プッシュ・フェッチは利用できません。</string>
     <string name="chat_git_sheet_018">* バイナリや大きなファイルなど、行数に含まれない変更があります。</string>
     <string name="chat_git_sheet_019">Detached HEAD です。ブランチを作成または切り替えてからプッシュしてください。</string>
-    <string name="chat_git_sheet_020">行数はステージ済み・未ステージ・未追跡の変更の合計です。</string>
     <string name="chat_git_sheet_021">追跡先は未設定です</string>
     <string name="chat_git_sheet_022">%1$s ファイル</string>
     <string name="chat_git_sheet_023">作成して切り替える</string>
@@ -331,7 +330,6 @@
     <string name="chat_git_sheet_035">ステージ解除</string>
     <string name="chat_git_sheet_036">ステージ</string>
     <string name="chat_git_sheet_037">%1$s 件選択</string>
-    <string name="chat_git_sheet_038">コミットにはステージ済みの変更だけを含めます。プッシュは別のボタンで実行します。</string>
     <string name="chat_git_sheet_039">コミット (%1$s 件)</string>
     <string name="chat_git_sheet_040">競合しているファイルがあります。内容を解決してからステージしてください。</string>
     <string name="chat_git_sheet_041">コミットメッセージ</string>
