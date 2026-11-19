@@ -506,6 +506,26 @@ class Api(private val client: OkHttpClient, private val strings: AppStringResolv
 
     internal fun mediaPlayback(id: String): MediaPlaybackSource = mediaPlaybackSource(base(), id)
 
+    internal suspend fun isVideoSourceMissing(source: MediaPlaybackSource): Boolean =
+        kotlinx.coroutines.suspendCancellableCoroutine { continuation ->
+            val request = Request.Builder().url(source.url)
+                .apply { source.headers.forEach { (name, value) -> header(name, value) } }
+                .cacheControl(CacheControl.FORCE_NETWORK).head().build()
+            val call = directClient.newCall(request)
+            call.timeout().timeout(5, java.util.concurrent.TimeUnit.SECONDS)
+            continuation.invokeOnCancellation { call.cancel() }
+            call.enqueue(object : okhttp3.Callback {
+                override fun onFailure(call: okhttp3.Call, e: IOException) {
+                    if (continuation.isActive) continuation.resumeWith(Result.success(false))
+                }
+
+                override fun onResponse(call: okhttp3.Call, response: okhttp3.Response) {
+                    val missing = response.use { it.code == 404 }
+                    if (continuation.isActive) continuation.resumeWith(Result.success(missing))
+                }
+            })
+        }
+
     /** 動画をメモリへ展開せず保存し、画面終了時に通信を中断する。 */
     internal suspend fun copyMediaTo(id: String, destination: java.io.OutputStream): Long =
         kotlinx.coroutines.suspendCancellableCoroutine { continuation ->

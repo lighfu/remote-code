@@ -79,7 +79,10 @@ fun VideoPlayerContent(id: String, name: String = videoFileName(id), writeOrigin
     val route by repo.route.collectAsState()
     val identity = remember(settings?.server, route) { repo.api.server?.connectionIdentity() }
     val source = remember(id, identity) { runCatching { repo.api.mediaPlayback(id) }.getOrNull() }
-    VideoPlaybackContent(source, id, name, identity, writeOriginal, onViewHex, onClose)
+    VideoPlaybackContent(
+        source, id, name, identity, writeOriginal, onViewHex, onClose,
+        isSourceMissing = repo.api::isVideoSourceMissing,
+    )
 }
 
 @Composable
@@ -93,18 +96,27 @@ private fun VideoPlaybackContent(
     source: MediaPlaybackSource?, id: String, name: String = "", identity: ConnectionIdentity? = null,
     writeOriginal: (suspend (java.io.OutputStream) -> Unit)? = null, onViewHex: (() -> Unit)? = null,
     onClose: (() -> Unit)? = null,
+    isSourceMissing: (suspend (MediaPlaybackSource) -> Boolean)? = null,
 ) {
     val owner = LocalLifecycleOwner.current
     val lifecycle by owner.lifecycle.currentStateFlow.collectAsState()
     var attempt by remember(id, identity) { mutableIntStateOf(0) }
     var loading by remember(id, identity, attempt) { mutableStateOf(true) }
     var error by remember(id, identity, attempt) { mutableStateOf<String?>(null) }
+    var sourceMissing by remember(source, attempt) { mutableStateOf(false) }
     var position by rememberSaveable(id, identity) { mutableIntStateOf(0) }
     var resumePlaying by rememberSaveable(id, identity) { mutableStateOf(true) }
     var player by remember(id, identity, attempt) { mutableStateOf<VideoView?>(null) }
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
     var saving by remember(id) { mutableStateOf(false) }
+
+    val playbackFailed = error != null
+    LaunchedEffect(source, attempt, playbackFailed) {
+        if (source != null && playbackFailed && isSourceMissing != null) {
+            sourceMissing = isSourceMissing(source)
+        }
+    }
 
     Surface(Modifier.fillMaxSize()) {
         Column(if (onClose == null) Modifier.fillMaxSize() else Modifier.fillMaxSize().systemBarsPadding()) {
@@ -199,7 +211,9 @@ private fun VideoPlaybackContent(
                 }
                 if (source == null || error != null) {
                     Column(Modifier.padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                        Text(error ?: appString(R.string.screen_video_media_008), color = MaterialTheme.colorScheme.error)
+                        val message = if (sourceMissing) stringResource(R.string.screen_video_source_missing)
+                            else error ?: stringResource(R.string.screen_video_media_008)
+                        Text(message, color = MaterialTheme.colorScheme.error)
                         if (source != null) Button(onClick = { attempt++ }) { Text(stringResource(R.string.screen_video_media_009)) }
                     }
                 } else if (loading) LoadingIndicator()

@@ -4,6 +4,7 @@ import com.sun.net.httpserver.HttpServer
 import java.io.ByteArrayOutputStream
 import java.net.InetSocketAddress
 import java.util.Base64
+import java.util.concurrent.ConcurrentLinkedQueue
 import java.util.concurrent.atomic.AtomicInteger
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.cancelAndJoin
@@ -28,6 +29,45 @@ class MediaPlaybackTest {
         assertEquals("video/mp4", videoMime(videoFileName(id)))
         assertFalse(mediaPlaybackSource(ServerConfig("http://127.0.0.1:8787", "usb", "PC"), id).headers.containsKey("CF-Access-Client-Id"))
         assertTrue(runCatching { mediaPlaybackSource(ServerConfig("https://remote.example", "token", "PC"), "../file", invalidIdMessage = { "invalid-id" }) }.isFailure)
+    }
+
+    @Test fun videoProbeReportsOnlyMissingFilesAndUsesThePlaybackConnection() = runBlocking {
+        val requests = ConcurrentLinkedQueue<List<String?>>()
+        val server = HttpServer.create(InetSocketAddress("127.0.0.1", 0), 0)
+        server.createContext("/api/media/") { exchange ->
+            requests.add(listOf(
+                exchange.requestMethod,
+                exchange.requestHeaders.getFirst("Authorization"),
+                exchange.requestHeaders.getFirst("CF-Access-Client-Id"),
+                exchange.requestHeaders.getFirst("CF-Access-Client-Secret"),
+            ))
+            val status = when (exchange.requestURI.path.substringAfterLast('/')) {
+                "missing" -> 404
+                "available" -> 200
+                else -> 503
+            }
+            exchange.sendResponseHeaders(status, -1)
+            exchange.close()
+        }
+        server.start()
+        val client = OkHttpClient()
+        val api = Api(strings = testAppStrings, client = client).apply {
+            this.server = ServerConfig("http://127.0.0.1:${server.address.port}", "video-token", "PC", "client", "secret")
+        }
+        try {
+            val missing = api.mediaPlayback("missing")
+            val available = api.mediaPlayback("available")
+            val unavailable = api.mediaPlayback("unavailable")
+            api.server = null
+            withTimeout(5_000) {
+                assertTrue(api.isVideoSourceMissing(missing))
+                assertFalse(api.isVideoSourceMissing(available))
+                assertFalse(api.isVideoSourceMissing(unavailable))
+            }
+            assertEquals(List(3) { listOf("HEAD", "Bearer video-token", "client", "secret") }, requests.toList())
+        } finally {
+            client.connectionPool.evictAll(); client.dispatcher.executorService.shutdown(); server.stop(0)
+        }
     }
 
     @Test fun videoDownloadStreamsTheOriginalWithAuthentication() = runBlocking {
