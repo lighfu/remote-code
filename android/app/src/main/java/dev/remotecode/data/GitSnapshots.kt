@@ -53,8 +53,8 @@ internal class GitSnapshots(
         }
     }
 
-    @Synchronized fun invalidate(id: String) { revisions[id] = (revisions[id] ?: 0) + 1; loaded.remove(id) }
-    @Synchronized fun forget(id: String) { invalidate(id); _values.update { it - id } }
+    @Synchronized fun invalidate(id: String) { revisions[id] = (revisions[id] ?: 0) + 1 }
+    @Synchronized fun forget(id: String) { invalidate(id); loaded.remove(id); _values.update { it - id } }
     @Synchronized fun reconnected() { reset++; loaded.clear() }
     @Synchronized fun clear() { reset++; revisions.clear(); loaded.clear(); _values.value = emptyMap() }
 }

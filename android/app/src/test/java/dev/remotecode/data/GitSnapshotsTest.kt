@@ -13,6 +13,21 @@ import org.junit.Test
 class GitSnapshotsTest {
     private val pc = ConnectionIdentity("http://pc", "token", "", "")
 
+    @Test fun aFailedRefreshKeepsTheLastFilesOnlyForTheSameWorkingDirectory() = runBlocking {
+        val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+        try {
+            val snapshots = GitSnapshots(scope, failureMessage = { "offline" })
+            val files = listOf(GitFile(path = "demo.kt", staged = true))
+            snapshots.load("id", pc, "project", false, { true }) { GitStatus(isRepo = true, files = files) }
+            snapshots.invalidate("id")
+            snapshots.load("id", pc, "project", false, { true }) { error("retry") }
+            assertEquals(files, snapshots.values.value["id"]?.files)
+            assertEquals("retry", snapshots.values.value["id"]?.error)
+            snapshots.load("id", pc, "other", false, { true }) { error("different project") }
+            assertTrue(snapshots.values.value["id"]!!.files.isEmpty())
+        } finally { scope.cancel() }
+    }
+
     @Test fun mutationRejectsAnOlderInflightReadAndDoesNotShareItsRefresh() = runBlocking {
         val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
         try {
