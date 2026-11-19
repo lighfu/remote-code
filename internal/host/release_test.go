@@ -314,8 +314,12 @@ func TestLegacyPortableRootOnlyMatchesTheActiveChild(t *testing.T) {
 	if err := atomicJSON(filepath.Join(root, "current.json"), M{"version": "1.2.3"}); err != nil {
 		t.Fatal(err)
 	}
-	if got := legacyPortableRoot(exe, "instance"); got != root {
-		t.Fatalf("legacy portable root = %q, want %q", got, root)
+	canonicalRoot, err := filepath.EvalSymlinks(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := legacyPortableRoot(exe, "instance"); got != canonicalRoot {
+		t.Fatalf("legacy portable root = %q, want %q", got, canonicalRoot)
 	}
 	if got := legacyPortableRoot(exe, ""); got != "" {
 		t.Fatalf("standalone process recognized as a portable child: %q", got)

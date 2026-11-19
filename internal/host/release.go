@@ -547,11 +547,21 @@ func legacyPortableRoot(exe, instance string) string {
 	if instance == "" || !strings.EqualFold(filepath.Base(releases), "releases") {
 		return ""
 	}
-	root := filepath.Dir(releases)
+	root, err := filepath.EvalSymlinks(filepath.Dir(releases))
+	if err != nil {
+		return ""
+	}
 	if _, err := releaseRegular(filepath.Join(root, "portable.json")); err != nil {
 		return ""
 	}
-	if _, selected, err := releaseSelect(root); err == nil && platformSameResource(selected, exe) {
+	if _, err := releaseRegular(exe); err != nil {
+		return ""
+	}
+	canonicalExe, err := filepath.EvalSymlinks(exe)
+	if err != nil {
+		return ""
+	}
+	if _, selected, err := releaseSelect(root); err == nil && strings.EqualFold(selected, canonicalExe) {
 		return root
 	}
 	return ""
@@ -644,7 +654,7 @@ func runPortable(root, data string, args []string) error {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer stop()
 	for ctx.Err() == nil {
-		err := runPortableGeneration(ctx, root, data, args, key)
+		err := runPortableGeneration(ctx, canonicalRoot, data, args, key)
 		if !errors.Is(err, ErrPortableRestart) {
 			return err
 		}
