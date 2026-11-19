@@ -22,6 +22,8 @@ var mediaVideos = map[string]string{".mp4": "video/mp4", ".m4v": "video/mp4", ".
 var mediaNonLocal = regexp.MustCompile(`(?i)^(https?|data|content):`)
 var mediaDriveURL = regexp.MustCompile(`^[\\/]+([A-Za-z]:[\\/])`)
 
+const mediaVideoLimit = 512 * 1024 * 1024
+
 const mediaTextExtensions = " txt md markdown json jsonl yaml yml toml ini cfg conf log csv tsv xml svg html htm css scss js mjs cjs ts tsx jsx py rb go rs java kt kts c h cpp hpp cs swift php sh bash zsh ps1 bat cmd sql gradle properties env gitignore dockerfile makefile lua r dart vue svelte "
 
 func mediaMime(path string) string {
@@ -88,7 +90,7 @@ func mediaAvailable(path string, video bool) bool {
 	}
 	limit := int64(40 * 1024 * 1024)
 	if video {
-		limit = 512 * 1024 * 1024
+		limit = mediaVideoLimit
 	}
 	return st.Size() <= limit
 }
@@ -551,8 +553,13 @@ func registerMedia(a *App, mux *http.ServeMux) {
 		}
 		ext := strings.ToLower(filepath.Ext(path))
 		video := mediaVideos[ext] != ""
-		if (!video && mediaImages[ext] == "") || !mediaAvailable(path, video) {
-			fileError(w, fileProblem(404, "Image not found"))
+		available := (video || mediaImages[ext] != "") && mediaAvailable(path, video)
+		if video && !available {
+			path = sentVideoFile(a.DataDir, path)
+			available = mediaAvailable(path, true)
+		}
+		if !available {
+			fileError(w, fileProblem(404, "Media file not found"))
 			return
 		}
 		st, err := os.Stat(path)

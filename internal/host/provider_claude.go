@@ -354,6 +354,11 @@ func (p *nativeProvider) claudeUserMessage(sid string, fromPC bool, msg M) {
 		}
 		p.store.Patch(sid, id, M{"output": providerText(block["content"]), "status": status})
 		p.addToolMedia(sid, id, block["content"])
+		if status == "done" {
+			for _, video := range p.store.claudeSentVideos(sid, id) {
+				retainSentVideo(p.data, video)
+			}
+		}
 	}
 	if toolResult {
 		p.store.repairClaudeWrapUpCards(sid)
