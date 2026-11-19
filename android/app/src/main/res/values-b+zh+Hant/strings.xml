@@ -819,6 +819,7 @@
     <string name="screen_video_media_008">"請連線至 PC 後再開啟影片"</string>
     <string name="screen_video_media_009">"重新播放"</string>
     <string name="screen_video_source_missing">在電腦上找不到原始影片檔案，請重新附加。</string>
+    <string name="screen_video_prepare_local">正在暫存影片…</string>
     <string name="screen_video_media_010">"無法建立儲存目的地"</string>
     <string name="screen_video_media_011">"無法寫入儲存目的地"</string>
     <string name="screen_native_project_code_editor_001">"程式碼編輯器"</string>

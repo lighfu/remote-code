@@ -31,7 +31,7 @@ class MediaPlaybackTest {
         assertTrue(runCatching { mediaPlaybackSource(ServerConfig("https://remote.example", "token", "PC"), "../file", invalidIdMessage = { "invalid-id" }) }.isFailure)
     }
 
-    @Test fun videoProbeReportsOnlyMissingFilesAndUsesThePlaybackConnection() = runBlocking {
+    @Test fun videoPlaybackCopyUsesTheOriginalConnectionAndPreservesHttpErrors() = runBlocking {
         val requests = ConcurrentLinkedQueue<List<String?>>()
         val server = HttpServer.create(InetSocketAddress("127.0.0.1", 0), 0)
         server.createContext("/api/media/") { exchange ->
@@ -46,7 +46,9 @@ class MediaPlaybackTest {
                 "available" -> 200
                 else -> 503
             }
-            exchange.sendResponseHeaders(status, -1)
+            val payload = if (status == 200) byteArrayOf(10, 20, 30) else byteArrayOf()
+            exchange.sendResponseHeaders(status, if (payload.isEmpty()) -1L else payload.size.toLong())
+            if (payload.isNotEmpty()) exchange.responseBody.write(payload)
             exchange.close()
         }
         server.start()
@@ -60,11 +62,13 @@ class MediaPlaybackTest {
             val unavailable = api.mediaPlayback("unavailable")
             api.server = null
             withTimeout(5_000) {
-                assertTrue(api.isVideoSourceMissing(missing))
-                assertFalse(api.isVideoSourceMissing(available))
-                assertFalse(api.isVideoSourceMissing(unavailable))
+                val output = ByteArrayOutputStream()
+                assertEquals(3L, api.copyMediaTo(available, output))
+                assertArrayEquals(byteArrayOf(10, 20, 30), output.toByteArray())
+                assertEquals(404, (runCatching { api.copyMediaTo(missing, output) }.exceptionOrNull() as? ApiException)?.code)
+                assertEquals(503, (runCatching { api.copyMediaTo(unavailable, output) }.exceptionOrNull() as? ApiException)?.code)
             }
-            assertEquals(List(3) { listOf("HEAD", "Bearer video-token", "client", "secret") }, requests.toList())
+            assertEquals(List(3) { listOf("GET", "Bearer video-token", "client", "secret") }, requests.toList())
         } finally {
             client.connectionPool.evictAll(); client.dispatcher.executorService.shutdown(); server.stop(0)
         }

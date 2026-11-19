@@ -32,13 +32,24 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import dev.remotecode.RemoteCodeApp
+import dev.remotecode.data.ApiException
 import dev.remotecode.data.ConnectionIdentity
 import dev.remotecode.data.MediaPlaybackSource
 import dev.remotecode.data.connectionIdentity
 import dev.remotecode.data.videoFileName
 import dev.remotecode.data.videoMime
+import java.io.File
+import java.io.IOException
+import java.io.OutputStream
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.awaitCancellation
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+
+private const val StreamPrepareTimeoutMs = 12_000L
 
 /** 本文やツールの折りたたみに関係なく表示する。 */
 @Composable
@@ -81,7 +92,7 @@ fun VideoPlayerContent(id: String, name: String = videoFileName(id), writeOrigin
     val source = remember(id, identity) { runCatching { repo.api.mediaPlayback(id) }.getOrNull() }
     VideoPlaybackContent(
         source, id, name, identity, writeOriginal, onViewHex, onClose,
-        isSourceMissing = repo.api::isVideoSourceMissing,
+        copyForPlayback = repo.api::copyMediaTo,
     )
 }
 
@@ -96,27 +107,54 @@ private fun VideoPlaybackContent(
     source: MediaPlaybackSource?, id: String, name: String = "", identity: ConnectionIdentity? = null,
     writeOriginal: (suspend (java.io.OutputStream) -> Unit)? = null, onViewHex: (() -> Unit)? = null,
     onClose: (() -> Unit)? = null,
-    isSourceMissing: (suspend (MediaPlaybackSource) -> Boolean)? = null,
+    copyForPlayback: (suspend (MediaPlaybackSource, OutputStream) -> Long)? = null,
 ) {
     val owner = LocalLifecycleOwner.current
     val lifecycle by owner.lifecycle.currentStateFlow.collectAsState()
     var attempt by remember(id, identity) { mutableIntStateOf(0) }
     var loading by remember(id, identity, attempt) { mutableStateOf(true) }
     var error by remember(id, identity, attempt) { mutableStateOf<String?>(null) }
-    var sourceMissing by remember(source, attempt) { mutableStateOf(false) }
+    var playFromFile by remember(source, attempt) { mutableStateOf(false) }
+    var previewFile by remember(source, attempt) { mutableStateOf<File?>(null) }
     var position by rememberSaveable(id, identity) { mutableIntStateOf(0) }
     var resumePlaying by rememberSaveable(id, identity) { mutableStateOf(true) }
-    var player by remember(id, identity, attempt) { mutableStateOf<VideoView?>(null) }
+    var player by remember(id, identity, attempt, playFromFile) { mutableStateOf<VideoView?>(null) }
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
     var saving by remember(id) { mutableStateOf(false) }
 
-    val playbackFailed = error != null
-    LaunchedEffect(source, attempt, playbackFailed) {
-        if (source != null && playbackFailed && isSourceMissing != null) {
-            sourceMissing = isSourceMissing(source)
+    val playbackError = stringResource(if (onClose == null) R.string.chat_attachment_video_error else R.string.screen_video_media_007)
+    val missingError = stringResource(R.string.screen_video_source_missing)
+    val active = lifecycle.isAtLeast(Lifecycle.State.STARTED)
+    val preparingStream = active && loading && !playFromFile && error == null
+    LaunchedEffect(source, attempt, preparingStream) {
+        if (source != null && copyForPlayback != null && preparingStream) {
+            delay(StreamPrepareTimeoutMs)
+            playFromFile = true
         }
     }
+    LaunchedEffect(source, attempt, playFromFile) {
+        if (source == null || copyForPlayback == null || !playFromFile) return@LaunchedEffect
+        var temporary: File? = null
+        try {
+            previewFile = withContext(Dispatchers.IO) {
+                val file = File.createTempFile("video-preview-", ".tmp", context.cacheDir)
+                temporary = file
+                val bytes = file.outputStream().buffered().use { copyForPlayback(source, it) }
+                if (bytes <= 0) throw IOException("Empty video preview")
+                file
+            }
+            awaitCancellation()
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            loading = false
+            error = if (e is ApiException && e.code == 404) missingError else playbackError
+        } finally {
+            withContext(Dispatchers.IO + NonCancellable) { temporary?.delete() }
+        }
+    }
+    val playbackUri = if (playFromFile) previewFile?.let(Uri::fromFile) else source?.url?.let(Uri::parse)
 
     Surface(Modifier.fillMaxSize()) {
         Column(if (onClose == null) Modifier.fillMaxSize() else Modifier.fillMaxSize().systemBarsPadding()) {
@@ -153,8 +191,9 @@ private fun VideoPlaybackContent(
                 }
             }
             Box(Modifier.fillMaxWidth().weight(1f), contentAlignment = Alignment.Center) {
-                if (source != null && error == null && lifecycle.isAtLeast(Lifecycle.State.STARTED)) {
-                    key(id, identity, attempt) {
+                if (playbackUri != null && error == null && active) {
+                    key(id, identity, attempt, playbackUri) {
+                        val usingFile = playFromFile
                         var controller by remember { mutableStateOf<MediaController?>(null) }
                         DisposableEffect(owner, player) {
                             val view = player
@@ -188,6 +227,7 @@ private fun VideoPlaybackContent(
                                     player = this
                                     loading = true
                                     setOnPreparedListener {
+                                        if (usingFile != playFromFile) return@setOnPreparedListener
                                         loading = false
                                         if (position > 0) seekTo(position)
                                         if (owner.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) {
@@ -196,11 +236,18 @@ private fun VideoPlaybackContent(
                                         }
                                     }
                                     setOnErrorListener { _, _, _ ->
-                                        loading = false
-                                        error = appString(if (onClose == null) R.string.chat_attachment_video_error else R.string.screen_video_media_007)
+                                        if (usingFile != playFromFile) return@setOnErrorListener true
+                                        if (!usingFile && copyForPlayback != null) {
+                                            loading = true
+                                            playFromFile = true
+                                        } else {
+                                            loading = false
+                                            error = playbackError
+                                        }
                                         true
                                     }
-                                    setVideoURI(Uri.parse(source.url), source.headers)
+                                    if (usingFile) setVideoURI(playbackUri)
+                                    else setVideoURI(playbackUri, source?.headers.orEmpty())
                                     requestFocus()
                                 }
                             },
@@ -211,12 +258,16 @@ private fun VideoPlaybackContent(
                 }
                 if (source == null || error != null) {
                     Column(Modifier.padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                        val message = if (sourceMissing) stringResource(R.string.screen_video_source_missing)
-                            else error ?: stringResource(R.string.screen_video_media_008)
+                        val message = error ?: stringResource(R.string.screen_video_media_008)
                         Text(message, color = MaterialTheme.colorScheme.error)
                         if (source != null) Button(onClick = { attempt++ }) { Text(stringResource(R.string.screen_video_media_009)) }
                     }
-                } else if (loading) LoadingIndicator()
+                } else if (loading) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        LoadingIndicator()
+                        if (playFromFile && previewFile == null) Text(stringResource(R.string.screen_video_prepare_local))
+                    }
+                }
             }
         }
     }

@@ -819,6 +819,7 @@
     <string name="screen_video_media_008">"Connect to PC before opening video"</string>
     <string name="screen_video_media_009">"Play again"</string>
     <string name="screen_video_source_missing">The original video file could not be found on the PC. Please attach it again.</string>
+    <string name="screen_video_prepare_local">Downloading video for playback…</string>
     <string name="screen_video_media_010">"Could not create destination folder"</string>
     <string name="screen_video_media_011">"Could not write to destination"</string>
     <string name="screen_native_project_code_editor_001">"Code editor"</string>

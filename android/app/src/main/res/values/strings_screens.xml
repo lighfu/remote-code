@@ -60,6 +60,7 @@
     <string name="screen_video_media_008">"PC に接続してから動画を開いてください"</string>
     <string name="screen_video_media_009">"もう一度再生する"</string>
     <string name="screen_video_source_missing">PC 上に元の動画ファイルが見つかりません。もう一度添付してください。</string>
+    <string name="screen_video_prepare_local">動画を一時保存中…</string>
     <string name="screen_video_media_010">"保存先を作れませんでした"</string>
     <string name="screen_video_media_011">"保存先に書けませんでした"</string>
     <string name="screen_native_project_code_editor_001">"コードエディター"</string>

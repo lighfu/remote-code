@@ -819,6 +819,7 @@
     <string name="screen_video_media_008">"请在连接到 PC 后再打开视频"</string>
     <string name="screen_video_media_009">"重新播放"</string>
     <string name="screen_video_source_missing">在电脑上找不到原始视频文件，请重新附加。</string>
+    <string name="screen_video_prepare_local">正在临时保存视频…</string>
     <string name="screen_video_media_010">"无法创建保存目录"</string>
     <string name="screen_video_media_011">"无法写入保存目录"</string>
     <string name="screen_native_project_code_editor_001">"代码编辑器"</string>
