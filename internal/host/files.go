@@ -72,6 +72,11 @@ func fileRoute(a *App, mux *http.ServeMux, pattern string, fn func(*http.Request
 			fileError(w, err)
 			return
 		}
+		// Session-scoped POST routes here edit project files or the Git worktree.
+		if rec != nil && r.Method == http.MethodPost {
+			gitSnapshots.invalidateWorktree(S(rec.Info, "cwd"))
+			a.Store.noteSessionDetails(S(rec.Info, "id"), detailGit)
+		}
 		writeJSON(w, 200, value)
 	})
 }
