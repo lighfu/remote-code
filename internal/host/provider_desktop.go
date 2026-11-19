@@ -957,6 +957,7 @@ func (d *providerDesktop) project(thread string, b *desktopBinding, state M) {
 	}
 	if tier, ok := settings["serviceTier"]; ok {
 		patch["fastMode"] = tier == "priority"
+		patch["serviceTier"] = tier
 	}
 	permissions := providerMap(state["currentPermissions"])
 	if len(permissions) > 0 {
@@ -972,8 +973,8 @@ func (d *providerDesktop) project(thread string, b *desktopBinding, state M) {
 		used := N(last, "inputTokens") + N(last, "outputTokens")
 		patch["context"] = M{"used": used, "max": max, "percent": min(100, math.Round(used*100/max))}
 	}
-	d.p.store.recordCodexLiveUsage(b.sid, thread, usage)
 	d.p.store.Update(b.sid, patch, false)
+	d.p.store.recordCodexLiveUsage(b.sid, thread, usage)
 }
 func (d *providerDesktop) followChild(thread, sid, parent string) {
 	if !desktopThreadID.MatchString(thread) {

@@ -338,6 +338,94 @@ func TestAnalyticsClaudeUsageDedupAndUnknownPrice(t *testing.T) {
 		t.Fatal("duplicated assistant message", stats, detail)
 	}
 }
+
+func TestClaudeLiveTotalsAndLastRequestCacheRatio(t *testing.T) {
+	store, err := OpenStore(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	rec := store.Create(M{"provider": "claude"})
+	id := S(rec.Info, "id")
+	p := &nativeProvider{store: store}
+	runtime := &nativeSession{}
+	send := func(message string, fresh, cached, created, output int) {
+		p.claudeStats(id, runtime, M{"type": "assistant", "message": M{"id": message, "usage": M{
+			"input_tokens": fresh, "cache_read_input_tokens": cached, "cache_creation_input_tokens": created, "output_tokens": output,
+		}}})
+	}
+	send("one", 30, 60, 10, 5)
+	send("one", 30, 60, 10, 7)
+	send("two", 15, 5, 0, 3)
+	stats := providerMap(store.Get(id).Info["stats"])
+	tokens := providerMap(stats["tokens"])
+	if N(tokens, "input") != 120 || N(tokens, "cached") != 65 || N(tokens, "output") != 10 || N(providerMap(stats["cache"]), "lastHit") != .25 {
+		t.Fatal("live message snapshots did not match their transcript semantics", stats)
+	}
+	p.claudeStats(id, runtime, M{"type": "result", "total_cost_usd": 0, "usage": M{
+		"input_tokens": 45, "cache_read_input_tokens": 65, "cache_creation_input_tokens": 10, "output_tokens": 10,
+	}})
+	store.applyAnalyticsStats(rec, M{"tokens": tokens, "costUsd": .5, "cache": stats["cache"]})
+	stats = providerMap(store.Get(id).Info["stats"])
+	if cost, ok := reportedAmount(stats, "costUsd"); !ok || cost != 0 || B(stats, "partial") || N(providerMap(stats["cache"]), "lastHit") != .25 {
+		t.Fatal("lost the reported total or replaced last request's cache ratio", stats)
+	}
+	send("three", 5, 0, 0, 3)
+	if !B(providerMap(store.Get(id).Info["stats"]), "partial") {
+		t.Fatal("previous result was shown as a complete cost for a later request")
+	}
+}
+
+func TestAntigravityStepUsageAndReportedSessionCost(t *testing.T) {
+	step := func(index, fresh, read, output int) M {
+		return M{"type": "PLANNER_RESPONSE", "step_index": index, "model": "unpriced",
+			"input_tokens": fresh, "cache_read_tokens": read, "output_tokens": output}
+	}
+	transcript := analyticsFixture(t, []M{step(0, 40, 60, 11), step(0, 40, 60, 13), step(1, 15, 5, 3)})
+	stats, detail, err := analyticsRead("antigravity", transcript, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	tokens := providerMap(stats["tokens"])
+	if N(tokens, "input") != 120 || N(tokens, "cached") != 65 || N(tokens, "output") != 16 || N(providerMap(detail["totals"]), "requests") != 2 ||
+		N(providerMap(stats["cache"]), "lastHit") != .25 || stats["costUsd"] != nil {
+		t.Fatal("invalid deduplication or token normalization", stats, detail)
+	}
+	store, err := OpenStore(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	rec := store.Create(M{"provider": "antigravity", "externalId": "thread"})
+	id := S(rec.Info, "id")
+	report := func(thread, currency string, amount any) {
+		store.recordAgyUsage(id, thread, M{"used": 50, "size": 100, "cost": M{"amount": amount, "currency": currency}})
+	}
+	report("thread", "credits", 12)
+	report("thread", "USD", "unknown")
+	report("another", "USD", 1)
+	saved := store.Get(id)
+	before := providerMap(saved.Info["stats"])
+	if N(providerMap(saved.Info["context"]), "used") != 50 || before["tokens"] != nil || before["costUsd"] != nil {
+		t.Fatal("invented usage or cost from unrelated data", saved.Info)
+	}
+	report("thread", "USD", 1.25)
+	store.applyAnalyticsStats(rec, stats)
+	after := providerMap(store.Get(id).Info["stats"])
+	if N(after, "costUsd") != 1.25 || B(after, "partial") || N(providerMap(after["tokens"]), "input") != 120 {
+		t.Fatal("lost ACP session cost while importing transcript tokens", after)
+	}
+	report("thread", "USD", 0)
+	store.applyAnalyticsStats(rec, M{"bytes": 500})
+	after = providerMap(store.Get(id).Info["stats"])
+	if amount, ok := reportedAmount(after, "costUsd"); !ok || amount != 0 || N(providerMap(after["tokens"]), "output") != 16 {
+		t.Fatal("explicit zero or existing usage was lost", after)
+	}
+	stats, _, err = analyticsRead("antigravity", analyticsFixture(t, []M{{"type": "PLANNER_RESPONSE"}}), nil)
+	if err != nil || stats["tokens"] != nil {
+		t.Fatal("records without counters should leave usage unavailable", stats, err)
+	}
+}
 func TestAnalyticsDefersPartialLineAndResetsTruncation(t *testing.T) {
 	path := analyticsFixture(t, nil)
 	text := `{"type":"PLANNER_RESPONSE","model":"unknown","input_tokens":5,"output_tokens":2}`

@@ -432,17 +432,40 @@ func (p *nativeProvider) agyMessage(msg M) {
 			p.store.Update(sid, patch, false)
 		}
 	case "usage_update":
-		max := N(u, "size")
-		used := N(u, "used")
-		if max > 0 {
-			p.store.Update(sid, M{"context": M{"used": used, "max": max, "percent": math.Round(100 * used / max)}}, false)
-		}
+		p.store.recordAgyUsage(sid, S(params, "sessionId"), u)
 	case "session_info_update":
 		rec := p.store.Get(sid)
 		if rec != nil && !B(rec.Info, "titlePinned") && S(u, "title") != "" {
 			p.store.Update(sid, M{"title": u["title"]}, false)
 		}
 	}
+}
+
+func (s *Store) recordAgyUsage(sid, external string, u M) {
+	window := N(u, "size")
+	used, hasUsage := reportedAmount(u, "used")
+	cost := providerMap(u["cost"])
+	usd, hasCost := reportedAmount(cost, "amount")
+	hasCost = hasCost && strings.EqualFold(S(cost, "currency"), "USD")
+	if !(hasUsage && window > 0) && !hasCost {
+		return
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	rec := s.records[sid]
+	if s.closed || rec == nil || S(rec.Info, "provider") != "antigravity" || S(rec.Info, "externalId") != external {
+		return
+	}
+	if hasUsage && window > 0 {
+		rec.Info["context"] = M{"used": used, "max": window, "percent": math.Round(100 * used / window)}
+	}
+	if hasCost {
+		stats := providerMap(rec.Info["stats"])
+		stats["costUsd"], stats["costSource"], stats["partial"] = usd, "provider", false
+		rec.Info["stats"] = stats
+	}
+	s.dirty[sid] = true
+	s.emitLocked(M{"type": "session", "session": rec.Info})
 }
 
 func (p *nativeProvider) listAgyCommands(rec *Record) []M {

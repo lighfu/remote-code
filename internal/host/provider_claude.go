@@ -203,7 +203,7 @@ func (p *nativeProvider) claudeMessage(sid string, r *nativeSession, msg M) {
 			}
 			p.addClaudeMessageEntry(sid, msg, entry)
 		}
-		p.claudeStats(sid, msg)
+		p.claudeStats(sid, r, msg)
 	case "user":
 		p.claudeUserMessage(sid, r.Remote() || S(msg, "_transcript_hash") != "", msg)
 	case "result":
@@ -217,7 +217,7 @@ func (p *nativeProvider) claudeMessage(sid string, r *nativeSession, msg M) {
 			text = "Stopped due to error"
 		}
 		p.settle(sid, ok, text)
-		p.claudeStats(sid, msg)
+		p.claudeStats(sid, r, msg)
 		p.armClaudeIdle(sid, r)
 	case "tool_progress":
 		id := S(msg, "tool_use_id")
@@ -433,7 +433,7 @@ func (p *nativeProvider) describeClaudeTool(name string, input M) M {
 	}
 	return entry
 }
-func (p *nativeProvider) claudeStats(sid string, msg M) {
+func (p *nativeProvider) claudeStats(sid string, runtime *nativeSession, msg M) {
 	u := providerMap(msg["usage"])
 	if len(u) == 0 {
 		u = providerMap(providerMap(msg["message"])["usage"])
@@ -445,28 +445,54 @@ func (p *nativeProvider) claudeStats(sid string, msg M) {
 	cached := N(u, "cache_read_input_tokens")
 	created := N(u, "cache_creation_input_tokens")
 	output := N(u, "output_tokens")
-	rec := p.store.Get(sid)
-	if rec == nil {
+	total, read := input+cached+created, cached
+	if S(msg, "type") == "assistant" {
+		message := providerMap(msg["message"])
+		id := S(message, "id")
+		if id == "" {
+			id = S(msg, "uuid")
+		}
+		if id == "" {
+			return
+		}
+		runtime.mu.Lock()
+		runtime.claudeUsage.add("claude", id, analyticsUsage{Fresh: input, Read: cached, Write5: created, Output: output}, nil)
+		total, read, output = runtime.claudeUsage.input, runtime.claudeUsage.cached, runtime.claudeUsage.output
+		runtime.mu.Unlock()
+	}
+	p.store.mu.Lock()
+	defer p.store.mu.Unlock()
+	rec := p.store.records[sid]
+	if rec == nil || p.store.closed || S(rec.Info, "provider") != "claude" {
 		return
 	}
 	stats := providerMap(rec.Info["stats"])
-	stats["tokens"] = M{"input": input + cached + created, "cached": cached, "output": output}
-	stats["partial"] = false
-	if cost := N(msg, "total_cost_usd"); cost > 0 {
-		stats["costUsd"] = cost
+	prior := providerMap(stats["tokens"])
+	coversPrior := total >= N(prior, "input") && read >= N(prior, "cached") && output >= N(prior, "output")
+	if coversPrior {
+		stats["tokens"] = M{"input": total, "cached": read, "output": output}
+	}
+	if cost, ok := reportedAmount(msg, "total_cost_usd"); ok && (coversPrior || stats["costUsd"] == nil) {
+		stats["costUsd"], stats["costSource"], stats["partial"] = cost, "provider", !coversPrior
+	} else if stats["costUsd"] == nil || coversPrior && (N(prior, "input") != total || N(prior, "output") != output || N(prior, "cached") != read) {
+		stats["partial"] = true
 	}
 	ttl := float64(300000)
 	if N(providerMap(u["cache_creation"]), "ephemeral_1h_input_tokens") > 0 {
 		ttl = 3600000
 	}
-	if cached > 0 || created > 0 {
+	if prompt := input + cached + created; prompt > 0 && (S(msg, "type") == "assistant" || stats["cache"] == nil) {
 		at := providerNow()
 		if stamp := S(msg, "timestamp"); stamp != "" {
 			at = providerStamp(stamp)
 		}
-		stats["cache"] = M{"lastAt": at, "ttlMs": ttl, "lastHit": cached}
+		if float64(at) >= N(providerMap(stats["cache"]), "lastAt") {
+			stats["cache"] = M{"lastAt": at, "ttlMs": ttl, "lastHit": cached / prompt}
+		}
 	}
-	p.store.Update(sid, M{"stats": stats}, false)
+	rec.Info["stats"] = stats
+	p.store.dirty[sid] = true
+	p.store.emitLocked(M{"type": "session", "session": rec.Info})
 }
 func (p *nativeProvider) claudeBlockMedia(sid string, blocks []M) (media, videos []string) {
 	cwd := ""

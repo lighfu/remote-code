@@ -44,6 +44,7 @@ type Store struct {
 	closed     bool
 
 	timelineRevision int64
+	usagePrices      M
 }
 
 func OpenStore(directory string) (*Store, error) {

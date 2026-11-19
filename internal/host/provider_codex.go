@@ -236,8 +236,15 @@ func (p *nativeProvider) codexMessage(msg M) {
 		}
 	case "thread/settings/updated":
 		settings := providerMap(params["threadSettings"])
+		patch := M{}
+		if model := S(settings, "model"); model != "" {
+			patch["model"] = model
+		}
 		if _, ok := settings["serviceTier"]; ok {
-			p.store.Update(sid, M{"fastMode": S(settings, "serviceTier") == "priority"}, false)
+			patch["fastMode"], patch["serviceTier"] = S(settings, "serviceTier") == "priority", settings["serviceTier"]
+		}
+		if len(patch) > 0 {
+			p.store.Update(sid, patch, false)
 		}
 	case "thread/status/changed":
 		state := providerMap(params["status"])
@@ -350,7 +357,7 @@ func (s *Store) recordCodexLiveUsage(sid, external string, usage M) {
 		}
 		cache = providerMap(stats["cache"])
 		changed = N(tokens, "input") != input || N(tokens, "cached") != cached || N(tokens, "output") != output
-		if !changed && N(cache, "lastAt") > 0 && N(cache, "ttlMs") == float64(codexCacheTTL.Milliseconds()) && N(cache, "lastHit") == hit {
+		if !changed && stats["savedKnown"] != nil && N(cache, "lastAt") > 0 && N(cache, "ttlMs") == float64(codexCacheTTL.Milliseconds()) && N(cache, "lastHit") == hit {
 			return nil, nil, false
 		}
 		return stats, cache, changed
@@ -371,10 +378,35 @@ func (s *Store) recordCodexLiveUsage(sid, external string, usage M) {
 	if changed || at == 0 {
 		at = float64(providerNow())
 	}
+	rec := s.records[sid]
+	if changed || stats["savedKnown"] == nil {
+		lastWrite := min(max(0, N(last, "cacheWriteInputTokens")), lastInput-lastCached)
+		used := analyticsUsage{At: int64(at), Model: S(rec.Info, "model"), Tier: S(rec.Info, "serviceTier"),
+			Read: lastCached, Write5: lastWrite, Fresh: lastInput - lastCached - lastWrite, Output: N(last, "outputTokens")}
+		if used.Tier == "" && B(rec.Info, "fastMode") {
+			used.Tier = "priority"
+		}
+		cost, saved, priced, known := analyticsCharge("codex", used, s.usagePrices)
+		// A live cumulative report may start midway through a thread or skip
+		// requests. Price only the last request using its model and context.
+		prior := providerMap(stats["tokens"])
+		previousInput := N(prior, "input")
+		if stats["savedKnown"] == nil {
+			previousInput = 0
+		}
+		missing := input-previousInput != lastInput
+		stats["savedPartial"] = B(stats, "savedPartial") || !known || missing
+		stats["savedKnown"] = B(stats, "savedKnown") || known
+		if known {
+			stats["savedUsd"] = N(stats, "savedUsd") + saved
+		}
+		stats["partial"] = B(stats, "partial") || !priced || missing
+		if priced && (changed || stats["costUsd"] == nil) {
+			stats["costUsd"] = N(stats, "costUsd") + cost
+		}
+	}
 	stats["cache"] = M{"lastAt": at, "ttlMs": codexCacheTTL.Milliseconds(), "lastHit": hit}
 	stats["tokens"] = M{"input": input, "cached": cached, "output": output}
-	stats["partial"] = true
-	rec := s.records[sid]
 	rec.Info["stats"] = stats
 	s.dirty[sid] = true
 	s.emitLocked(M{"type": "session", "session": rec.Info})

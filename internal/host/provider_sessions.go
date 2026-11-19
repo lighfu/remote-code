@@ -139,6 +139,7 @@ func (p *nativeProvider) ensureWithCodexSettings(ctx context.Context, rec *Recor
 				}
 				if tier, ok := response["serviceTier"]; ok {
 					patch["fastMode"] = tier == "priority"
+					patch["serviceTier"] = tier
 				}
 				if preserve || S(rec.Info, "mode") == "" {
 					if mode := codexModeFromSettings(response["approvalPolicy"], response["sandbox"]); mode != "" {

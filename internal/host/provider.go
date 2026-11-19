@@ -17,6 +17,7 @@ type nativeSession struct {
 	mu                            sync.Mutex
 	agyPromptMu                   sync.Mutex
 	agyCommands                   []M
+	claudeUsage                   analyticsSeries
 	claudeIdleTimer               *time.Timer
 	wire                          *providerWire
 	external, turn, text, thought string
@@ -635,13 +636,18 @@ func (p *nativeProvider) cacheDetail(rec *Record) M {
 	if input > 0 {
 		rate = float64(read) / float64(input)
 	}
-	return M{
+	detail := M{
 		"summary":      summary,
 		"totals":       M{"read": read, "uncached": input - read, "hitRate": rate},
-		"savedUsd":     0,
+		"savedKnown":   B(stats, "savedKnown"),
+		"savedPartial": B(stats, "savedPartial"),
 		"expiredCount": 0,
 		"recent":       []M{},
 	}
+	if B(stats, "savedKnown") && stats["savedUsd"] != nil {
+		detail["savedUsd"] = stats["savedUsd"]
+	}
+	return detail
 }
 func (p *nativeProvider) rewind(ctx context.Context, rec *Record, body M) (any, error) {
 	if p.name != "claude" {

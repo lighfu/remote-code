@@ -212,6 +212,7 @@ func NewApp(dataDir string) (*App, error) {
 	if err != nil {
 		return nil, err
 	}
+	store.usagePrices = c.Raw
 	a := &App{DataDir: abs, Config: c, Store: store, Providers: map[string]Provider{}, InstanceID: NewID(), StartedAt: nowMS(), usage: M{}, usageLoading: map[string]bool{}, usageAt: map[string]time.Time{}, btw: map[string][]M{}, closed: make(chan struct{})}
 	a.usageSeenAt = map[string]time.Time{}
 	a.taskCtx, a.taskCancel = context.WithCancel(context.Background())

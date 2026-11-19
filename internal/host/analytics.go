@@ -7,9 +7,11 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"math"
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -23,17 +25,36 @@ const codexCacheTTL = 5 * time.Minute
 
 func init() { _ = json.Unmarshal(analyticsPricesJSON, &analyticsPrices) }
 
+// A missing or malformed amount is different from an explicitly reported zero.
+func reportedAmount(m M, key string) (float64, bool) {
+	var amount float64
+	switch value := m[key].(type) {
+	case float64, int, int64:
+		amount = N(m, key)
+	case json.Number:
+		var err error
+		if amount, err = value.Float64(); err != nil {
+			return 0, false
+		}
+	default:
+		return 0, false
+	}
+	return amount, amount >= 0 && !math.IsInf(amount, 0) && !math.IsNaN(amount)
+}
+
 type analyticsUsage struct {
 	At                                  int64
-	Model, ID                           string
+	Model, ID, Tier                     string
 	Read, Write5, Write1, Fresh, Output float64
+	CodexWrite12h                       float64 // included in Write5, the legacy Codex write-total field
 }
 type analyticsSeries struct {
 	requests                                           []analyticsUsage
 	seen                                               map[string]analyticsUsage
 	count                                              int
 	input, cached, write5, write1, output, cost, saved float64
-	priced, unpriced                                   bool
+	pricedRequests, savingsSamples                     int
+	missingCost, missingSavings                        bool
 	last                                               analyticsUsage
 	cacheBeforeRecent                                  analyticsCacheHistory
 	provider                                           string
@@ -69,10 +90,10 @@ func (h *analyticsCacheHistory) observe(provider string, u analyticsUsage) any {
 }
 
 type analyticsState struct {
-	mu     sync.Mutex
-	offset int64
-	rest   []byte
-	model  string
+	mu          sync.Mutex
+	offset      int64
+	rest        []byte
+	model, tier string
 	analyticsSeries
 	codexCounts  analyticsSeries
 	codexTotal   analyticsUsage
@@ -181,10 +202,14 @@ func analyticsPrice(provider, model string, raw M) M {
 	}
 	return providerMap(models[model])
 }
-func analyticsCharge(provider string, u analyticsUsage, config M) (float64, float64, bool) {
+func analyticsCharge(provider string, u analyticsUsage, config M) (float64, float64, bool, bool) {
 	p := analyticsPrice(provider, u.Model, config)
+	noCache := u.Read == 0 && u.Write5 == 0 && u.Write1 == 0
 	if len(p) == 0 {
-		return 0, 0, false
+		return 0, 0, false, noCache
+	}
+	if provider == "codex" {
+		return codexCharge(p, u)
 	}
 	if provider == "claude" {
 		long := providerMap(p["long_prompt"])
@@ -193,10 +218,10 @@ func analyticsCharge(provider string, u analyticsUsage, config M) (float64, floa
 		}
 		cost := (u.Fresh*N(p, "input") + u.Read*N(p, "cache_read") + u.Write5*N(p, "cache_write_5m") + u.Write1*N(p, "cache_write_1h") + u.Output*N(p, "output")) / 1e6
 		saved := (u.Read*(N(p, "input")-N(p, "cache_read")) - u.Write5*(N(p, "cache_write_5m")-N(p, "input")) - u.Write1*(N(p, "cache_write_1h")-N(p, "input"))) / 1e6
-		return cost, saved, true
+		return cost, saved, true, true
 	}
 	cost := (u.Fresh*N(p, "input") + u.Read*N(p, "cachedInput") + u.Output*N(p, "output")) / 1e6
-	return cost, u.Read * (N(p, "input") - N(p, "cachedInput")) / 1e6, true
+	return cost, u.Read * (N(p, "input") - N(p, "cachedInput")) / 1e6, true, true
 }
 func (s *analyticsSeries) add(provider, id string, u analyticsUsage, config M) {
 	s.provider = provider
@@ -214,9 +239,15 @@ func (s *analyticsSeries) add(provider, id string, u analyticsUsage, config M) {
 		s.write5 -= old.Write5
 		s.write1 -= old.Write1
 		s.output -= old.Output
-		cost, saved, _ := analyticsCharge(provider, old, config)
+		cost, saved, priced, savingsKnown := analyticsCharge(provider, old, config)
 		s.cost -= cost
 		s.saved -= saved
+		if priced {
+			s.pricedRequests--
+		}
+		if savingsKnown {
+			s.savingsSamples--
+		}
 	}
 	if id != "" {
 		if s.seen == nil {
@@ -229,13 +260,14 @@ func (s *analyticsSeries) add(provider, id string, u analyticsUsage, config M) {
 	s.write5 += u.Write5
 	s.write1 += u.Write1
 	s.output += u.Output
-	cost, saved, known := analyticsCharge(provider, u, config)
+	cost, saved, known, savingsKnown := analyticsCharge(provider, u, config)
 	s.cost += cost
 	s.saved += saved
+	if savingsKnown {
+		s.savingsSamples++
+	}
 	if known {
-		s.priced = true
-	} else {
-		s.unpriced = true
+		s.pricedRequests++
 	}
 	if updated {
 		for i := len(s.requests) - 1; i >= 0; i-- {
@@ -260,8 +292,18 @@ func (s *analyticsSeries) add(provider, id string, u analyticsUsage, config M) {
 
 func codexCountUsage(value M) analyticsUsage {
 	input := max(0, N(value, "input_tokens"))
-	read := min(input, max(0, N(value, "cached_input_tokens")))
-	return analyticsUsage{Read: read, Fresh: input - read, Output: max(0, N(value, "output_tokens"))}
+	details := providerMap(value["input_tokens_details"])
+	read, write := N(value, "cached_input_tokens"), N(value, "cache_write_input_tokens")
+	if value["cached_input_tokens"] == nil {
+		read = N(details, "cached_tokens")
+	}
+	if value["cache_write_input_tokens"] == nil {
+		write = N(details, "cache_write_tokens")
+	}
+	read = min(input, max(0, read))
+	write = min(input-read, max(0, write))
+	longWrite := N(providerMap(details["cache_write_tokens_details"]), "ttl_12h_tokens")
+	return analyticsUsage{Read: read, Write5: write, CodexWrite12h: min(write, max(0, longWrite)), Fresh: input - read - write, Output: max(0, N(value, "output_tokens"))}
 }
 
 func (s *analyticsState) codexTokenCount(record, info M, config M) {
@@ -281,6 +323,7 @@ func (s *analyticsState) codexTokenCount(record, info M, config M) {
 	previous := s.codexTotal
 	s.codexTotal = total
 	usage.Model = s.model
+	usage.Tier = s.tier
 	usage.At = s.codexCounts.last.At
 	if at, err := time.Parse(time.RFC3339Nano, S(record, "timestamp")); err == nil {
 		usage.At = at.UnixMilli()
@@ -291,12 +334,15 @@ func (s *analyticsState) codexTokenCount(record, info M, config M) {
 	// report, keep the known token counts without inventing request details or costs.
 	fresh := total.Fresh - previous.Fresh - usage.Fresh
 	read := total.Read - previous.Read - usage.Read
+	write := total.Write5 - previous.Write5 - usage.Write5
 	output := total.Output - previous.Output - usage.Output
-	if fresh >= 0 && read >= 0 && output >= 0 && fresh+read+output > 0 {
-		s.codexCounts.input += fresh + read
+	if fresh >= 0 && read >= 0 && write >= 0 && output >= 0 && fresh+read+write+output > 0 {
+		s.codexCounts.input += fresh + read + write
 		s.codexCounts.cached += read
+		s.codexCounts.write5 += write
 		s.codexCounts.output += output
-		s.codexCounts.unpriced = true
+		s.codexCounts.missingCost = true
+		s.codexCounts.missingSavings = s.codexCounts.missingSavings || read+write > 0
 	}
 }
 func (s *analyticsState) line(provider string, line []byte, config M) {
@@ -336,6 +382,19 @@ func (s *analyticsState) line(provider string, line []byte, config M) {
 		s.codexContext.record(kind, payload, int64(len(line)))
 		if kind == "turn_context" {
 			s.model = S(payload, "model")
+			if _, ok := payload["service_tier"]; ok {
+				s.tier = S(payload, "service_tier")
+			}
+			return
+		}
+		if S(payload, "type") == "thread_settings_applied" {
+			settings := providerMap(payload["thread_settings"])
+			if model := S(settings, "model"); model != "" {
+				s.model = model
+			}
+			if _, ok := settings["service_tier"]; ok {
+				s.tier = S(settings, "service_tier")
+			}
 			return
 		}
 		if S(payload, "type") == "token_count" {
@@ -349,12 +408,15 @@ func (s *analyticsState) line(provider string, line []byte, config M) {
 		if len(usage) == 0 {
 			return
 		}
-		u.Model = s.model
+		u = codexCountUsage(usage)
+		u.Model, u.Tier = s.model, s.tier
+		if model := S(payload, "model"); model != "" {
+			u.Model = model
+		}
+		if tier := S(payload, "service_tier"); tier != "" {
+			u.Tier = tier
+		}
 		u.At = providerStamp(r["timestamp"])
-		u.Read = N(usage, "cached_input_tokens")
-		u.Write5 = N(usage, "cache_write_input_tokens")
-		u.Fresh = max(0, N(usage, "input_tokens")-u.Read-u.Write5)
-		u.Output = N(usage, "output_tokens")
 		id = S(payload, "response_id")
 		if id == "" {
 			id = S(payload, "id")
@@ -376,6 +438,9 @@ func (s *analyticsState) line(provider string, line []byte, config M) {
 			s.used = used
 		}
 		id = S(r, "id")
+		if step, ok := reportedAmount(r, "step_index"); id == "" && ok && step == math.Trunc(step) {
+			id = "step:" + strconv.FormatFloat(step, 'f', 0, 64)
+		}
 	default:
 		return
 	}
@@ -474,7 +539,7 @@ func (s *analyticsState) readUntil(provider string, f io.Reader, end int64, conf
 }
 
 func (s *analyticsState) resetTranscript() {
-	s.offset, s.rest, s.file, s.model = 0, nil, nil, ""
+	s.offset, s.rest, s.file, s.model, s.tier = 0, nil, nil, "", ""
 	s.analyticsSeries, s.codexCounts = analyticsSeries{}, analyticsSeries{}
 	s.codexTotal, s.codexContext = analyticsUsage{}, codexContextWeights{}
 	s.agyContext, s.claudePlan = agyContextWeights{}, claudePlanState{}
@@ -499,15 +564,23 @@ func (s *analyticsSeries) result(size int64) (M, M) {
 		summary = M{"lastAt": s.last.At, "ttlMs": cache.ttl, "lastHit": hit}
 	}
 	var cost any
-	if s.priced {
+	if s.pricedRequests > 0 {
 		cost = s.cost
 	}
-	stats := M{"costUsd": cost, "partial": s.unpriced, "bytes": size, "cache": summary, "tokens": M{"input": s.input, "cached": s.cached, "output": s.output}}
+	stats := M{"costUsd": cost, "partial": s.pricedRequests < s.count || s.missingCost, "bytes": size, "cache": summary}
+	if s.count > 0 {
+		stats["tokens"] = M{"input": s.input, "cached": s.cached, "output": s.output}
+	}
 	hit := float64(0)
 	if s.input > 0 {
 		hit = s.cached / s.input
 	}
-	detail := M{"summary": summary, "totals": M{"read": s.cached, "write5m": s.write5, "write1h": s.write1, "uncached": max(0, s.input-s.cached-s.write5-s.write1), "requests": s.count, "hitRate": hit}, "savedUsd": s.saved, "expiredCount": cache.expired, "recent": recent}
+	detail := M{"summary": summary, "totals": M{"read": s.cached, "write5m": s.write5, "write1h": s.write1, "uncached": max(0, s.input-s.cached-s.write5-s.write1), "requests": s.count, "hitRate": hit}, "expiredCount": cache.expired, "recent": recent}
+	detail["savedKnown"], detail["savedPartial"] = s.savingsSamples > 0, s.savingsSamples < s.count || s.missingSavings
+	stats["savedKnown"], stats["savedPartial"] = detail["savedKnown"], detail["savedPartial"]
+	if s.savingsSamples > 0 {
+		detail["savedUsd"], stats["savedUsd"] = s.saved, s.saved
+	}
 	return stats, detail
 }
 func (a *App) analytics(rec *Record) (M, M, error) {
@@ -538,9 +611,13 @@ func (a *App) analytics(rec *Record) (M, M, error) {
 			stats["partial"] = B(stats, "partial") || B(childStats, "partial")
 			t := providerMap(stats["tokens"])
 			c := providerMap(childStats["tokens"])
+			if len(c) == 0 {
+				continue
+			}
 			for _, k := range []string{"input", "cached", "output"} {
 				t[k] = N(t, k) + N(c, k)
 			}
+			stats["tokens"] = t
 		}
 	}
 	return stats, detail, nil
@@ -611,11 +688,21 @@ func (s *Store) applyAnalyticsStats(source *Record, stats M) {
 		return
 	}
 	previous := providerMap(current.Info["stats"])
-	if provider == "codex" && stats["cache"] == nil && len(previous) > 0 {
+	tokens, prior := providerMap(stats["tokens"]), providerMap(previous["tokens"])
+	if stats["cache"] == nil && len(tokens) == 0 && len(previous) > 0 {
 		// No usage samples in this read. Keep the last cache and totals snapshot.
 		bytes := stats["bytes"]
 		stats = clone(previous)
 		stats["bytes"] = bytes
+	}
+	if provider == "antigravity" && S(previous, "costSource") == "provider" {
+		// ACP reports the cumulative session cost independently of planner token records.
+		stats["costUsd"], stats["costSource"], stats["partial"] = previous["costUsd"], "provider", false
+	} else if provider == "claude" && S(previous, "costSource") == "provider" && len(tokens) > 0 {
+		matches := N(tokens, "input") == N(prior, "input") && N(tokens, "cached") == N(prior, "cached") && N(tokens, "output") == N(prior, "output")
+		if matches && !B(previous, "partial") || stats["costUsd"] == nil {
+			stats["costUsd"], stats["costSource"], stats["partial"] = previous["costUsd"], "provider", !matches || B(previous, "partial")
+		}
 	}
 	old, _ := json.Marshal(previous)
 	next, _ := json.Marshal(stats)
