@@ -15,6 +15,12 @@ data class ChatFooterDisplay(
     val stats: Boolean = true,
     val git: Boolean = true,
     val order: List<String> = ChatFooterItem.entries.map { it.id },
+    val inputTokens: Boolean = true,
+    val outputTokens: Boolean = true,
+    val cachedTokens: Boolean = true,
+    val cacheRate: Boolean = true,
+    val costUsd: Boolean = true,
+    val costLocal: Boolean = true,
 ) {
     val visibleCount: Int get() = listOf(context, cache, usage, stats, git).count { it }
 

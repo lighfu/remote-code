@@ -8,6 +8,7 @@ import androidx.compose.ui.res.stringResource
 
 import android.content.Intent
 import android.provider.Settings
+import android.widget.Toast
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -25,6 +26,7 @@ import androidx.compose.material.icons.rounded.Build
 import androidx.compose.material.icons.rounded.AccountTree
 import androidx.compose.material.icons.rounded.Computer
 import androidx.compose.material.icons.rounded.Terminal
+import androidx.compose.material.icons.rounded.Visibility
 import androidx.compose.material.icons.rounded.Lightbulb
 import androidx.compose.material.icons.rounded.Notifications
 import androidx.compose.material.icons.rounded.Palette
@@ -57,6 +59,7 @@ import dev.remotecode.RemoteCodeApp
 import dev.remotecode.data.ConnState
 import dev.remotecode.data.ThinkingModes
 import dev.remotecode.notify.ConnectionService
+import dev.remotecode.ui.chat.FooterDisplayDialog
 import dev.remotecode.ui.common.AppUpdateItem
 import kotlinx.coroutines.launch
 
@@ -70,6 +73,7 @@ fun SettingsScreen(onBack: () -> Unit, onChangeServer: () -> Unit, onAppearance:
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var thinkingMenu by remember { mutableStateOf(false) }
+    var showFooterDisplay by remember { mutableStateOf(false) }
     val s = settings ?: return
     val dependencyServer = remember(s.server, route, conn) { repo.api.server }
     val haptics = dev.remotecode.ui.common.rememberHaptics()
@@ -188,7 +192,7 @@ fun SettingsScreen(onBack: () -> Unit, onChangeServer: () -> Unit, onAppearance:
             Box {
                 SegmentedListItem(
                     onClick = { thinkingMenu = true },
-                    shapes = ListItemDefaults.segmentedShapes(0, 2),
+                    shapes = ListItemDefaults.segmentedShapes(0, 3),
                     colors = ListItemDefaults.segmentedColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
                     leadingContent = { Icon(Icons.Rounded.Lightbulb, null) },
                     supportingContent = { Text(ThinkingModes.description(s.thinking)) },
@@ -220,12 +224,18 @@ fun SettingsScreen(onBack: () -> Unit, onChangeServer: () -> Unit, onAppearance:
             }
             SegmentedListItem(
                 onClick = { haptics.toggle(!s.toolDetail); scope.launch { repo.settingsStore.setToolDetail(!s.toolDetail) } },
-                shapes = ListItemDefaults.segmentedShapes(1, 2),
+                shapes = ListItemDefaults.segmentedShapes(1, 3),
                 colors = ListItemDefaults.segmentedColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
                 leadingContent = { Icon(Icons.Rounded.Build, null) },
                 supportingContent = { Text(stringResource(R.string.screen_settings_028)) },
                 trailingContent = { Switch(checked = s.toolDetail, onCheckedChange = null) },
             ) { Text(stringResource(R.string.screen_settings_029)) }
+            SegmentedListItem(
+                onClick = { haptics.tick(); showFooterDisplay = true },
+                shapes = ListItemDefaults.segmentedShapes(2, 3),
+                colors = ListItemDefaults.segmentedColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
+                leadingContent = { Icon(Icons.Rounded.Visibility, null) },
+            ) { Text(stringResource(R.string.chat_chat_screen_054)) }
 
             Spacer(Modifier.height(8.dp))
             WrapSetting(R.string.settings_wrap_tool_input, s.toolWrap.input, 0) { on ->
@@ -254,6 +264,14 @@ fun SettingsScreen(onBack: () -> Unit, onChangeServer: () -> Unit, onAppearance:
                 )
             }
         }
+    }
+    if (showFooterDisplay) {
+        FooterDisplayDialog(
+            initial = s.footerDisplay,
+            onSave = repo.settingsStore::setFooterDisplay,
+            onDismiss = { showFooterDisplay = false },
+            onSaveError = { Toast.makeText(context, appString(R.string.chat_chat_screen_038), Toast.LENGTH_SHORT).show() },
+        )
     }
 }
 

@@ -136,7 +136,7 @@ fun CacheSheet(sessionId: String, onDismiss: () -> Unit) {
     val repo = RemoteCodeApp.instance.repository
     val scope = rememberCoroutineScope()
     val meta by repo.meta.collectAsState()
-    val rate = meta?.usdJpy ?: 150.0
+    val money = rememberUsageMoney(meta)
     var detail by remember { mutableStateOf<CacheDetail?>(null) }
     var error by remember { mutableStateOf<String?>(null) }
     fun load() = scope.launch {
@@ -171,7 +171,10 @@ fun CacheSheet(sessionId: String, onDismiss: () -> Unit) {
                             Legend(appString(R.string.chat_cache_sheet_016, tokensText(t.write1h), tokensText(t.write5m)), t.write5m + t.write1h, WriteColor)
                             Legend(appString(R.string.chat_cache_sheet_015), t.uncached, UncachedColor)
                             Text(
-                                stringResource(R.string.chat_cache_sheet_014).format(d.savedUsd, d.savedUsd * rate),
+                                stringResource(
+                                    if (d.savedPartial && d.savedKnown != false && d.savedUsd != null) R.string.chat_cache_savings_partial else R.string.chat_cache_sheet_014,
+                                    money.savings(d.savedUsd.takeUnless { d.savedKnown == false }),
+                                ),
                                 style = MaterialTheme.typography.bodyMedium,
                             )
                             Text(

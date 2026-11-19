@@ -134,7 +134,8 @@ data class Meta(
     val home: String = "",
     val publicUrl: String = "",
     val providers: Map<String, ProviderMeta> = emptyMap(),
-    val usdJpy: Double = 150.0,
+    val usdJpy: Double? = null,
+    val usdRates: Map<String, Double>? = null,
     /** 「PC の設定どおり」の実効値。 */
     val defaults: Map<String, ProviderDefaults> = emptyMap(),
 )
@@ -235,7 +236,9 @@ data class CacheTotals(val read: Long = 0, val write5m: Long = 0, val write1h: L
 data class CacheDetail(
     val summary: CacheSummary? = null,
     val totals: CacheTotals = CacheTotals(),
-    val savedUsd: Double = 0.0,
+    val savedUsd: Double? = null,
+    val savedKnown: Boolean? = null,
+    val savedPartial: Boolean = false,
     val expiredCount: Int = 0,
     val recent: List<CacheRequest> = emptyList(),
 )

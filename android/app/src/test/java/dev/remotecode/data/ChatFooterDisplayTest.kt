@@ -8,9 +8,8 @@ class ChatFooterDisplayTest {
     @Test
     fun legacyHiddenPreferencesKeepTheirVisibilityAndDefaultOrder() {
         val legacy = AppJson.decodeFromString(ChatFooterDisplay.serializer(), """{"cache":false,"git":false}""")
+        assertEquals(ChatFooterDisplay(cache = false, git = false), legacy)
         assertEquals(ChatFooterItem.entries.toList(), legacy.orderedItems)
-        assertFalse(legacy.cache)
-        assertFalse(legacy.git)
         assertEquals(3, legacy.visibleCount)
     }
 
@@ -37,10 +36,12 @@ class ChatFooterDisplayTest {
 
     @Test
     fun visibilityChangesAndSerializationKeepCustomOrder() {
-        val display = ChatFooterDisplay().move(ChatFooterItem.STATS, 0).withVisibility(ChatFooterItem.CACHE, false)
+        val preferences = ChatFooterDisplay(inputTokens = false, cacheRate = false, costUsd = false)
+        val display = preferences.move(ChatFooterItem.STATS, 0).withVisibility(ChatFooterItem.CACHE, false)
         val restored = AppJson.decodeFromString(ChatFooterDisplay.serializer(), AppJson.encodeToString(ChatFooterDisplay.serializer(), display))
         assertEquals(listOf("stats", "context", "cache", "usage", "git"), restored.order)
         assertFalse(restored.isVisible(ChatFooterItem.CACHE))
+        assertEquals(restored, restored.withVisibility(ChatFooterItem.STATS, false).withVisibility(ChatFooterItem.STATS, true))
         assertEquals(4, restored.visibleCount)
         assertEquals(display, restored)
     }

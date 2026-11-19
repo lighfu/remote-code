@@ -39,7 +39,8 @@
     <string name="chat_cache_sheet_011">"최근 요청"</string>
     <string name="chat_cache_sheet_012">"만료되어 다시 작성된 적이 없습니다"</string>
     <string name="chat_cache_sheet_013">"만료로 다시 작성된 횟수: %1$s회"</string>
-    <string name="chat_cache_sheet_014">"절약된 금액: $%1$.2f(¥%2$,.0f)"</string>
+    <string name="chat_cache_sheet_014">예상 절감액 %1$s</string>
+    <string name="chat_cache_savings_partial">예상 절감액 %1$s (가격 책정된 요청만)</string>
     <string name="chat_cache_sheet_015">"사용 안 함"</string>
     <string name="chat_cache_sheet_016">"쓰기(1시간 %1$s / 5분 %2$s)"</string>
     <string name="chat_cache_sheet_017">"읽기"</string>
@@ -270,6 +271,12 @@
     <string name="chat_entry_views_031">"여기까지 되감기"</string>
     <string name="chat_entry_views_032">"이미지 %1$s장"</string>
     <string name="chat_failed">"실패"</string>
+    <string name="chat_footer_input_tokens">입력 토큰</string>
+    <string name="chat_footer_output_tokens">출력 토큰</string>
+    <string name="chat_footer_cached_tokens">캐시된 입력 토큰</string>
+    <string name="chat_footer_cache_rate">입력 캐시 적중률</string>
+    <string name="chat_footer_cost_usd">USD 비용</string>
+    <string name="chat_footer_cost_local">현지 통화 비용</string>
     <string name="chat_footer_display_dialog_001">"아래로 이동"</string>
     <string name="chat_footer_display_dialog_002">"위로 이동"</string>
     <string name="chat_footer_display_dialog_003">"%1$s 순서 변경"</string>

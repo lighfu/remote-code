@@ -25,6 +25,7 @@ import androidx.compose.material.icons.automirrored.rounded.ReceiptLong
 import androidx.compose.material.icons.rounded.AccountTree
 import androidx.compose.material.icons.rounded.ArrowDownward
 import androidx.compose.material.icons.rounded.ArrowUpward
+import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.DataUsage
 import androidx.compose.material.icons.rounded.DragHandle
 import androidx.compose.material.icons.rounded.Schedule
@@ -33,6 +34,7 @@ import androidx.compose.material.icons.rounded.Visibility
 import androidx.compose.material3.AlertDialog
 import dev.remotecode.ui.common.AppDropdownMenu as DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -46,6 +48,7 @@ import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -67,11 +70,20 @@ import androidx.compose.ui.zIndex
 import dev.remotecode.data.ChatFooterDisplay
 import dev.remotecode.data.ChatFooterItem
 import dev.remotecode.ui.common.hapticArea
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-internal fun FooterDisplayDialog(initial: ChatFooterDisplay, saving: Boolean, onDismiss: () -> Unit, onApply: (ChatFooterDisplay) -> Unit) {
+internal fun FooterDisplayDialog(
+    initial: ChatFooterDisplay,
+    onSave: suspend (ChatFooterDisplay) -> Unit,
+    onDismiss: () -> Unit,
+    onSaveError: suspend () -> Unit,
+) {
+    val scope = rememberCoroutineScope()
+    var saving by remember { mutableStateOf(false) }
     var draft by remember { mutableStateOf(initial) }
     val bounds = remember { mutableStateMapOf<ChatFooterItem, Rect>() }
     var dragging by remember { mutableStateOf<ChatFooterItem?>(null) }
@@ -99,7 +111,7 @@ internal fun FooterDisplayDialog(initial: ChatFooterDisplay, saving: Boolean, on
 
     AlertDialog(
         modifier = hapticArea(),
-        onDismissRequest = onDismiss,
+        onDismissRequest = { if (!saving) onDismiss() },
         icon = { Icon(Icons.Rounded.Visibility, null) },
         title = { Text(stringResource(R.string.chat_chat_screen_054)) },
         text = {
@@ -107,7 +119,7 @@ internal fun FooterDisplayDialog(initial: ChatFooterDisplay, saving: Boolean, on
                 Text(stringResource(R.string.chat_footer_display_dialog_014), style = MaterialTheme.typography.bodySmall)
                 Text(stringResource(R.string.chat_footer_display_dialog_013), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    TextButton(onClick = { draft = draft.copy(context = true, cache = true, usage = true, stats = true, git = true) }, enabled = !saving && dragging == null) { Text(stringResource(R.string.chat_footer_display_dialog_012)) }
+                    TextButton(onClick = { draft = ChatFooterDisplay(order = draft.order) }, enabled = !saving && dragging == null) { Text(stringResource(R.string.chat_footer_display_dialog_012)) }
                     TextButton(onClick = { draft = draft.copy(context = false, cache = false, usage = false, stats = false, git = false) }, enabled = !saving && dragging == null) { Text(stringResource(R.string.chat_chat_screen_053)) }
                 }
                 draft.orderedItems.forEachIndexed { index, item ->
@@ -134,12 +146,55 @@ internal fun FooterDisplayDialog(initial: ChatFooterDisplay, saving: Boolean, on
                                 onDragEnd = ::finishDrag,
                             )
                         }
+                        if (item == ChatFooterItem.STATS) {
+                            FlowRow(
+                                modifier = Modifier.padding(start = 12.dp),
+                                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            ) {
+                                val enabled = draft.stats && !saving && dragging == null
+                                FooterStatChip(R.string.chat_footer_input_tokens, draft.inputTokens, enabled) { draft = draft.copy(inputTokens = it) }
+                                FooterStatChip(R.string.chat_footer_output_tokens, draft.outputTokens, enabled) { draft = draft.copy(outputTokens = it) }
+                                FooterStatChip(R.string.chat_footer_cached_tokens, draft.cachedTokens, enabled) { draft = draft.copy(cachedTokens = it) }
+                                FooterStatChip(R.string.chat_footer_cache_rate, draft.cacheRate, enabled) { draft = draft.copy(cacheRate = it) }
+                                FooterStatChip(R.string.chat_footer_cost_usd, draft.costUsd, enabled) { draft = draft.copy(costUsd = it) }
+                                FooterStatChip(R.string.chat_footer_cost_local, draft.costLocal, enabled) { draft = draft.copy(costLocal = it) }
+                            }
+                        }
                     }
                 }
             }
         },
-        confirmButton = { TextButton(onClick = { onApply(draft) }, enabled = !saving && dragging == null) { Text(if (saving) stringResource(R.string.chat_footer_display_dialog_011) else stringResource(R.string.chat_apply)) } },
+        confirmButton = {
+            TextButton(onClick = {
+                if (saving) return@TextButton
+                saving = true
+                scope.launch {
+                    try {
+                        onSave(draft)
+                        onDismiss()
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (_: Exception) {
+                        saving = false
+                        onSaveError()
+                    }
+                }
+            }, enabled = !saving && dragging == null) {
+                Text(if (saving) stringResource(R.string.chat_footer_display_dialog_011) else stringResource(R.string.chat_apply))
+            }
+        },
         dismissButton = { TextButton(onClick = onDismiss, enabled = !saving) { Text(stringResource(R.string.chat_cancel)) } },
+    )
+}
+
+@Composable
+private fun FooterStatChip(label: Int, checked: Boolean, enabled: Boolean, onChange: (Boolean) -> Unit) {
+    FilterChip(
+        selected = checked,
+        onClick = { onChange(!checked) },
+        enabled = enabled,
+        label = { Text(stringResource(label)) },
+        leadingIcon = if (checked) ({ Icon(Icons.Rounded.Check, null, Modifier.size(16.dp)) }) else null,
     )
 }
 

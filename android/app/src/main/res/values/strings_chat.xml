@@ -39,7 +39,8 @@
     <string name="chat_cache_sheet_011">最近のリクエスト</string>
     <string name="chat_cache_sheet_012">切れて書き直したことはありません</string>
     <string name="chat_cache_sheet_013">切れて書き直した回数: %1$s 回</string>
-    <string name="chat_cache_sheet_014">浮いた金額: $%1$.2f（¥%2$,.0f）</string>
+    <string name="chat_cache_sheet_014">推定節約額 %1$s</string>
+    <string name="chat_cache_savings_partial">推定節約額 %1$s（一部のリクエストのみ）</string>
     <string name="chat_cache_sheet_015">使わなかった</string>
     <string name="chat_cache_sheet_016">書いた（1 時間 %1$s / 5 分 %2$s）</string>
     <string name="chat_cache_sheet_017">読んだ</string>
@@ -270,6 +271,12 @@
     <string name="chat_entry_views_031">ここまで巻き戻す</string>
     <string name="chat_entry_views_032">画像 %1$s 枚</string>
     <string name="chat_failed">失敗</string>
+    <string name="chat_footer_input_tokens">入力トークン</string>
+    <string name="chat_footer_output_tokens">出力トークン</string>
+    <string name="chat_footer_cached_tokens">キャッシュ済み入力トークン</string>
+    <string name="chat_footer_cache_rate">入力キャッシュヒット率</string>
+    <string name="chat_footer_cost_usd">料金（米ドル）</string>
+    <string name="chat_footer_cost_local">料金（地域通貨）</string>
     <string name="chat_footer_display_dialog_001">下に移動</string>
     <string name="chat_footer_display_dialog_002">上に移動</string>
     <string name="chat_footer_display_dialog_003">%1$s の順番を変更</string>

@@ -125,6 +125,12 @@ class SettingsStore(private val context: Context) {
         val footerStats = booleanPreferencesKey("chat_footer_stats")
         val footerGit = booleanPreferencesKey("chat_footer_git")
         val footerOrder = stringPreferencesKey("chat_footer_order")
+        val footerInputTokens = booleanPreferencesKey("chat_footer_input_tokens")
+        val footerOutputTokens = booleanPreferencesKey("chat_footer_output_tokens")
+        val footerCachedTokens = booleanPreferencesKey("chat_footer_cached_tokens")
+        val footerCacheRate = booleanPreferencesKey("chat_footer_cache_rate")
+        val footerCostUsd = booleanPreferencesKey("chat_footer_cost_usd")
+        val footerCostLocal = booleanPreferencesKey("chat_footer_cost_local")
         val themeMode = stringPreferencesKey("theme_mode")
         val dynamicColor = booleanPreferencesKey("dynamic_color")
         val accent = stringPreferencesKey("accent")
@@ -211,6 +217,12 @@ class SettingsStore(private val context: Context) {
                 stats = p[Keys.footerStats] ?: true,
                 git = p[Keys.footerGit] ?: true,
                 order = p[Keys.footerOrder]?.split(',') ?: ChatFooterItem.entries.map { it.id },
+                inputTokens = p[Keys.footerInputTokens] ?: true,
+                outputTokens = p[Keys.footerOutputTokens] ?: true,
+                cachedTokens = p[Keys.footerCachedTokens] ?: true,
+                cacheRate = p[Keys.footerCacheRate] ?: true,
+                costUsd = p[Keys.footerCostUsd] ?: true,
+                costLocal = p[Keys.footerCostLocal] ?: true,
             ),
             appearance = Appearance(
                 themeMode = p[Keys.themeMode] ?: "system",
@@ -339,6 +351,12 @@ class SettingsStore(private val context: Context) {
             it[Keys.footerStats] = display.stats
             it[Keys.footerGit] = display.git
             it[Keys.footerOrder] = display.orderedItems.joinToString(",") { item -> item.id }
+            it[Keys.footerInputTokens] = display.inputTokens
+            it[Keys.footerOutputTokens] = display.outputTokens
+            it[Keys.footerCachedTokens] = display.cachedTokens
+            it[Keys.footerCacheRate] = display.cacheRate
+            it[Keys.footerCostUsd] = display.costUsd
+            it[Keys.footerCostLocal] = display.costLocal
         }
     }
 

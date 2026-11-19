@@ -236,7 +236,6 @@ fun ChatScreen(sessionId: String, onBack: () -> Unit, onTerminals: (String) -> U
     var showUsage by remember { mutableStateOf(false) }
     var showGit by remember(sessionId) { mutableStateOf(false) }
     var showFooterDisplay by remember { mutableStateOf(false) }
-    var savingFooterDisplay by remember { mutableStateOf(false) }
     var showBtw by remember { mutableStateOf(false) }
     var btwAsk by remember { mutableStateOf<String?>(null) }
     /** 未読判定用。空文字は未取得。 */
@@ -855,23 +854,9 @@ fun ChatScreen(sessionId: String, onBack: () -> Unit, onTerminals: (String) -> U
     if (showFooterDisplay) {
         FooterDisplayDialog(
             initial = footerDisplay,
-            saving = savingFooterDisplay,
-            onDismiss = { if (!savingFooterDisplay) showFooterDisplay = false },
-            onApply = { value ->
-                savingFooterDisplay = true
-                scope.launch {
-                    try {
-                        repo.settingsStore.setFooterDisplay(value)
-                        showFooterDisplay = false
-                    } catch (e: kotlinx.coroutines.CancellationException) {
-                        throw e
-                    } catch (_: Exception) {
-                        snackbar.showSnackbar(appString(R.string.chat_chat_screen_038))
-                    } finally {
-                        savingFooterDisplay = false
-                    }
-                }
-            },
+            onSave = repo.settingsStore::setFooterDisplay,
+            onDismiss = { showFooterDisplay = false },
+            onSaveError = { snackbar.showSnackbar(appString(R.string.chat_chat_screen_038)) },
         )
     }
     if (showBtw) {
@@ -1307,19 +1292,11 @@ private fun ChatFooter(session: dev.remotecode.data.SessionInfo?, display: ChatF
     val repo = RemoteCodeApp.instance.repository
     val meta by repo.meta.collectAsState()
     val gitStatuses by repo.git.collectAsState()
-    val rate = meta?.usdJpy ?: 150.0
+    val money = rememberUsageMoney(meta)
     val claude = session.provider == "claude"
     val parts = buildList {
         if (!display.stats) return@buildList
-        session.stats?.costUsd?.let { usd ->
-            val yen = usd * rate
-            add("$" + (if (usd < 10) "%.3f" else "%.2f").format(usd) + "（¥" + "%,.0f".format(yen) + "）" + if (session.stats.partial) "+" else "")
-        }
-        // 単価不明時は料金の代わりにトークン数を出す。
-        if (session.stats?.costUsd == null) session.stats?.tokens?.takeIf { it.input + it.output > 0 }?.let { t ->
-            val hit = if (t.input > 0) appString(R.string.chat_chat_screen_008, (t.cached * 100 / t.input)) else ""
-            add(appString(R.string.chat_chat_screen_007, shortTokens(t.input), hit, shortTokens(t.output)).replace("（ ", "（"))
-        }
+        usageMetrics(session.stats, display, money).forEach { add("${appString(it.label)} ${it.value}") }
         session.stats?.takeIf { it.bytes > 0 }?.let { add(appString(R.string.chat_chat_screen_006, bytesText(it.bytes))) }
     }
     val hasContext = (session.context?.max ?: 0) > 0
@@ -1348,14 +1325,14 @@ private fun ChatFooter(session: dev.remotecode.data.SessionInfo?, display: ChatF
                 androidx.compose.runtime.key(group.first().id) {
                     when (group.first()) {
                         ChatFooterItem.GIT -> GitStatusBar(session.id, session.cwd, onGit)
-                        ChatFooterItem.STATS -> Text(
-                            parts.joinToString("  ·  "),
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                            modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp),
-                        )
+                        ChatFooterItem.STATS -> androidx.compose.foundation.layout.FlowRow(
+                            Modifier.fillMaxWidth().padding(horizontal = 4.dp),
+                            horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        ) {
+                            parts.forEach { part ->
+                                Text(part, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                        }
                         else -> androidx.compose.foundation.layout.FlowRow(
                             Modifier.fillMaxWidth().padding(horizontal = 4.dp),
                             horizontalArrangement = Arrangement.spacedBy(4.dp),
@@ -1380,7 +1357,7 @@ private fun ChatFooter(session: dev.remotecode.data.SessionInfo?, display: ChatF
     }
 }
 
-private fun shortTokens(n: Long): String = when {
+internal fun shortTokens(n: Long): String = when {
     n >= 1_000_000 -> "%.1f".format(n / 1_000_000.0).removeSuffix(".0") + "M"
     n >= 1_000 -> "${n / 1000}k"
     else -> n.toString()

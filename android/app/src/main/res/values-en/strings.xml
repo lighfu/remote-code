@@ -39,7 +39,8 @@
     <string name="chat_cache_sheet_011">"Recent requests"</string>
     <string name="chat_cache_sheet_012">"Never rewritten due to cache expiration"</string>
     <string name="chat_cache_sheet_013">"Rewritten due to cache expiration: %1$s times"</string>
-    <string name="chat_cache_sheet_014">"Savings: $%1$.2f (¥%2$,.0f)"</string>
+    <string name="chat_cache_sheet_014">Estimated savings %1$s</string>
+    <string name="chat_cache_savings_partial">Estimated savings %1$s (priced requests only)</string>
     <string name="chat_cache_sheet_015">"Unused"</string>
     <string name="chat_cache_sheet_016">"Written (1h %1$s / 5m %2$s)"</string>
     <string name="chat_cache_sheet_017">"Read"</string>
@@ -270,6 +271,12 @@
     <string name="chat_entry_views_031">"Rewind to here"</string>
     <string name="chat_entry_views_032">"%1$s images"</string>
     <string name="chat_failed">"Failed"</string>
+    <string name="chat_footer_input_tokens">Input tokens</string>
+    <string name="chat_footer_output_tokens">Output tokens</string>
+    <string name="chat_footer_cached_tokens">Cached input tokens</string>
+    <string name="chat_footer_cache_rate">Input cache hit rate</string>
+    <string name="chat_footer_cost_usd">Cost in USD</string>
+    <string name="chat_footer_cost_local">Cost in local currency</string>
     <string name="chat_footer_display_dialog_001">"Move down"</string>
     <string name="chat_footer_display_dialog_002">"Move up"</string>
     <string name="chat_footer_display_dialog_003">"Change order of %1$s"</string>

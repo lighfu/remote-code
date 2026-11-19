@@ -39,7 +39,8 @@
     <string name="chat_cache_sheet_011">"最近请求"</string>
     <string name="chat_cache_sheet_012">"从未发生过期重写"</string>
     <string name="chat_cache_sheet_013">"过期重写次数：%1$s 次"</string>
-    <string name="chat_cache_sheet_014">"节省金额：$%1$.2f（¥%2$,.0f）"</string>
+    <string name="chat_cache_sheet_014">预估节省金额 %1$s</string>
+    <string name="chat_cache_savings_partial">预估节省金额 %1$s (仅限已定价请求)</string>
     <string name="chat_cache_sheet_015">"未使用"</string>
     <string name="chat_cache_sheet_016">"写入（1 小时 %1$s / 5 分钟 %2$s）"</string>
     <string name="chat_cache_sheet_017">"读取"</string>
@@ -270,6 +271,12 @@
     <string name="chat_entry_views_031">"回退到此处"</string>
     <string name="chat_entry_views_032">"%1$s 张图片"</string>
     <string name="chat_failed">"失败"</string>
+    <string name="chat_footer_input_tokens">输入 Token</string>
+    <string name="chat_footer_output_tokens">输出 Token</string>
+    <string name="chat_footer_cached_tokens">缓存输入 Token</string>
+    <string name="chat_footer_cache_rate">输入缓存命中率</string>
+    <string name="chat_footer_cost_usd">美元费用</string>
+    <string name="chat_footer_cost_local">本地货币费用</string>
     <string name="chat_footer_display_dialog_001">"下移"</string>
     <string name="chat_footer_display_dialog_002">"上移"</string>
     <string name="chat_footer_display_dialog_003">"调整 %1$s 的顺序"</string>
