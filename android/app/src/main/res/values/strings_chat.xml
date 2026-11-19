@@ -68,7 +68,10 @@
     <string name="chat_chat_screen_014">Fast mode ON、高速枠の回復待ち</string>
     <string name="chat_chat_screen_015">コマンド・スキル</string>
     <string name="chat_chat_screen_016">ファイルを添付</string>
-    <string name="chat_chat_screen_017">画像を添付</string>
+    <string name="chat_chat_screen_017">画像や動画を添付</string>
+    <string name="chat_attachment_video_error">この動画を再生できませんでした。お使いの端末がこの形式に対応しているか確認してください。</string>
+    <string name="chat_previous_attachment">前の添付ファイル</string>
+    <string name="chat_next_attachment">次の添付ファイル</string>
     <string name="chat_chat_screen_018">画像・ファイル・コマンド</string>
     <string name="chat_chat_screen_019">タスクの内容や質問を入力…</string>
     <string name="chat_chat_screen_020">追加の指示を送る…</string>

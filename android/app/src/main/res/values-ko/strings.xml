@@ -68,7 +68,10 @@
     <string name="chat_chat_screen_014">"Fast mode ON, 고속 슬롯 회복 대기 중"</string>
     <string name="chat_chat_screen_015">"명령어·스킬"</string>
     <string name="chat_chat_screen_016">"파일 첨부"</string>
-    <string name="chat_chat_screen_017">"이미지 첨부"</string>
+    <string name="chat_chat_screen_017">사진 또는 동영상 첨부</string>
+    <string name="chat_attachment_video_error">이 동영상을 재생할 수 없습니다. 기기에서 해당 형식을 지원하는지 확인하세요.</string>
+    <string name="chat_previous_attachment">이전 첨부파일</string>
+    <string name="chat_next_attachment">다음 첨부파일</string>
     <string name="chat_chat_screen_018">"이미지·파일·명령어"</string>
     <string name="chat_chat_screen_019">"작업 내용이나 질문 입력…"</string>
     <string name="chat_chat_screen_020">"추가 지시사항 보내기…"</string>

@@ -139,6 +139,8 @@ import androidx.compose.material.icons.rounded.Memory
 import androidx.compose.material.icons.rounded.SmartToy
 import androidx.compose.material.icons.rounded.Visibility
 import androidx.compose.material.icons.rounded.AttachFile
+import androidx.compose.material.icons.rounded.Image
+import androidx.compose.material.icons.rounded.PlayCircle
 import androidx.compose.material.icons.rounded.Description
 import androidx.compose.material.icons.rounded.FolderOpen
 import dev.remotecode.data.Providers
@@ -169,17 +171,19 @@ private fun WrapMenuItem(label: Int, checked: Boolean, onChange: (Boolean) -> Un
     )
 }
 
-private class Attachment(val payload: ImagePayload, val preview: Bitmap)
+private sealed interface DraftAttachment
+private class ImageAttachment(val uri: Uri, val payload: ImagePayload, val preview: Bitmap) : DraftAttachment
+private class FileAttachment(val file: SelectedFile) : DraftAttachment
+
 private data class ChatSubmission(
-    val draft: ComposerSubmission<Attachment, SelectedFile>,
+    val draft: ComposerSubmission<DraftAttachment>,
     val owner: dev.remotecode.data.ConnectionIdentity?,
     val quoteSource: dev.remotecode.data.ConnectionIdentity?,
     val quotes: List<CodeQuote>,
 )
 
 /** 添付の下書きはプロセス内だけ保持する。 */
-private val attachmentDrafts = java.util.concurrent.ConcurrentHashMap<String, List<Attachment>>()
-private val fileAttachmentDrafts = java.util.concurrent.ConcurrentHashMap<String, List<SelectedFile>>()
+private val attachmentDrafts = java.util.concurrent.ConcurrentHashMap<String, List<DraftAttachment>>()
 
 @Composable
 fun ChatScreen(sessionId: String, onBack: () -> Unit, onTerminals: (String) -> Unit = {}, onOpenTerminal: (String) -> Unit = {}, onProjectFiles: () -> Unit = {}) {
@@ -212,12 +216,10 @@ fun ChatScreen(sessionId: String, onBack: () -> Unit, onTerminals: (String) -> U
             inputState.value = text
         }
     }
-    val attachments = remember(sessionId) { mutableStateListOf<Attachment>().apply { addAll(attachmentDrafts[sessionId].orEmpty()) } }
-    val fileAttachments = remember(sessionId) { mutableStateListOf<SelectedFile>().apply { addAll(fileAttachmentDrafts[sessionId].orEmpty()) } }
+    val attachments = remember(sessionId) { mutableStateListOf<DraftAttachment>().apply { addAll(attachmentDrafts[sessionId].orEmpty()) } }
     DisposableEffect(sessionId) {
         onDispose {
             if (attachments.isEmpty()) attachmentDrafts.remove(sessionId) else attachmentDrafts[sessionId] = attachments.toList()
-            if (fileAttachments.isEmpty()) fileAttachmentDrafts.remove(sessionId) else fileAttachmentDrafts[sessionId] = fileAttachments.toList()
         }
     }
     var sending by remember(sessionId) { mutableStateOf(false) }
@@ -321,21 +323,30 @@ fun ChatScreen(sessionId: String, onBack: () -> Unit, onTerminals: (String) -> U
         if (!text.isNullOrBlank()) updateInput(if (input.isBlank()) text else "$input $text")
     }
 
-    val pickImages = rememberLauncherForActivityResult(ActivityResultContracts.PickMultipleVisualMedia(4)) { uris ->
-        scope.launch {
-            for (u in uris) loadAttachment(context, u)?.let { attachments.add(it) }
-        }
-    }
-    val pickFiles = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
+    fun importAttachments(uris: List<Uri>, visualPicker: Boolean) {
         scope.launch {
             readingFiles = true
             val errors = mutableListOf<String>()
             try {
-                val selected = uris.distinct().filter { uri -> fileAttachments.none { it.uri == uri } }
-                val remaining = (MAX_FILE_ATTACHMENTS - fileAttachments.size).coerceAtLeast(0)
-                if (selected.size > remaining) errors.add(appString(R.string.chat_chat_screen_081, MAX_FILE_ATTACHMENTS))
-                for (uri in selected.take(remaining)) {
-                    try { fileAttachments.add(readSelectedFile(context, uri)) }
+                for (uri in uris.distinct()) {
+                    try {
+                        val mime = if (visualPicker) withContext(Dispatchers.IO) { context.contentResolver.getType(uri) } else null
+                        if (visualPicker && mime?.startsWith("video/") != true) {
+                            val image = loadAttachment(context, uri)
+                            if (image != null) {
+                                attachments.add(image)
+                                continue
+                            }
+                        }
+                        val files = attachments.filterIsInstance<FileAttachment>()
+                        if (files.none { it.file.uri == uri }) {
+                            if (files.size >= MAX_FILE_ATTACHMENTS) {
+                                errors.add(appString(R.string.chat_chat_screen_081, MAX_FILE_ATTACHMENTS))
+                            } else {
+                                attachments.add(FileAttachment(readSelectedFile(context, uri)))
+                            }
+                        }
+                    }
                     catch (e: kotlinx.coroutines.CancellationException) { throw e }
                     catch (e: Exception) { errors.add(e.message ?: appString(R.string.chat_chat_screen_080)) }
                 }
@@ -345,10 +356,12 @@ fun ChatScreen(sessionId: String, onBack: () -> Unit, onTerminals: (String) -> U
             if (errors.isNotEmpty()) snackbar.showSnackbar(errors.first())
         }
     }
+    val pickMedia = rememberLauncherForActivityResult(ActivityResultContracts.PickMultipleVisualMedia(4)) { importAttachments(it, true) }
+    val pickFiles = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { importAttachments(it, false) }
 
     fun acknowledge(sent: ChatSubmission) {
         if (submission !== sent || sent.owner != settings?.server?.connectionIdentity()) return
-        sent.draft.acknowledge(input, inputRevision, attachments, fileAttachments) { updateInput("") }
+        sent.draft.acknowledge(input, inputRevision, attachments) { updateInput("") }
         sent.quoteSource?.let { source -> sent.quotes.forEach { CodeQuoteDrafts.remove(source, sessionId, it.id) } }
         submission = null
         follow = true
@@ -374,12 +387,12 @@ fun ChatScreen(sessionId: String, onBack: () -> Unit, onTerminals: (String) -> U
         val selectedQuotes = codeQuotes.toList()
         val quoteSource = quoteIdentity
         val text = codeQuotePrompt(typed, selectedQuotes)
-        if (text.isEmpty() && attachments.isEmpty() && fileAttachments.isEmpty()) return
+        if (text.isEmpty() && attachments.isEmpty()) return
         if (now) haptics.reject() else haptics.confirm()
-        val draft = ComposerSubmission(input, inputRevision, attachments.toList(), fileAttachments.toList())
+        val draft = ComposerSubmission(input, inputRevision, attachments.toList())
         val sent = ChatSubmission(draft, settings?.server?.connectionIdentity(), quoteSource, selectedQuotes)
-        val imgs = draft.images.map { it.payload }
-        val selectedFiles = draft.files
+        val imgs = draft.attachments.filterIsInstance<ImageAttachment>().map { it.payload }
+        val selectedFiles = draft.attachments.filterIsInstance<FileAttachment>().map { it.file }
         submission = sent
         sending = true
         scope.launch {
@@ -720,7 +733,6 @@ fun ChatScreen(sessionId: String, onBack: () -> Unit, onTerminals: (String) -> U
                     updateInput((if (c.kind == "skill" && session?.provider == "codex") "$" else "/") + c.name + " ")
                 },
                 attachments = attachments,
-                fileAttachments = fileAttachments,
                 codeQuotes = codeQuotes,
                 onRemoveCodeQuote = { quote -> quoteIdentity?.let { CodeQuoteDrafts.remove(it, sessionId, quote.id) } },
                 attachmentStatus = if (readingFiles) appString(R.string.chat_chat_screen_044) else uploadStatus,
@@ -728,7 +740,12 @@ fun ChatScreen(sessionId: String, onBack: () -> Unit, onTerminals: (String) -> U
                 running = running,
                 sending = sending,
                 connected = conn is ConnState.Connected,
-                onPick = { pickImages.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) },
+                onPick = {
+                    pickMedia.launch(PickVisualMediaRequest.Builder()
+                        .setMediaType(ActivityResultContracts.PickVisualMedia.ImageAndVideo)
+                        .setOrderedSelection(true)
+                        .build())
+                },
                 onPickFiles = { pickFiles.launch(arrayOf("*/*")) },
                 onSend = { send() },
                 onSendNow = { send(now = true) },
@@ -1035,8 +1052,7 @@ private fun Composer(
     paletteOpen: Boolean,
     onPalette: (Boolean) -> Unit,
     onPickCommand: (CommandInfo) -> Unit,
-    attachments: MutableList<Attachment>,
-    fileAttachments: MutableList<SelectedFile>,
+    attachments: MutableList<DraftAttachment>,
     codeQuotes: List<CodeQuote>,
     onRemoveCodeQuote: (CodeQuote) -> Unit,
     attachmentStatus: String?,
@@ -1056,6 +1072,20 @@ private fun Composer(
     btwUnread: Boolean = false,
 ) {
     var plusMenu by remember { mutableStateOf(false) }
+    var gallery by remember { mutableStateOf<DraftMediaGallery?>(null) }
+    fun openPreview(item: DraftAttachment) {
+        val imageName = appString(R.string.screen_remote_image_003)
+        val previews = attachments.mapNotNull { attachment ->
+            val media = when (attachment) {
+                is ImageAttachment -> DraftMedia(attachment.uri, imageName, video = false, imagePayload = attachment.payload)
+                is FileAttachment -> attachment.file.previewMedia()
+            }
+            media?.let { attachment to it }
+        }
+        val page = previews.indexOfFirst { it.first === item }
+        if (page >= 0) gallery = DraftMediaGallery(previews.map { it.second }, page)
+    }
+    gallery?.let { DraftMediaViewer(it) { gallery = null } }
     val light = MaterialTheme.colorScheme.surface.luminance() > 0.5f
     val fieldColor = if (light) MaterialTheme.colorScheme.surfaceContainerLowest else MaterialTheme.colorScheme.surfaceContainerHigh
     val pillColor = if (light) MaterialTheme.colorScheme.surfaceContainer else MaterialTheme.colorScheme.surfaceContainerHighest
@@ -1085,32 +1115,34 @@ private fun Composer(
                     if (attachments.isNotEmpty()) {
                         LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(start = 10.dp, top = 6.dp, bottom = 4.dp)) {
                             items(attachments.toList()) { a ->
-                                Box {
+                                if (a is ImageAttachment) Box {
                                     Image(
                                         a.preview.asImageBitmap(),
                                         contentDescription = appString(R.string.chat_chat_screen_024),
                                         contentScale = ContentScale.Crop,
-                                        modifier = Modifier.size(64.dp).clip(RoundedCornerShape(14.dp)),
+                                        modifier = Modifier.size(64.dp).clip(RoundedCornerShape(14.dp)).clickable { openPreview(a) },
                                     )
                                     FilledIconButton(
                                         onClick = { attachments.remove(a) },
                                         modifier = Modifier.size(22.dp).align(Alignment.TopEnd),
                                     ) { Icon(Icons.Rounded.Close, stringResource(R.string.chat_remove), Modifier.size(14.dp)) }
-                                }
-                            }
-                        }
-                    }
-                    if (fileAttachments.isNotEmpty()) {
-                        LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(start = 10.dp, top = 6.dp, bottom = 4.dp)) {
-                            items(fileAttachments.toList(), key = { it.uri.toString() }) { file ->
-                                Surface(shape = RoundedCornerShape(14.dp), color = MaterialTheme.colorScheme.surfaceContainer, modifier = Modifier.widthIn(min = 180.dp, max = 230.dp)) {
-                                    Row(Modifier.padding(start = 10.dp, end = 2.dp, top = 6.dp, bottom = 6.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                        Icon(Icons.Rounded.Description, null, Modifier.size(20.dp), tint = MaterialTheme.colorScheme.primary)
-                                        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                                            Text(file.name, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.labelLarge)
-                                            Text(file.size?.let(::bytesText) ?: stringResource(R.string.chat_chat_screen_023), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                } else if (a is FileAttachment) {
+                                    val file = a.file
+                                    val media = remember(file) { file.previewMedia() }
+                                    val open = if (media == null) Modifier else Modifier.clickable { openPreview(a) }
+                                    Surface(shape = RoundedCornerShape(14.dp), color = MaterialTheme.colorScheme.surfaceContainer, modifier = Modifier.widthIn(min = 180.dp, max = 230.dp).then(open)) {
+                                        Row(Modifier.padding(start = 10.dp, end = 2.dp, top = 6.dp, bottom = 6.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                            Icon(when (media?.video) {
+                                                true -> Icons.Rounded.PlayCircle
+                                                false -> Icons.Rounded.Image
+                                                null -> Icons.Rounded.Description
+                                            }, null, Modifier.size(20.dp), tint = MaterialTheme.colorScheme.primary)
+                                            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                                                Text(file.name, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.labelLarge)
+                                                Text(file.size?.let(::bytesText) ?: stringResource(R.string.chat_chat_screen_023), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                            }
+                                            IconButton(onClick = { attachments.remove(a) }, enabled = !readingFiles, modifier = Modifier.size(32.dp)) { Icon(Icons.Rounded.Close, stringResource(R.string.chat_chat_screen_022, file.name), Modifier.size(18.dp)) }
                                         }
-                                        IconButton(onClick = { fileAttachments.remove(file) }, enabled = !readingFiles, modifier = Modifier.size(32.dp)) { Icon(Icons.Rounded.Close, stringResource(R.string.chat_chat_screen_022, file.name), Modifier.size(18.dp)) }
                                     }
                                 }
                             }
@@ -1156,7 +1188,7 @@ private fun Composer(
                                 DropdownMenuItem(
                                     text = { Text(stringResource(R.string.chat_chat_screen_016)) },
                                     leadingIcon = { Icon(Icons.Rounded.AttachFile, null) },
-                                    enabled = fileAttachments.size < MAX_FILE_ATTACHMENTS,
+                                    enabled = attachments.count { it is FileAttachment } < MAX_FILE_ATTACHMENTS,
                                     onClick = { plusMenu = false; onPickFiles() },
                                 )
                                 DropdownMenuItem(
@@ -1242,7 +1274,7 @@ private fun Composer(
                                 }
                             }
                         }
-                        val canSend = input.isNotBlank() || attachments.isNotEmpty() || fileAttachments.isNotEmpty() || codeQuotes.isNotEmpty()
+                        val canSend = input.isNotBlank() || attachments.isNotEmpty() || codeQuotes.isNotEmpty()
                         if (running && canSend) {
                             androidx.compose.material3.FilledTonalIconButton(
                                 onClick = onSendNow,
@@ -1459,7 +1491,7 @@ private fun CommandSuggestions(commands: List<CommandInfo>?, query: String, onPi
     }
 }
 
-private suspend fun loadAttachment(context: Context, uri: Uri): Attachment? = withContext(Dispatchers.IO) {
+private suspend fun loadAttachment(context: Context, uri: Uri): ImageAttachment? = withContext(Dispatchers.IO) {
     runCatching {
         val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
         context.contentResolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, bounds) }
@@ -1468,10 +1500,11 @@ private suspend fun loadAttachment(context: Context, uri: Uri): Attachment? = wi
         val opts = BitmapFactory.Options().apply { inSampleSize = sample }
         val raw = context.contentResolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, opts) } ?: return@runCatching null
         val scale = 1600f / maxOf(raw.width, raw.height)
-        val bmp = if (scale < 1f) Bitmap.createScaledBitmap(raw, (raw.width * scale).toInt(), (raw.height * scale).toInt(), true) else raw
+        val bmp = if (scale < 1f) Bitmap.createScaledBitmap(raw, (raw.width * scale).toInt().coerceAtLeast(1), (raw.height * scale).toInt().coerceAtLeast(1), true) else raw
         val out = ByteArrayOutputStream()
         bmp.compress(Bitmap.CompressFormat.JPEG, 85, out)
-        val preview = Bitmap.createScaledBitmap(bmp, 160, (160f * bmp.height / bmp.width).toInt().coerceAtLeast(1), true)
-        Attachment(ImagePayload("image/jpeg", Base64.encodeToString(out.toByteArray(), Base64.NO_WRAP)), preview)
+        val previewScale = (160f / maxOf(bmp.width, bmp.height)).coerceAtMost(1f)
+        val preview = Bitmap.createScaledBitmap(bmp, (bmp.width * previewScale).toInt().coerceAtLeast(1), (bmp.height * previewScale).toInt().coerceAtLeast(1), true)
+        ImageAttachment(uri, ImagePayload("image/jpeg", Base64.encodeToString(out.toByteArray(), Base64.NO_WRAP)), preview)
     }.getOrNull()
 }

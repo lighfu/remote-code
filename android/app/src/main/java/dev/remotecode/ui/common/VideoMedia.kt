@@ -32,6 +32,8 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import dev.remotecode.RemoteCodeApp
+import dev.remotecode.data.ConnectionIdentity
+import dev.remotecode.data.MediaPlaybackSource
 import dev.remotecode.data.connectionIdentity
 import dev.remotecode.data.videoFileName
 import dev.remotecode.data.videoMime
@@ -77,6 +79,21 @@ fun VideoPlayerContent(id: String, name: String = videoFileName(id), writeOrigin
     val route by repo.route.collectAsState()
     val identity = remember(settings?.server, route) { repo.api.server?.connectionIdentity() }
     val source = remember(id, identity) { runCatching { repo.api.mediaPlayback(id) }.getOrNull() }
+    VideoPlaybackContent(source, id, name, identity, writeOriginal, onViewHex, onClose)
+}
+
+@Composable
+internal fun LocalVideoPreview(uri: Uri) {
+    val source = remember(uri) { MediaPlaybackSource(uri.toString(), emptyMap()) }
+    VideoPlaybackContent(source, source.url)
+}
+
+@Composable
+private fun VideoPlaybackContent(
+    source: MediaPlaybackSource?, id: String, name: String = "", identity: ConnectionIdentity? = null,
+    writeOriginal: (suspend (java.io.OutputStream) -> Unit)? = null, onViewHex: (() -> Unit)? = null,
+    onClose: (() -> Unit)? = null,
+) {
     val owner = LocalLifecycleOwner.current
     val lifecycle by owner.lifecycle.currentStateFlow.collectAsState()
     var attempt by remember(id, identity) { mutableIntStateOf(0) }
@@ -90,8 +107,8 @@ fun VideoPlayerContent(id: String, name: String = videoFileName(id), writeOrigin
     var saving by remember(id) { mutableStateOf(false) }
 
     Surface(Modifier.fillMaxSize()) {
-        Column(Modifier.fillMaxSize().systemBarsPadding()) {
-            Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+        Column(if (onClose == null) Modifier.fillMaxSize() else Modifier.fillMaxSize().systemBarsPadding()) {
+            if (onClose != null) Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
                 IconButton(onClick = onClose) { Icon(Icons.AutoMirrored.Rounded.ArrowBack, stringResource(R.string.screen_video_media_003)) }
                 Text(name, Modifier.weight(1f), style = MaterialTheme.typography.titleMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
                 IconButton(enabled = !saving, onClick = {
@@ -168,7 +185,7 @@ fun VideoPlayerContent(id: String, name: String = videoFileName(id), writeOrigin
                                     }
                                     setOnErrorListener { _, _, _ ->
                                         loading = false
-                                        error = appString(R.string.screen_video_media_007)
+                                        error = appString(if (onClose == null) R.string.chat_attachment_video_error else R.string.screen_video_media_007)
                                         true
                                     }
                                     setVideoURI(Uri.parse(source.url), source.headers)

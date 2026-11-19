@@ -68,7 +68,10 @@
     <string name="chat_chat_screen_014">"Fast mode ON, waiting for quota reset"</string>
     <string name="chat_chat_screen_015">"Commands &amp; Skills"</string>
     <string name="chat_chat_screen_016">"Attach file"</string>
-    <string name="chat_chat_screen_017">"Attach image"</string>
+    <string name="chat_chat_screen_017">Attach photos or videos</string>
+    <string name="chat_attachment_video_error">This video could not be played. Check that your device supports its format.</string>
+    <string name="chat_previous_attachment">Previous attachment</string>
+    <string name="chat_next_attachment">Next attachment</string>
     <string name="chat_chat_screen_018">"Images, files &amp; commands"</string>
     <string name="chat_chat_screen_019">"Enter task details or questions…"</string>
     <string name="chat_chat_screen_020">"Send additional instructions…"</string>

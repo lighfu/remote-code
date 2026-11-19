@@ -68,7 +68,10 @@
     <string name="chat_chat_screen_014">"Fast mode 已开启，等待高速额度恢复"</string>
     <string name="chat_chat_screen_015">"命令与技能"</string>
     <string name="chat_chat_screen_016">"添加文件"</string>
-    <string name="chat_chat_screen_017">"添加图片"</string>
+    <string name="chat_chat_screen_017">附加照片或视频</string>
+    <string name="chat_attachment_video_error">无法播放此视频。请检查您的设备是否支持该格式。</string>
+    <string name="chat_previous_attachment">上一个附件</string>
+    <string name="chat_next_attachment">下一个附件</string>
     <string name="chat_chat_screen_018">"图片 · 文件 · 命令"</string>
     <string name="chat_chat_screen_019">"输入任务内容或提问…"</string>
     <string name="chat_chat_screen_020">"发送追加指令…"</string>

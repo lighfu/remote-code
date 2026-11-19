@@ -15,7 +15,8 @@ import android.widget.Toast
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.detectTransformGestures
+import androidx.compose.foundation.gestures.rememberTransformableState
+import androidx.compose.foundation.gestures.transformable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -59,7 +60,6 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
@@ -182,28 +182,30 @@ fun MediaStrip(ids: List<String>, modifier: Modifier = Modifier, writeOriginal: 
 }
 
 @Composable
-fun ImageViewer(id: String, writeOriginal: (suspend (java.io.OutputStream) -> Unit)? = null, onClose: () -> Unit) {
-    Dialog(onDismissRequest = onClose, properties = DialogProperties(usePlatformDefaultWidth = false)) {
-        var scale by remember { mutableFloatStateOf(1f) }
-        var offset by remember { mutableStateOf(Offset.Zero) }
-        Box(
+internal fun ZoomableImage(content: @Composable (Modifier) -> Unit) {
+    var scale by remember { mutableFloatStateOf(1f) }
+    var offset by remember { mutableStateOf(Offset.Zero) }
+    val transform = rememberTransformableState { zoom, pan, _ ->
+        scale = (scale * zoom).coerceIn(1f, 8f)
+        offset = if (scale == 1f) Offset.Zero else offset + pan
+    }
+    Box(
+        Modifier.fillMaxSize().clip(androidx.compose.ui.graphics.RectangleShape)
+            .transformable(state = transform, canPan = { scale > 1f }),
+    ) {
+        content(
             Modifier
                 .fillMaxSize()
-                .background(Color.Black)
-                .pointerInput(Unit) {
-                    detectTransformGestures { _, pan, zoom, _ ->
-                        scale = (scale * zoom).coerceIn(1f, 8f)
-                        offset = if (scale == 1f) Offset.Zero else offset + pan
-                    }
-                },
-        ) {
-            RemoteImage(
-                id,
-                maxSide = 2400,
-                modifier = Modifier
-                    .fillMaxSize()
-                    .graphicsLayer(scaleX = scale, scaleY = scale, translationX = offset.x, translationY = offset.y),
-            )
+                .graphicsLayer(scaleX = scale, scaleY = scale, translationX = offset.x, translationY = offset.y),
+        )
+    }
+}
+
+@Composable
+fun ImageViewer(id: String, writeOriginal: (suspend (java.io.OutputStream) -> Unit)? = null, onClose: () -> Unit) {
+    Dialog(onDismissRequest = onClose, properties = DialogProperties(usePlatformDefaultWidth = false)) {
+        Box(Modifier.fillMaxSize().background(Color.Black)) {
+            ZoomableImage { modifier -> RemoteImage(id, maxSide = 2400, modifier = modifier) }
             FilledTonalIconButton(onClick = onClose, modifier = Modifier.align(Alignment.TopEnd).statusBarsPadding().padding(12.dp)) {
                 Icon(Icons.Rounded.Close, stringResource(R.string.screen_remote_image_005))
             }

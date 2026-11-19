@@ -68,7 +68,10 @@
     <string name="chat_chat_screen_014">"Fast mode 已開啟，等待高速額度重置"</string>
     <string name="chat_chat_screen_015">"指令與 Skills"</string>
     <string name="chat_chat_screen_016">"附加檔案"</string>
-    <string name="chat_chat_screen_017">"附加圖片"</string>
+    <string name="chat_chat_screen_017">附加相片或影片</string>
+    <string name="chat_attachment_video_error">無法播放此影片。請確認您的裝置是否支援該格式。</string>
+    <string name="chat_previous_attachment">上一個附件</string>
+    <string name="chat_next_attachment">下一個附件</string>
     <string name="chat_chat_screen_018">"圖片、檔案、指令"</string>
     <string name="chat_chat_screen_019">"輸入任務內容或問題…"</string>
     <string name="chat_chat_screen_020">"傳送額外指示…"</string>
