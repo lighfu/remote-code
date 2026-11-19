@@ -30,8 +30,8 @@ android {
         minSdk = 29
         targetSdk = 36
         // 更新時はバージョン番号とビルド番号を両方上げる。
-        versionCode = 74
-        versionName = "0.18.15"
+        versionCode = 75
+        versionName = "0.18.16"
     }
 
     signingConfigs {
@@ -60,6 +60,13 @@ android {
     }
     testOptions {
         unitTests.isIncludeAndroidResources = true
+    }
+}
+
+androidComponents {
+    onVariants(selector().withBuildType("release")) { variant ->
+        // Keep the locales declared in res/xml/locales_config.xml.
+        variant.androidResources.localeFilters.addAll("ja", "en", "zh-rCN", "b+zh+Hant", "ko")
     }
 }
 
