@@ -214,6 +214,29 @@ func TestWorktreeInvalidationDetachesPendingParentSnapshot(t *testing.T) {
 	}
 }
 
+func TestWorktreeInvalidationResolvesDirectoryAlias(t *testing.T) {
+	c := newGitStatusCache(2)
+	root := t.TempDir()
+	alias := filepath.Join(t.TempDir(), "worktree")
+	if err := os.Symlink(root, alias); err != nil {
+		t.Skipf("directory symlinks unavailable: %v", err)
+	}
+	canonical, err := filepath.EvalSymlinks(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	keys := []string{fileKey(alias), fileKey(canonical)}
+	for _, key := range keys {
+		_, _ = c.read(key, false, func() (M, error) { return M{"changedFiles": 0}, nil })
+	}
+	c.invalidateWorktree(alias)
+	for _, key := range keys {
+		if c.lookup(key, false) != nil {
+			t.Fatalf("kept stale Git snapshot for %s", key)
+		}
+	}
+}
+
 func TestClaudeLiveSummaryUsesOnlyRootRequestUsage(t *testing.T) {
 	a := testApp(t)
 	rec := a.Store.Create(M{"provider": "claude"})

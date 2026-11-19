@@ -172,11 +172,21 @@ func (c *gitStatusCache) invalidateWorktree(cwd string) {
 		return
 	}
 	path := fileKey(filepath.Clean(cwd))
+	// Git can cache the canonical root even when the session opened through
+	// a junction, a symlink, or a Windows short path.
+	resolved, err := filepath.EvalSymlinks(cwd)
+	paths := []string{path}
+	if err == nil && fileKey(resolved) != path {
+		paths = append(paths, fileKey(resolved))
+	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	for key := range c.entries {
-		if fileInside(key, path) || fileInside(path, key) {
-			delete(c.entries, key)
+		for _, path := range paths {
+			if fileInside(key, path) || fileInside(path, key) {
+				delete(c.entries, key)
+				break
+			}
 		}
 	}
 }
