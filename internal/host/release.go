@@ -25,6 +25,13 @@ import (
 const releaseRepository = "lighfu/remote-code"
 const releaseApplicationID = "net.ajisaiflow.remotecode"
 const releaseAPKLimit = 64 << 20
+const portableRestartEnv = "REMOTE_CODE_PORTABLE_RESTART"
+
+// PortableRestartExitCode signals a graceful restart to a compatible launcher.
+const PortableRestartExitCode = 75
+
+// ErrPortableRestart requests a relaunch through the portable update check.
+var ErrPortableRestart = errors.New("portable server restart requested")
 
 var releaseVersionPattern = regexp.MustCompile(`^(0|[1-9][0-9]{0,8})\.(0|[1-9][0-9]{0,8})\.(0|[1-9][0-9]{0,8})$`)
 var releaseSHA = regexp.MustCompile(`^[a-f0-9]{64}$`)
@@ -532,14 +539,41 @@ func portableServerArgs(data string, args []string) []string {
 	return childArgs
 }
 
+// Older launchers only supervise the child. The active portable executable can
+// run the launcher loop itself once and supervise subsequent restarts.
+func legacyPortableRoot(exe, instance string) string {
+	releaseDir := filepath.Dir(exe)
+	releases := filepath.Dir(releaseDir)
+	if instance == "" || !strings.EqualFold(filepath.Base(releases), "releases") {
+		return ""
+	}
+	root := filepath.Dir(releases)
+	if _, err := releaseRegular(filepath.Join(root, "portable.json")); err != nil {
+		return ""
+	}
+	if _, selected, err := releaseSelect(root); err == nil && platformSameResource(selected, exe) {
+		return root
+	}
+	return ""
+}
+
 func portableServerCommand(exe string, args []string) (*exec.Cmd, string) {
 	cmd := platformCommand(context.Background(), exe, args...)
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	instance := NewID()
-	cmd.Env = append(os.Environ(), "REMOTE_CODE_INSTANCE="+instance)
+	cmd.Env = append(os.Environ(), "REMOTE_CODE_INSTANCE="+instance, portableRestartEnv+"=1")
 	return cmd, instance
+}
+
+func waitPortableChild(cmd *exec.Cmd) error {
+	err := cmd.Wait()
+	var exit *exec.ExitError
+	if errors.As(err, &exit) && exit.ExitCode() == PortableRestartExitCode {
+		return ErrPortableRestart
+	}
+	return err
 }
 
 type portableChildExit struct {
@@ -554,21 +588,19 @@ func runPortableChild(exe string, args []string) portableChildExit {
 		return portableChildExit{err: err}
 	}
 	started := time.Now()
-	err := cmd.Wait()
+	err := waitPortableChild(cmd)
 	return portableChildExit{err: err, runtime: time.Since(started), started: true}
 }
 
 func supervisePortableChild(ctx context.Context, args []string, first portableChildExit, wait time.Duration, launch func([]string) portableChildExit) error {
-	retryArgs := make([]string, 0, len(args))
-	for _, arg := range args {
-		if arg != "--new-url" {
-			retryArgs = append(retryArgs, arg)
-		}
-	}
+	retryArgs := restartServerArgs(args)
 	shortExits := 0
 	for result := first; ; result = launch(retryArgs) {
 		if ctx.Err() != nil || result.err == nil {
 			return nil
+		}
+		if errors.Is(result.err, ErrPortableRestart) {
+			return ErrPortableRestart
 		}
 		if result.runtime >= 30*time.Second {
 			shortExits = 0
@@ -609,6 +641,19 @@ func runPortable(root, data string, args []string) error {
 		return e
 	}
 	key := releaseHash([]byte(strings.ToLower(canonicalRoot)))[:32]
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
+	defer stop()
+	for ctx.Err() == nil {
+		err := runPortableGeneration(ctx, root, data, args, key)
+		if !errors.Is(err, ErrPortableRestart) {
+			return err
+		}
+		args = restartServerArgs(args)
+	}
+	return nil
+}
+
+func runPortableGeneration(ctx context.Context, root, data string, args []string, key string) error {
 	lease, e := platformListenPipe(platformPipeName("update", key))
 	if e != nil {
 		return errors.New("another launcher is preparing this installation; keep the existing terminal open")
@@ -630,10 +675,15 @@ func runPortable(root, data string, args []string) error {
 		return errors.New("invalid current release pointer")
 	}
 	updated := false
-	checkCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	checkCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	candidate, checkErr := releaseLatest(checkCtx)
 	cancel()
-	if checkErr == nil && releaseCandidateAllowed(oldPointer, version, strings.TrimPrefix(S(candidate, "tag_name"), "v")) {
+	if ctx.Err() != nil {
+		return nil
+	}
+	if checkErr != nil {
+		fmt.Println("[Update] Could not check for server updates:", checkErr)
+	} else if releaseCandidateAllowed(oldPointer, version, strings.TrimPrefix(S(candidate, "tag_name"), "v")) {
 		next := strings.TrimPrefix(S(candidate, "tag_name"), "v")
 		fmt.Printf("\n[Update] Server %s -> %s\n[Update] Source: https://github.com/%s/releases/tag/v%s\n", version, next, releaseRepository, next)
 		if platformPrompt("Download and use this update? [y/N]: ") {
@@ -655,8 +705,6 @@ func runPortable(root, data string, args []string) error {
 			}
 		}
 	}
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
-	defer stop()
 	childArgs := portableServerArgs(data, args)
 	launch := func(args []string) portableChildExit { return runPortableChild(exe, args) }
 	const restartDelay = 1500 * time.Millisecond
@@ -674,7 +722,7 @@ func runPortable(root, data string, args []string) error {
 	if e = cmd.Start(); e == nil {
 		started := time.Now()
 		finished := make(chan error, 1)
-		go func() { finished <- cmd.Wait() }()
+		go func() { finished <- waitPortableChild(cmd) }()
 		tick := time.NewTicker(250 * time.Millisecond)
 		defer tick.Stop()
 		deadline := time.NewTimer(90 * time.Second)
@@ -687,6 +735,10 @@ func runPortable(root, data string, args []string) error {
 			case childErr := <-finished:
 				if childErr == nil || ctx.Err() != nil {
 					return atomicJSON(filepath.Join(root, "current.json"), oldPointer)
+				}
+				if errors.Is(childErr, ErrPortableRestart) {
+					// The child accepted a console action after acquiring the server port.
+					return ErrPortableRestart
 				}
 				e = errors.New("updated server exited before healthy startup")
 				goto rollback

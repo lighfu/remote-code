@@ -292,6 +292,37 @@ func TestPortableSupervisorRetriesCrashAndHonorsStop(t *testing.T) {
 	if err := supervisePortableChild(t.Context(), args, crashed, 0, alwaysCrash); !errors.Is(err, crashed.err) || attempts != 2 {
 		t.Fatalf("relaunch did not cap repeated crashes: got %d, %v", attempts, err)
 	}
+	attempts = 0
+	requested := portableChildExit{err: ErrPortableRestart, started: true}
+	if err := supervisePortableChild(t.Context(), args, requested, 0, launch); !errors.Is(err, ErrPortableRestart) || attempts != 0 {
+		t.Fatalf("restart did not return control to the launcher: %d retries, %v", attempts, err)
+	}
+}
+
+func TestLegacyPortableRootOnlyMatchesTheActiveChild(t *testing.T) {
+	root := t.TempDir()
+	exe := filepath.Join(root, "releases", "1.2.3", "remote-code.exe")
+	if err := os.MkdirAll(filepath.Dir(exe), 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(exe, nil, 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := atomicJSON(filepath.Join(root, "portable.json"), M{"launcherProtocol": 3}); err != nil {
+		t.Fatal(err)
+	}
+	if err := atomicJSON(filepath.Join(root, "current.json"), M{"version": "1.2.3"}); err != nil {
+		t.Fatal(err)
+	}
+	if got := legacyPortableRoot(exe, "instance"); got != root {
+		t.Fatalf("legacy portable root = %q, want %q", got, root)
+	}
+	if got := legacyPortableRoot(exe, ""); got != "" {
+		t.Fatalf("standalone process recognized as a portable child: %q", got)
+	}
+	if got := legacyPortableRoot(filepath.Join(root, "releases", "1.2.2", "remote-code.exe"), "instance"); got != "" {
+		t.Fatalf("inactive executable recognized as a portable child: %q", got)
+	}
 }
 
 func TestAPKDownloadKeyIsSeparatedFromServerToken(t *testing.T) {

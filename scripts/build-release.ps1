@@ -1,6 +1,6 @@
 param(
     [string]$Output = 'data/releases',
-    [string]$Version = '0.19.11',
+    [string]$Version = '0.19.12',
     [string]$ApkManifest = 'data/prebuilt-apk/remote-code-android.json',
     [string]$ApkRelease = ''
 )
@@ -74,7 +74,7 @@ Node.js, Java and Go are not required on this PC.
 Setup uses WinGet when available, or each provider's official Windows downloads.
 The installer can also be run manually from releases/$Version/scripts/install-dependencies.ps1.
 Data stays in data/. Keep this folder when updating.
-Server updates are offered at startup and require confirmation. Running servers are never replaced automatically.
+Server updates are checked at startup and when you choose Restart in the console. Installing an update requires confirmation.
 "@ | Set-Content -LiteralPath (Join-Path $payload 'README.txt') -Encoding utf8NoBOM
     $licenses = Join-Path $application 'licenses'
     [IO.Directory]::CreateDirectory($licenses) | Out-Null

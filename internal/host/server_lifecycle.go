@@ -46,16 +46,31 @@ func runServer(data string, args []string) error {
 		if err != nil || !restart || ctx.Err() != nil {
 			return err
 		}
-		// Reuse the existing tunnel after an in-process restart.
-		next := make([]string, 0, len(args))
-		for _, arg := range args {
-			if arg != "--new-url" {
-				next = append(next, arg)
+		args = restartServerArgs(args)
+		if platformFlag(args, "--serve") {
+			if os.Getenv(portableRestartEnv) == "1" {
+				return ErrPortableRestart
+			}
+			if exe, err := os.Executable(); err == nil {
+				if root := legacyPortableRoot(exe, os.Getenv("REMOTE_CODE_INSTANCE")); root != "" {
+					return runPortable(root, data, args)
+				}
 			}
 		}
-		args = next
 	}
 }
+
+// A restart keeps the tunnel chosen at startup.
+func restartServerArgs(args []string) []string {
+	next := make([]string, 0, len(args))
+	for _, arg := range args {
+		if arg != "--new-url" {
+			next = append(next, arg)
+		}
+	}
+	return next
+}
+
 func runServerGeneration(parent context.Context, data string, args []string, generation int) (restart bool, result error) {
 	a, err := NewApp(data)
 	if err != nil {

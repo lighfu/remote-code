@@ -17,7 +17,7 @@ import (
 	"time"
 )
 
-var Version = "0.19.11"
+var Version = "0.19.12"
 
 type M = map[string]any
 
