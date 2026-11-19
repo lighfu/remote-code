@@ -29,6 +29,12 @@ func (p *nativeProvider) ensureWithCodexSettings(ctx context.Context, rec *Recor
 	if closed {
 		return nil, errors.New("Provider is shutting down")
 	}
+	if p.name == "antigravity" {
+		// A mode change may have been saved while this session was disconnected.
+		if current := p.store.infoRecord(sid); current != nil {
+			rec = current
+		}
+	}
 	if p.name == "codex" && B(rec.Info, "desktop") {
 		return nil, errors.New("This conversation is open in Codex Desktop. It cannot be resumed in another process")
 	}
@@ -197,7 +203,10 @@ func (p *nativeProvider) ensureWithCodexSettings(ctx context.Context, rec *Recor
 		p.byExternal[r.External()] = sid
 		p.mu.Unlock()
 		if p.name == "antigravity" {
-			p.initializeAgySession(ctx, rec, r, response)
+			if err := p.initializeAgySession(ctx, rec, r, response); err != nil {
+				_ = p.detach(ctx, rec)
+				return nil, err
+			}
 		}
 	}
 	p.store.Update(sid, M{"live": true, "externalId": r.External()}, false)

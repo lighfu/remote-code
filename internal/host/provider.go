@@ -17,6 +17,8 @@ type nativeSession struct {
 	mu                            sync.Mutex
 	agyPromptMu                   sync.Mutex
 	agyCommands                   []M
+	agyModeConfigID               string
+	agyModeRevision               uint64
 	claudeUsage                   analyticsSeries
 	claudeContextModel            string
 	claudeContextTokens           float64
@@ -500,6 +502,9 @@ func (p *nativeProvider) detach(ctx context.Context, rec *Record) error {
 }
 func (p *nativeProvider) configure(ctx context.Context, rec *Record, action string, body M) error {
 	sid := S(rec.Info, "id")
+	if p.name == "antigravity" && action == "setMode" {
+		return p.configureAgyMode(ctx, sid, S(body, "mode"))
+	}
 	if p.name == "codex" && action == "setFastMode" {
 		return p.configureCodexFastMode(ctx, rec, B(body, "on") || B(body, "fastMode"))
 	}
@@ -564,11 +569,6 @@ func (p *nativeProvider) configure(ctx context.Context, rec *Record, action stri
 			}
 		} else if p.name == "antigravity" {
 			switch action {
-			case "setMode":
-				_, err := r.Wire().request(ctx, "session/set_mode", M{"sessionId": r.External(), "modeId": body["mode"]})
-				if err != nil {
-					return err
-				}
 			case "setModel":
 				for _, key := range []string{"model", "effort"} {
 					if val := S(body, key); val != "" {

@@ -426,10 +426,13 @@ func (p *nativeProvider) agyMessage(msg M) {
 		}
 		p.store.Update(sid, M{"plan": M{"items": items, "updatedAt": providerNow()}}, false)
 	case "current_mode_update":
-		p.store.Update(sid, M{"mode": u["currentModeId"]}, false)
+		if mode := S(u, "currentModeId"); mode != "" {
+			p.updateAgyConfig(sid, r, M{"mode": mode}, true)
+		}
 	case "config_option_update", "config_options_update":
+		r.rememberAgyModeConfig(u)
 		if patch := agyConfigValues(u); len(patch) > 0 {
-			p.store.Update(sid, patch, false)
+			p.updateAgyConfig(sid, r, patch, false)
 		}
 	case "usage_update":
 		p.store.recordAgyUsage(sid, S(params, "sessionId"), u)
@@ -506,6 +509,40 @@ func agyModelUnset(model string) bool {
 	return model == "" || strings.EqualFold(model, "default")
 }
 
+func agyModeOption(response M) M {
+	for _, option := range providerRows(response["configOptions"]) {
+		if S(option, "id") != "" && (S(option, "category") == "mode" || S(option, "id") == "mode") {
+			return option
+		}
+	}
+	return nil
+}
+
+func (r *nativeSession) rememberAgyModeConfig(response M) {
+	if id := S(agyModeOption(response), "id"); id != "" {
+		r.mu.Lock()
+		r.agyModeConfigID = id
+		r.mu.Unlock()
+	}
+}
+
+func (p *nativeProvider) updateAgyConfig(sid string, r *nativeSession, patch M, legacy bool) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if p.sessions[sid] != r {
+		return
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if legacy && r.agyModeConfigID != "" {
+		return
+	}
+	if S(patch, "mode") != "" {
+		r.agyModeRevision++
+	}
+	p.store.Update(sid, patch, false)
+}
+
 func agyConfigValues(response M) M {
 	patch := M{}
 	for _, option := range providerRows(response["configOptions"]) {
@@ -520,24 +557,96 @@ func agyConfigValues(response M) M {
 			}
 		case "thought_level":
 			patch["effort"] = value
-		case "mode":
-			patch["mode"] = value
 		}
 	}
 	if model := S(providerMap(response["models"]), "currentModelId"); patch["model"] == nil && !agyModelUnset(model) {
 		patch["model"] = model
 	}
-	if mode := S(providerMap(response["modes"]), "currentModeId"); mode != "" {
+	mode := S(agyModeOption(response), "currentValue")
+	if mode == "" {
+		mode = S(providerMap(response["modes"]), "currentModeId")
+	}
+	if mode != "" {
 		patch["mode"] = mode
 	}
 	return patch
 }
 
-func (p *nativeProvider) initializeAgySession(ctx context.Context, rec *Record, r *nativeSession, response M) {
+func (p *nativeProvider) configureAgyMode(ctx context.Context, sid, mode string) error {
+	// Serialize with session initialization, independently of the active prompt.
+	p.startMu.Lock()
+	defer p.startMu.Unlock()
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	r := p.session(sid)
+	if r == nil {
+		current := p.store.infoRecord(sid)
+		if current == nil {
+			return &HTTPError{404, "Session not found"}
+		}
+		if status := S(current.Info, "status"); status == "running" || status == "waiting" {
+			return &HTTPError{409, "Antigravity is active outside this connection. Change permissions in the session that is running on the PC."}
+		}
+		p.store.Update(sid, M{"mode": mode}, false)
+		return nil
+	}
+	return p.setAgyMode(ctx, sid, r, mode)
+}
+
+func (p *nativeProvider) setAgyMode(ctx context.Context, sid string, r *nativeSession, mode string) error {
+	ctx, cancel := context.WithTimeout(ctx, 8*time.Second)
+	defer cancel()
+	w, external := r.Wire(), r.External()
+	if w == nil || external == "" {
+		return fmt.Errorf("Antigravity conversation is no longer connected")
+	}
+	r.mu.Lock()
+	configID, revision := r.agyModeConfigID, r.agyModeRevision
+	r.mu.Unlock()
+	confirmed := mode
+	if configID != "" {
+		response, err := w.request(ctx, "session/set_config_option", M{"sessionId": external, "configId": configID, "value": mode})
+		if err != nil {
+			return fmt.Errorf("Change Antigravity permissions: %w", err)
+		}
+		confirmed = ""
+		for _, option := range providerRows(response["configOptions"]) {
+			if S(option, "id") == configID {
+				confirmed = S(option, "currentValue")
+				break
+			}
+		}
+		if confirmed == "" {
+			return fmt.Errorf("Antigravity did not confirm the permission change")
+		}
+	} else if _, err := w.request(ctx, "session/set_mode", M{"sessionId": external, "modeId": mode}); err != nil {
+		return fmt.Errorf("Change Antigravity permissions: %w", err)
+	}
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if p.sessions[sid] != r {
+		return fmt.Errorf("Antigravity conversation is no longer connected")
+	}
+	r.mu.Lock()
+	if r.agyModeRevision == revision {
+		p.store.Update(sid, M{"mode": confirmed}, false)
+	}
+	r.mu.Unlock()
+	if confirmed != mode {
+		return fmt.Errorf("Antigravity kept permission mode %q instead of %q", confirmed, mode)
+	}
+	return nil
+}
+
+func (p *nativeProvider) initializeAgySession(ctx context.Context, rec *Record, r *nativeSession, response M) error {
+	r.rememberAgyModeConfig(response)
 	current := agyConfigValues(response)
 	p.store.fillAgyConfig(rec, current)
 	if mode := S(rec.Info, "mode"); mode != "" && mode != S(current, "mode") {
-		_, _ = r.Wire().request(ctx, "session/set_mode", M{"sessionId": r.External(), "modeId": mode})
+		if err := p.setAgyMode(ctx, S(rec.Info, "id"), r, mode); err != nil {
+			return err
+		}
 	}
 	for _, setting := range []struct{ field, configID string }{{"model", "model"}, {"effort", "thought_level"}} {
 		value := S(rec.Info, setting.field)
@@ -548,6 +657,7 @@ func (p *nativeProvider) initializeAgySession(ctx context.Context, rec *Record, 
 			_, _ = r.Wire().request(ctx, "session/set_config_option", M{"sessionId": r.External(), "configId": setting.configID, "value": value})
 		}
 	}
+	return nil
 }
 
 func (s *Store) fillAgyConfig(source *Record, defaults M) {

@@ -135,6 +135,121 @@ func TestAgyCommandsAreScopedToLiveSession(t *testing.T) {
 	}
 }
 
+func TestAgyPermissionChangeDuringPrompt(t *testing.T) {
+	store := providerTestStore(t)
+	rec := store.Create(M{"provider": "antigravity", "externalId": "external", "mode": "default"})
+	sid := S(rec.Info, "id")
+	p := NewProvider("antigravity", store, t.TempDir()).(*nativeProvider)
+	sent := make(chan M, 4)
+	w := &providerWire{waiting: map[string]chan providerReply{}, done: make(chan struct{}), sendFunc: func(m M) error {
+		sent <- m
+		return nil
+	}}
+	t.Cleanup(func() { close(w.done) })
+	r := &nativeSession{external: "external", wire: w}
+	p.sessions[sid], p.byExternal[r.external], p.rpc = r, sid, w
+	config := func(mode string) M {
+		return M{"configOptions": []M{{"id": "execution", "category": "mode", "currentValue": mode}}}
+	}
+	r.rememberAgyModeConfig(config("default"))
+	update := func(payload M) {
+		p.agyMessage(M{"method": "session/update", "params": M{"sessionId": r.external, "update": payload}})
+	}
+	request := func(method string) M {
+		t.Helper()
+		select {
+		case m := <-sent:
+			if S(m, "method") != method {
+				t.Fatalf("expected %s, got %v", method, m)
+			}
+			return m
+		case <-time.After(3 * time.Second):
+			t.Fatalf("missing %s while the prompt was running", method)
+			return nil
+		}
+	}
+	p.sendAgyPrompt(sid, r, []any{M{"type": "text", "text": "test prompt"}})
+	prompt := request("session/prompt")
+	p.agyMessage(M{"id": "approval", "method": "session/request_permission", "params": M{
+		"sessionId": r.external,
+		"toolCall":  M{"kind": "edit", "title": "Edit a file"},
+		"options":   []M{{"optionId": "once", "kind": "allow_once", "name": "Allow once"}},
+	}})
+	change := func(mode string) (M, <-chan error) {
+		t.Helper()
+		result := make(chan error, 1)
+		go func() { result <- p.configureAgyMode(context.Background(), sid, mode) }()
+		return request("session/set_config_option"), result
+	}
+	changeMode, result := change("accept-edits")
+	params := providerMap(changeMode["params"])
+	if S(params, "sessionId") != r.external || S(params, "configId") != "execution" || S(params, "value") != "accept-edits" {
+		t.Fatalf("incorrect permission request: %v", params)
+	}
+	if current := S(store.infoRecord(sid).Info, "mode"); current != "default" {
+		t.Fatalf("mode appeared applied before the reply: %s", current)
+	}
+	w.receive(M{"id": changeMode["id"], "result": config("accept-edits")})
+	if err := <-result; err != nil {
+		t.Fatal(err)
+	}
+	update(M{"sessionUpdate": "current_mode_update", "currentModeId": "default"})
+	if info := store.infoRecord(sid).Info; S(info, "mode") != "accept-edits" || N(info, "pending") != 1 || S(info, "status") != "waiting" {
+		t.Fatalf("mode or outstanding approval was lost: %v", info)
+	}
+	changeMode, result = change("plan")
+	w.receive(M{"id": changeMode["id"], "result": config("accept-edits")})
+	if err := <-result; err == nil || S(store.infoRecord(sid).Info, "mode") != "accept-edits" {
+		t.Fatalf("unconfirmed mode was accepted: %v", err)
+	}
+	changeMode, result = change("default")
+	modeUpdate := config("plan")
+	modeUpdate["sessionUpdate"] = "config_option_update"
+	update(modeUpdate)
+	w.receive(M{"id": changeMode["id"], "result": config("default")})
+	if err := <-result; err != nil || S(store.infoRecord(sid).Info, "mode") != "plan" {
+		t.Fatalf("provider update was overwritten by the reply: %v", err)
+	}
+	w.receive(M{"id": prompt["id"], "result": M{"stopReason": "end_turn"}})
+	r.agyPromptMu.Lock()
+	r.agyPromptMu.Unlock()
+}
+
+func TestAgyPermissionChangeLegacySession(t *testing.T) {
+	store := providerTestStore(t)
+	rec := store.Create(M{"provider": "antigravity", "externalId": "external", "mode": "default"})
+	sid := S(rec.Info, "id")
+	p := NewProvider("antigravity", store, t.TempDir()).(*nativeProvider)
+	w := &providerWire{waiting: map[string]chan providerReply{}, done: make(chan struct{})}
+	w.sendFunc = func(m M) error {
+		params := providerMap(m["params"])
+		if S(m, "method") != "session/set_mode" || S(params, "modeId") != "plan" {
+			t.Errorf("incorrect permission request: %v", m)
+		}
+		w.receive(M{"id": m["id"], "result": M{}})
+		return nil
+	}
+	t.Cleanup(func() { close(w.done) })
+	p.sessions[sid] = &nativeSession{external: "external", wire: w}
+	if err := p.configureAgyMode(context.Background(), sid, "plan"); err != nil || S(store.infoRecord(sid).Info, "mode") != "plan" {
+		t.Fatalf("legacy mode change failed: %v", err)
+	}
+}
+
+func TestAgyPermissionChangeWithoutRuntime(t *testing.T) {
+	store := providerTestStore(t)
+	rec := store.Create(M{"provider": "antigravity", "mode": "default", "status": "running", "watching": true})
+	sid := S(rec.Info, "id")
+	p := NewProvider("antigravity", store, t.TempDir()).(*nativeProvider)
+	if err := p.configureAgyMode(context.Background(), sid, "accept-edits"); err == nil || S(store.infoRecord(sid).Info, "mode") != "default" {
+		t.Fatalf("reported a mode change to an active session without a connection: %v", err)
+	}
+	store.Update(sid, M{"status": "idle"}, false)
+	if err := p.configureAgyMode(context.Background(), sid, "accept-edits"); err != nil || S(store.infoRecord(sid).Info, "mode") != "accept-edits" {
+		t.Fatalf("did not save an idle session's mode for its next prompt: %v", err)
+	}
+}
+
 func TestAgyToolCardsKeepCommandsFilesAndDiffs(t *testing.T) {
 	store := providerTestStore(t)
 	rec := store.Create(M{"provider": "antigravity", "externalId": "external"})
