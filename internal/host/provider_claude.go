@@ -72,7 +72,7 @@ func (p *nativeProvider) claudeMessage(sid string, r *nativeSession, msg M) {
 			}
 			p.store.Update(sid, patch, false)
 		case "compact_boundary":
-			p.store.Add(sid, M{"kind": "system", "text": "Summarized conversation to free up context", "level": "info"})
+			p.store.Add(sid, M{"kind": "system", "text": "Summarized conversation to free up context", "level": "info", "compaction": parent == ""})
 		case "status":
 			if mode := S(msg, "permissionMode"); mode != "" {
 				p.store.Update(sid, M{"mode": mode}, false)
@@ -487,6 +487,7 @@ func (p *nativeProvider) claudeStats(sid string, runtime *nativeSession, msg M) 
 		}
 		if window > 0 && (N(current, "used") != contextTokens || N(current, "max") != window) {
 			rec.Info["context"] = M{"used": contextTokens, "max": window, "percent": math.Round(100 * contextTokens / window)}
+			rec.noteContextMeasurement()
 			changed = detailUsage
 		}
 	}

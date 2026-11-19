@@ -46,6 +46,21 @@ func TestSessionDetailEventWaitsForDelayedUsageAppend(t *testing.T) {
 	events, cancel := a.Store.Subscribe()
 	defer cancel()
 	a.Store.Update(id, M{"context": M{"used": 200, "max": 1000}}, false)
+	// An intervening tool row can grow the file without persisting the usage yet.
+	f, err := os.OpenFile(path, os.O_WRONLY|os.O_APPEND, 0600)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = f.WriteString("{\"type\":\"response_item\",\"payload\":{\"type\":\"function_call_output\"}}\n")
+	f.Close()
+	if err != nil {
+		t.Fatal(err)
+	}
+	response := testRequest(a, "GET", "/api/sessions/"+id+"/context", "")
+	var current M
+	if response.Code != 200 || json.Unmarshal(response.Body.Bytes(), &current) != nil || N(current, "totalTokens") != 200 || N(providerMap(a.Store.infoRecord(id).Info["context"]), "used") != 200 {
+		t.Fatalf("live summary regressed before the provider flush: %s", response.Body)
+	}
 	timer := time.NewTimer(500 * time.Millisecond)
 	defer timer.Stop()
 	for {
@@ -85,6 +100,60 @@ persisted:
 		case <-timeout:
 			t.Fatal("missing usage notification")
 		}
+	}
+}
+
+func TestSessionDetailInvalidationWithoutListenersSkipsTranscriptScan(t *testing.T) {
+	a := testApp(t)
+	home := t.TempDir()
+	t.Setenv("CODEX_HOME", home)
+	external := NewID()
+	dir := filepath.Join(home, "sessions")
+	if err := os.MkdirAll(dir, 0700); err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(dir, "rollout-"+external+".jsonl")
+	if err := os.WriteFile(path, []byte("{}\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	rec := a.Store.Create(M{"provider": "codex", "externalId": external})
+	id := S(rec.Info, "id")
+	key := contextKey(rec.Info)
+	a.contexts[id] = contextCacheValue{key: key, detail: M{"totalTokens": 10}}
+	a.Store.Update(id, M{"context": M{"used": 30, "max": 100}}, false)
+	deadline := time.Now().Add(2 * time.Second)
+	for {
+		a.contextMu.Lock()
+		_, exists := a.contexts[id]
+		a.contextMu.Unlock()
+		if !exists {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("cached detail was not invalidated")
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	if _, scanned := analyticsFiles.Load(path); scanned {
+		t.Fatal("unobserved update scanned a transcript")
+	}
+}
+
+func TestSessionDetailSignalsIgnoreToolDeltasAndReplayedCompletions(t *testing.T) {
+	a := testApp(t)
+	id := S(a.Store.Create(M{"provider": "codex"}).Info, "id")
+	var signals []detailChange
+	a.Store.detailsChanged = func(_ string, changed detailChange) { signals = append(signals, changed) }
+	a.Store.Add(id, M{"id": "tool", "kind": "tool", "tool": "Bash", "status": "running"})
+	a.Store.Delta(id, "tool", "output", "progress")
+	a.Store.Patch(id, "tool", M{"status": "done"})
+	a.Store.Patch(id, "tool", M{"status": "done", "output": "more output"})
+	a.Store.Add(id, M{"id": "tool", "kind": "tool", "tool": "Bash", "status": "done"})
+	a.Store.Add(id, M{"kind": "tool", "tool": "Read", "status": "done"})
+	a.Store.Add(id, M{"kind": "system", "compaction": true})
+	a.Store.Add(id, M{"kind": "result"})
+	if !slices.Equal(signals, []detailChange{detailGit, detailUsage, detailGit | detailUsage}) {
+		t.Fatal("unexpected invalidations", signals)
 	}
 }
 

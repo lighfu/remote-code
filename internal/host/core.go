@@ -153,8 +153,9 @@ type Provider interface {
 	Close() error
 }
 type Record struct {
-	Info    M   `json:"info"`
-	Entries []M `json:"entries"`
+	Info              M   `json:"info"`
+	Entries           []M `json:"entries"`
+	contextReportedAt time.Time
 }
 type App struct {
 	DataDir           string

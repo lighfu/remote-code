@@ -80,7 +80,8 @@ func (a *App) contextSnapshot(ctx context.Context, rec *Record, cached bool) (M,
 func (a *App) codexContextDetail(rec *Record) (M, error) {
 	snapshot, _ := codexContextBreakdown(S(rec.Info, "externalId"), a.Config.Raw)
 	used, window := snapshot.used, snapshot.window
-	if window <= 0 {
+	// The socket can report a new measurement before it appears in the rollout.
+	if window <= 0 || time.Since(rec.contextReportedAt) < sessionUsageFlushWait {
 		current := providerMap(rec.Info["context"])
 		used, window = N(current, "used"), N(current, "max")
 	}
@@ -122,15 +123,25 @@ func contextKey(info M) contextCacheKey {
 }
 
 type contextCacheValue struct {
-	key    contextCacheKey
-	at     time.Time
-	detail M
+	key        contextCacheKey
+	at         time.Time
+	reportedAt time.Time
+	detail     M
+}
+
+func (r *Record) noteContextMeasurement() {
+	now := time.Now()
+	if !now.After(r.contextReportedAt) {
+		now = r.contextReportedAt.Add(time.Nanosecond)
+	}
+	r.contextReportedAt = now
 }
 
 type contextFlight struct {
-	done   chan struct{}
-	detail M
-	err    error
+	done       chan struct{}
+	detail     M
+	err        error
+	reportedAt time.Time
 }
 
 func (a *App) invalidateSessionContext(key contextCacheKey) {
@@ -148,7 +159,11 @@ func (a *App) loadContextSnapshot(ctx context.Context, rec *Record, cached bool,
 	entry := a.contexts[key.id]
 	at := entry.at
 	flight := a.contextFlights[key]
-	if entry.key == key && entry.detail != nil && (cached || time.Since(at) < 10*time.Second) {
+	if flight != nil && rec.contextReportedAt.After(flight.reportedAt) {
+		delete(a.contextFlights, key)
+		flight = nil
+	}
+	if entry.key == key && entry.detail != nil && !rec.contextReportedAt.After(entry.reportedAt) && (cached || time.Since(at) < 10*time.Second) {
 		a.contextMu.Unlock()
 		previous := snapshotMap(entry.detail)
 		previous["cachedAt"] = at.UnixMilli()
@@ -166,7 +181,7 @@ func (a *App) loadContextSnapshot(ctx context.Context, rec *Record, cached bool,
 			return snapshotMap(flight.detail), flight.err
 		}
 	}
-	flight = &contextFlight{done: make(chan struct{})}
+	flight = &contextFlight{done: make(chan struct{}), reportedAt: rec.contextReportedAt}
 	a.contextFlights[key] = flight
 	a.contextMu.Unlock()
 	defer func() {
@@ -189,7 +204,7 @@ func (a *App) loadContextSnapshot(ctx context.Context, rec *Record, cached bool,
 		return nil, err
 	}
 	c := normalizeContext(value)
-	entry = contextCacheValue{key: key, at: time.Now(), detail: snapshotMap(c)}
+	entry = contextCacheValue{key: key, at: time.Now(), reportedAt: flight.reportedAt, detail: snapshotMap(c)}
 	if !a.applyContextSnapshot(entry, flight) {
 		return nil, errors.New("Conversation changed while reading context")
 	}
@@ -210,7 +225,7 @@ func (a *App) applyContextSnapshot(entry contextCacheValue, flight *contextFligh
 	}
 	a.contextMu.Lock()
 	defer a.contextMu.Unlock()
-	if a.contextFlights[key] != flight {
+	if a.contextFlights[key] != flight || rec.contextReportedAt.After(flight.reportedAt) {
 		// A live event superseded this read. Only its original callers can see it.
 		return true
 	}

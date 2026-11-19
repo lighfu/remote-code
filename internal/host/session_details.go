@@ -15,6 +15,8 @@ const (
 	detailPersisted // An incremental transcript scan already observed new usage.
 )
 
+const sessionUsageFlushWait = 1500 * time.Millisecond
+
 func (s *Store) noteSessionDetails(id string, changed detailChange) {
 	if changed != 0 && s.detailsChanged != nil {
 		s.detailsChanged(id, changed)
@@ -72,7 +74,7 @@ func (a *App) refreshSessionDetails(id string) {
 			if waiting != nil && waiting.key != contextKey(rec.Info) {
 				waiting = nil
 			}
-			if fields&detailPersisted != 0 || waiting != nil && waiting.ready() {
+			if fields&detailPersisted != 0 || waiting != nil && waiting.ready(a.Config.Raw) {
 				if fields&detailPersisted == 0 && waiting.path != "" {
 					a.readSessionAnalytics(rec)
 				}
@@ -98,39 +100,64 @@ func (a *App) refreshSessionDetails(id string) {
 // Let the writer catch up before waking cache and context HTTP readers. While
 // waiting, Git updates keep flowing and only file metadata is sampled.
 type pendingUsageFile struct {
-	key      contextCacheKey
-	path     string
-	baseline os.FileInfo
-	until    time.Time
+	key                       contextCacheKey
+	path                      string
+	baseline                  os.FileInfo
+	until                     time.Time
+	expectedUsed, expectedMax float64
 }
 
 func newPendingUsageFile(rec *Record) *pendingUsageFile {
 	key := contextKey(rec.Info)
-	p := &pendingUsageFile{key: key, path: analyticsPath(key.provider, key.external), until: time.Now().Add(1500 * time.Millisecond)}
+	p := &pendingUsageFile{key: key, path: analyticsPath(key.provider, key.external), until: time.Now().Add(sessionUsageFlushWait)}
+	if key.provider == "codex" && time.Since(rec.contextReportedAt) < sessionUsageFlushWait {
+		c := providerMap(rec.Info["context"])
+		p.expectedUsed, p.expectedMax = N(c, "used"), N(c, "max")
+	}
 	if state, ok := analyticsFiles.Load(p.path); ok {
 		s := state.(*analyticsState)
 		s.mu.Lock()
-		p.baseline = s.file
+		if p.expectedMax <= 0 || s.window != p.expectedMax || s.used != p.expectedUsed {
+			p.baseline = s.file
+		}
 		s.mu.Unlock()
 	}
 	return p
 }
 
-func (p *pendingUsageFile) ready() bool {
-	if p.path == "" || p.baseline == nil || !time.Now().Before(p.until) {
+func (p *pendingUsageFile) ready(config M) bool {
+	if p.path == "" || !time.Now().Before(p.until) {
 		return true
 	}
 	st, err := os.Stat(p.path)
-	return err != nil || st.Size() != p.baseline.Size() || !st.ModTime().Equal(p.baseline.ModTime())
+	if err != nil {
+		return true
+	}
+	if p.baseline != nil && st.Size() == p.baseline.Size() && st.ModTime().Equal(p.baseline.ModTime()) {
+		return false
+	}
+	p.baseline = st
+	if p.expectedMax <= 0 {
+		return true
+	}
+	s := analyticsStateFor(p.path)
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	_, err = s.read(p.key.provider, p.path, config)
+	return err != nil || s.window == p.expectedMax && s.used == p.expectedUsed
 }
 
 func sessionEntryDetails(e M) detailChange {
 	switch S(e, "kind") {
 	case "result":
 		return detailGit | detailUsage
+	case "system":
+		if B(e, "compaction") {
+			return detailUsage
+		}
 	case "tool":
 		switch S(e, "status") {
-		case "done", "error":
+		case "done", "completed", "error", "failed":
 			switch strings.ToLower(S(e, "tool")) {
 			case "filechange", "edit", "write", "multiedit", "notebookedit", "apply_patch", "command", "bash", "powershell":
 				return detailGit

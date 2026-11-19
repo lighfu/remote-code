@@ -214,14 +214,14 @@ func (s *Store) infoRecord(id string) *Record {
 	if r == nil {
 		return nil
 	}
-	return &Record{Info: snapshotMap(r.Info)}
+	return &Record{Info: snapshotMap(r.Info), contextReportedAt: r.contextReportedAt}
 }
 
 func snapshotRecord(r *Record) *Record {
 	if r == nil {
 		return nil
 	}
-	result := &Record{Info: snapshotMap(r.Info)}
+	result := &Record{Info: snapshotMap(r.Info), contextReportedAt: r.contextReportedAt}
 	if r.Entries != nil {
 		result.Entries = make([]M, len(r.Entries))
 		for i, entry := range r.Entries {
@@ -395,6 +395,7 @@ func (s *Store) Update(id string, patch M, touch bool) {
 		old := providerMap(r.Info["context"])
 		if N(ctx, "used") != N(old, "used") || N(ctx, "max") != N(old, "max") {
 			changed |= detailUsage
+			r.noteContextMeasurement()
 		}
 	}
 	if before, after := S(r.Info, "status"), S(patch, "status"); (before == "running" || before == "waiting") && (after == "idle" || after == "error") {

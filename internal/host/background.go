@@ -69,7 +69,9 @@ func (a *App) StartBackground(ctx context.Context) {
 					if !B(info, "archived") && S(info, "externalId") != "" {
 						a.refreshAnalytics(&Record{Info: info})
 						if B(info, "live") {
-							a.refreshLiveContext(ctx, &Record{Info: info})
+							if rec := a.Store.infoRecord(S(info, "id")); rec != nil && B(rec.Info, "live") && !B(rec.Info, "archived") {
+								a.refreshLiveContext(ctx, rec)
+							}
 						}
 					}
 				}

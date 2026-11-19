@@ -622,6 +622,7 @@ func (p *nativeProvider) addCodexItem(sid string, item M, completed bool, parent
 			return
 		}
 		entry["kind"] = "system"
+		entry["compaction"] = parent == ""
 		entry["level"] = "info"
 		entry["text"] = "Summarized conversation to free up context"
 	default:

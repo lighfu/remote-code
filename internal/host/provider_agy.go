@@ -461,6 +461,7 @@ func (s *Store) recordAgyUsage(sid, external string, u M) {
 		previous := providerMap(rec.Info["context"])
 		if N(previous, "used") != used || N(previous, "max") != window {
 			changed = detailUsage
+			rec.noteContextMeasurement()
 		}
 		rec.Info["context"] = M{"used": used, "max": window, "percent": math.Round(100 * used / window)}
 	}
