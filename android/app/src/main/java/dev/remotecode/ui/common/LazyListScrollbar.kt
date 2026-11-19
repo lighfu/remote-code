@@ -10,6 +10,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.geometry.CornerRadius
@@ -38,9 +39,10 @@ internal fun LazyListScrollTrack(
     modifier: Modifier,
     drawTrack: DrawScope.(ListScrollWindow, Boolean) -> Unit,
 ) {
-    val seeks = remember(listState, count) { Channel<Float>(Channel.CONFLATED) }
+    val currentCount = rememberUpdatedState(count)
+    val seeks = remember(listState) { Channel<Float>(Channel.CONFLATED) }
     LaunchedEffect(seeks) {
-        for (progress in seeks) listState.seekTrack(progress, count)
+        for (progress in seeks) listState.seekTrack(progress, currentCount.value)
     }
     val movable = listState.canScrollForward || listState.canScrollBackward
     Canvas(modifier
@@ -72,7 +74,7 @@ internal fun LazyListScrollTrack(
             awaitEachGesture {
                 val down = awaitFirstDown()
                 val height = size.height.toFloat()
-                val window = listState.scrollWindow(count)
+                val window = listState.scrollWindow(currentCount.value)
                 val thumb = window.thumb(height, 20.dp.toPx())
                 val travel = height - thumb
                 if (travel <= 0f) return@awaitEachGesture
@@ -139,6 +141,7 @@ private fun LazyListState.scrollWindow(count: Int): ListScrollWindow {
 }
 
 private suspend fun LazyListState.seekTrack(progress: Float, count: Int) {
+    if (count <= 0) return
     if (progress <= 0f) return scrollToItem(0)
     val position = if (progress >= 1f) count.toFloat() else progress * (1f - scrollWindow(count).span) * count
     val index = position.toInt().coerceIn(0, count - 1)
