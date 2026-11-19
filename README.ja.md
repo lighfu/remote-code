@@ -34,6 +34,10 @@ Android アプリは、PC で `start.cmd` を開き、ターミナルの **App Q
   <img src="docs/assets/readme/features.svg" width="1200" height="290" alt="会話と実行・コードを編集・変更をまとめる">
 </p>
 
+<p align="center">
+  <img src="docs/assets/readme/card-resources.svg" width="780" height="310" alt="少ないリソースで動く設計。会話ごとに履歴の件数を制限し、Go 製のポータブル形式で配布。リモート画面が変化しなければ再圧縮を省略します。">
+</p>
+
 - **会話** — 送信・再開、ツールの承認、サブエージェントの確認、バックグラウンド通知。
 - **ファイル** — 画像・動画・ファイルの添付と表示、コード編集・引用、Markdown プレビュー。
 - **Git・使用量** — 差分・履歴・ブランチ、ステージ操作、コミット・プッシュ。利用状況・コンテキスト・キャッシュの表示。

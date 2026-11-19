@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" xml:lang="zh-Hant" width="780" height="310" viewBox="0 0 780 310" role="img" aria-labelledby="title description">
+  <title id="title">以低資源用量為設計目標</title>
+  <desc id="description">限制每個對話的歷史筆數 · 精簡的 Go 原生可攜套件 · 畫面無變化時省去重新編碼</desc>
+  <rect width="780" height="310" rx="34" fill="#F0ECD9"/>
+  <path d="M38 155h704M38 220h704" stroke="#D9D7C8"/>
+  <g fill="#263322" font-family="'Segoe UI','Noto Sans TC','Microsoft JhengHei UI',sans-serif">
+    <text x="38" y="67" font-size="39" font-weight="700">以低資源用量為設計目標</text>
+    <circle cx="62" cy="123" r="23" fill="#D4ED9B"/>
+    <g transform="translate(62 123)" fill="none" stroke="#263322" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="-12" y="-9" width="24" height="18" rx="3"/><path d="M-7-3H7M-7 3H7M-7-9v-4M0-9v-4M7-9v-4M-7 9v4M0 9v4M7 9v4"/></g>
+    <text x="99" y="132" font-size="28" font-weight="700">記憶體</text>
+    <text x="266" y="131" fill="#46503D" font-size="24">限制每個對話的歷史筆數</text>
+    <circle cx="62" cy="188" r="23" fill="#DED8F8"/>
+    <g transform="translate(62 188)" fill="none" stroke="#263322" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="-12" y="-10" width="24" height="20" rx="4"/><path d="M-12 3h24M-7 6h1M-2 6h1"/></g>
+    <text x="99" y="197" font-size="28" font-weight="700">儲存空間</text>
+    <text x="266" y="196" fill="#46503D" font-size="24">精簡的 Go 原生可攜套件</text>
+    <circle cx="62" cy="253" r="23" fill="#F5BD9F"/>
+    <g transform="translate(62 253)" fill="none" stroke="#263322" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M-12 8v-3a12 12 0 0 1 24 0v3H-12ZM-6 3l-3-3M6 3l3-3M0-7v4M0 6l5-7"/></g>
+    <text x="99" y="262" font-size="28" font-weight="700">CPU</text>
+    <text x="266" y="261" fill="#46503D" font-size="24">畫面無變化時省去重新編碼</text>
+  </g>
+</svg>

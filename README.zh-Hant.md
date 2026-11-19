@@ -34,6 +34,10 @@ Windows 套件可於 [GitHub Releases](https://github.com/lighfu/remote-code/rel
   <img src="docs/assets/readme/zh-Hant/features.svg" width="1200" height="290" alt="對話與執行、編輯程式碼、提交變更">
 </p>
 
+<p align="center">
+  <img src="docs/assets/readme/zh-Hant/card-resources.svg" width="780" height="310" alt="以低資源用量為設計目標。限制每個對話的歷史筆數，提供精簡的 Go 原生可攜套件，遠端桌面畫面無變化時省去重新編碼。">
+</p>
+
 - **對話** — 傳送與繼續對話、核准工具呼叫、檢視子代理，並接收背景通知。
 - **檔案** — 附加與檢視圖片、影片及檔案，編輯與引用程式碼，並預覽 Markdown。
 - **Git 與用量** — 檢視差異、歷史記錄與分支，暫存變更、提交與推送。檢查用量、上下文與快取狀態。

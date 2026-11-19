@@ -34,6 +34,10 @@ To install the Android app, open `start.cmd` on your PC and scan the terminal’
   <img src="docs/assets/readme/en/features.svg" width="1200" height="290" alt="Chat & Run, Edit Code, Commit Changes">
 </p>
 
+<p align="center">
+  <img src="docs/assets/readme/en/card-resources.svg" width="780" height="310" alt="Designed for low resource use. Per-conversation history limits, a compact native Go package, and skipped re-encoding for unchanged remote desktop frames.">
+</p>
+
 - **Chat** — Send and resume chats, approve tool calls, inspect subagents, and receive background notifications.
 - **Files** — Attach and view images, videos, and files, edit and quote code, and preview Markdown.
 - **Git & Usage** — View diffs, history, and branches, stage changes, commit, and push. Check usage, context, and cache status.

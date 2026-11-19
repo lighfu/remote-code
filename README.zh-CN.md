@@ -34,6 +34,10 @@ Windows 发行版可从 [GitHub Releases](https://github.com/lighfu/remote-code/
   <img src="docs/assets/readme/zh-CN/features.svg" width="1200" height="290" alt="对话与执行、编辑代码、整理与提交变更">
 </p>
 
+<p align="center">
+  <img src="docs/assets/readme/zh-CN/card-resources.svg" width="780" height="310" alt="以低资源占用为设计目标。限制每个会话的历史条数，提供小巧的 Go 原生便携包，远程桌面画面无变化时省去重新编码。">
+</p>
+
 - **对话** — 发送与恢复对话、审批工具调用、查看子智能体、接收后台通知。
 - **文件** — 附加与查看图片、视频及文件，编辑与引用代码，预览 Markdown。
 - **Git 与用量** — 查看差异、历史与分支，暂存变更、提交与推送。显示使用情况、上下文与缓存。
