@@ -182,6 +182,8 @@ type App struct {
 	contextFlights    map[contextCacheKey]*contextFlight
 	fx                fxRates
 	analyticsBusy     sync.Map
+	detailMu          sync.Mutex
+	pendingDetails    map[string]detailChange
 	requestMu         sync.Mutex
 	requests          sync.WaitGroup
 	draining          bool
@@ -216,6 +218,8 @@ func NewApp(dataDir string) (*App, error) {
 	a := &App{DataDir: abs, Config: c, Store: store, Providers: map[string]Provider{}, InstanceID: NewID(), StartedAt: nowMS(), usage: M{}, usageLoading: map[string]bool{}, usageAt: map[string]time.Time{}, btw: map[string][]M{}, closed: make(chan struct{})}
 	a.usageSeenAt = map[string]time.Time{}
 	a.taskCtx, a.taskCancel = context.WithCancel(context.Background())
+	a.pendingDetails = make(map[string]detailChange)
+	store.detailsChanged = a.queueSessionDetails
 	a.btwCancel = map[string]context.CancelFunc{}
 	a.contexts = map[string]contextCacheValue{}
 	a.contextFlights = map[contextCacheKey]*contextFlight{}

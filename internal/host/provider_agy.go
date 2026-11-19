@@ -456,16 +456,25 @@ func (s *Store) recordAgyUsage(sid, external string, u M) {
 	if s.closed || rec == nil || S(rec.Info, "provider") != "antigravity" || S(rec.Info, "externalId") != external {
 		return
 	}
+	var changed detailChange
 	if hasUsage && window > 0 {
+		previous := providerMap(rec.Info["context"])
+		if N(previous, "used") != used || N(previous, "max") != window {
+			changed = detailUsage
+		}
 		rec.Info["context"] = M{"used": used, "max": window, "percent": math.Round(100 * used / window)}
 	}
 	if hasCost {
 		stats := providerMap(rec.Info["stats"])
+		if stats["costUsd"] == nil || N(stats, "costUsd") != usd {
+			changed = detailUsage
+		}
 		stats["costUsd"], stats["costSource"], stats["partial"] = usd, "provider", false
 		rec.Info["stats"] = stats
 	}
 	s.dirty[sid] = true
 	s.emitLocked(M{"type": "session", "session": rec.Info})
+	s.noteSessionDetails(sid, changed)
 }
 
 func (p *nativeProvider) listAgyCommands(rec *Record) []M {

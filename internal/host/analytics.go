@@ -623,14 +623,20 @@ func (a *App) analytics(rec *Record) (M, M, error) {
 	return stats, detail, nil
 }
 func (a *App) refreshAnalytics(rec *Record) {
+	if a.readSessionAnalytics(rec) {
+		a.Store.noteSessionDetails(S(rec.Info, "id"), detailPersisted)
+	}
+}
+
+func (a *App) readSessionAnalytics(rec *Record) bool {
 	id := S(rec.Info, "id")
 	if _, refreshing := a.analyticsBusy.LoadOrStore(id, struct{}{}); refreshing {
-		return
+		return false
 	}
 	defer a.analyticsBusy.Delete(id)
 	stats, detail, err := a.analytics(rec)
 	if err == nil {
-		a.Store.applyAnalyticsStats(rec, stats)
+		changed := a.Store.applyAnalyticsStats(rec, stats)
 		if S(rec.Info, "provider") == "antigravity" && agyModelUnset(S(rec.Info, "model")) {
 			for _, request := range providerRows(detail["recent"]) {
 				if model := S(request, "model"); !agyModelUnset(model) {
@@ -639,7 +645,9 @@ func (a *App) refreshAnalytics(rec *Record) {
 				}
 			}
 		}
+		return changed
 	}
+	return false
 }
 
 func (a *App) refreshClaudePlan(rec *Record) {
@@ -678,14 +686,14 @@ func (s *Store) applyClaudePlan(source *Record, plan M) bool {
 	return true
 }
 
-func (s *Store) applyAnalyticsStats(source *Record, stats M) {
+func (s *Store) applyAnalyticsStats(source *Record, stats M) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	id := S(source.Info, "id")
 	current := s.records[id]
 	provider := S(source.Info, "provider")
 	if s.closed || current == nil || S(current.Info, "provider") != provider || S(current.Info, "externalId") != S(source.Info, "externalId") {
-		return
+		return false
 	}
 	previous := providerMap(current.Info["stats"])
 	tokens, prior := providerMap(stats["tokens"]), providerMap(previous["tokens"])
@@ -710,5 +718,8 @@ func (s *Store) applyAnalyticsStats(source *Record, stats M) {
 		current.Info["stats"] = clone(stats)
 		s.dirty[id] = true
 		s.emitLocked(M{"type": "session", "session": current.Info})
+		return N(tokens, "input") != N(prior, "input") || N(tokens, "cached") != N(prior, "cached") ||
+			N(tokens, "output") != N(prior, "output") || N(providerMap(stats["cache"]), "lastAt") != N(providerMap(previous["cache"]), "lastAt")
 	}
+	return false
 }

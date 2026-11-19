@@ -363,9 +363,15 @@ func (s *Store) recordCodexLiveUsage(sid, external string, usage M) {
 		return stats, cache, changed
 	}
 	s.mu.RLock()
-	stats, _, _ := statsForUpdate()
+	stats, _, changed := statsForUpdate()
 	s.mu.RUnlock()
-	if stats == nil || analyticsPath("codex", external) != "" {
+	if stats == nil {
+		return
+	}
+	if analyticsPath("codex", external) != "" {
+		if changed {
+			s.noteSessionDetails(sid, detailUsage)
+		}
 		return
 	}
 	s.mu.Lock()
@@ -408,6 +414,9 @@ func (s *Store) recordCodexLiveUsage(sid, external string, usage M) {
 	stats["cache"] = M{"lastAt": at, "ttlMs": codexCacheTTL.Milliseconds(), "lastHit": hit}
 	stats["tokens"] = M{"input": input, "cached": cached, "output": output}
 	rec.Info["stats"] = stats
+	if changed {
+		s.noteSessionDetails(sid, detailUsage)
+	}
 	s.dirty[sid] = true
 	s.emitLocked(M{"type": "session", "session": rec.Info})
 }

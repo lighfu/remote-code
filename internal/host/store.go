@@ -45,6 +45,7 @@ type Store struct {
 
 	timelineRevision int64
 	usagePrices      M
+	detailsChanged   func(string, detailChange)
 }
 
 func OpenStore(directory string) (*Store, error) {
@@ -389,6 +390,16 @@ func (s *Store) Update(id string, patch M, touch bool) {
 	if r == nil {
 		return
 	}
+	var changed detailChange
+	if ctx := providerMap(patch["context"]); len(ctx) > 0 {
+		old := providerMap(r.Info["context"])
+		if N(ctx, "used") != N(old, "used") || N(ctx, "max") != N(old, "max") {
+			changed |= detailUsage
+		}
+	}
+	if before, after := S(r.Info, "status"), S(patch, "status"); (before == "running" || before == "waiting") && (after == "idle" || after == "error") {
+		changed |= detailUsage | detailGit
+	}
 	for k, v := range patch {
 		if k != "id" {
 			r.Info[k] = clone(v)
@@ -399,6 +410,7 @@ func (s *Store) Update(id string, patch M, touch bool) {
 	}
 	s.dirty[id] = true
 	s.emitLocked(M{"type": "session", "session": r.Info})
+	s.noteSessionDetails(id, changed)
 }
 func previewMessage(e M) bool {
 	return S(e, "parent") == "" && isTimelineMessage(e) && !B(e, "streaming") && strings.TrimSpace(S(e, "text")) != ""
@@ -481,8 +493,10 @@ func (s *Store) addEntry(id string, entry M, transcript, updatePreview bool) M {
 		return e
 	}
 	found := false
+	var previousDetails detailChange
 	for _, old := range r.Entries {
 		if S(old, "id") == S(e, "id") {
+			previousDetails = sessionEntryDetails(old)
 			if transcript {
 				return clone(old)
 			}
@@ -500,6 +514,7 @@ func (s *Store) addEntry(id string, entry M, transcript, updatePreview bool) M {
 	}
 	r.Entries = trimTimeline(r.Entries, storeMaxEntries)
 	s.emitLocked(M{"type": "entry", "sessionId": id, "entry": e})
+	s.noteSessionDetails(id, sessionEntryDetails(e)&^previousDetails)
 	if updatePreview {
 		s.touchLocked(r, e, transcript)
 	}
@@ -515,6 +530,7 @@ func (s *Store) Patch(id, entryID string, patch M) {
 	}
 	for _, e := range r.Entries {
 		if S(e, "id") == entryID {
+			previousDetails := sessionEntryDetails(e)
 			s.flushDeltasLocked(id, entryID)
 			for k, v := range patch {
 				e[k] = clone(v)
@@ -524,6 +540,7 @@ func (s *Store) Patch(id, entryID string, patch M) {
 			}
 			storeLimitEntry(e)
 			s.emitLocked(M{"type": "entry", "sessionId": id, "entry": e})
+			s.noteSessionDetails(id, sessionEntryDetails(e)&^previousDetails)
 			s.touchLocked(r, e, false)
 			s.dirty[id] = true
 			return

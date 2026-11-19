@@ -3,6 +3,7 @@ package host
 import (
 	"encoding/json"
 	"fmt"
+	"math"
 	"regexp"
 	"slices"
 	"strings"
@@ -446,6 +447,8 @@ func (p *nativeProvider) claudeStats(sid string, runtime *nativeSession, msg M) 
 	created := N(u, "cache_creation_input_tokens")
 	output := N(u, "output_tokens")
 	total, read := input+cached+created, cached
+	var contextTokens float64
+	var contextModel string
 	if S(msg, "type") == "assistant" {
 		message := providerMap(msg["message"])
 		id := S(message, "id")
@@ -456,8 +459,16 @@ func (p *nativeProvider) claudeStats(sid string, runtime *nativeSession, msg M) 
 			return
 		}
 		runtime.mu.Lock()
+		if S(msg, "parent_tool_use_id") == "" && total > 0 {
+			contextTokens, contextModel = total+output, S(message, "model")
+			runtime.claudeContextTokens, runtime.claudeContextModel = contextTokens, contextModel
+		}
 		runtime.claudeUsage.add("claude", id, analyticsUsage{Fresh: input, Read: cached, Write5: created, Output: output}, nil)
 		total, read, output = runtime.claudeUsage.input, runtime.claudeUsage.cached, runtime.claudeUsage.output
+		runtime.mu.Unlock()
+	} else if S(msg, "type") == "result" {
+		runtime.mu.Lock()
+		contextTokens, contextModel = runtime.claudeContextTokens, runtime.claudeContextModel
 		runtime.mu.Unlock()
 	}
 	p.store.mu.Lock()
@@ -467,9 +478,24 @@ func (p *nativeProvider) claudeStats(sid string, runtime *nativeSession, msg M) 
 		return
 	}
 	stats := providerMap(rec.Info["stats"])
+	var changed detailChange
+	if contextTokens > 0 {
+		current := providerMap(rec.Info["context"])
+		window := N(providerMap(providerMap(msg["modelUsage"])[contextModel]), "contextWindow")
+		if window <= 0 {
+			window = N(current, "max")
+		}
+		if window > 0 && (N(current, "used") != contextTokens || N(current, "max") != window) {
+			rec.Info["context"] = M{"used": contextTokens, "max": window, "percent": math.Round(100 * contextTokens / window)}
+			changed = detailUsage
+		}
+	}
 	prior := providerMap(stats["tokens"])
 	coversPrior := total >= N(prior, "input") && read >= N(prior, "cached") && output >= N(prior, "output")
 	if coversPrior {
+		if N(prior, "input") != total || N(prior, "cached") != read || N(prior, "output") != output {
+			changed = detailUsage
+		}
 		stats["tokens"] = M{"input": total, "cached": read, "output": output}
 	}
 	if cost, ok := reportedAmount(msg, "total_cost_usd"); ok && (coversPrior || stats["costUsd"] == nil) {
@@ -493,6 +519,7 @@ func (p *nativeProvider) claudeStats(sid string, runtime *nativeSession, msg M) 
 	rec.Info["stats"] = stats
 	p.store.dirty[sid] = true
 	p.store.emitLocked(M{"type": "session", "session": rec.Info})
+	p.store.noteSessionDetails(sid, changed)
 }
 func (p *nativeProvider) claudeBlockMedia(sid string, blocks []M) (media, videos []string) {
 	cwd := ""

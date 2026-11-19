@@ -18,6 +18,8 @@ type nativeSession struct {
 	agyPromptMu                   sync.Mutex
 	agyCommands                   []M
 	claudeUsage                   analyticsSeries
+	claudeContextModel            string
+	claudeContextTokens           float64
 	claudeIdleTimer               *time.Timer
 	wire                          *providerWire
 	external, turn, text, thought string

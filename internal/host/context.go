@@ -133,6 +133,15 @@ type contextFlight struct {
 	err    error
 }
 
+func (a *App) invalidateSessionContext(key contextCacheKey) {
+	a.contextMu.Lock()
+	defer a.contextMu.Unlock()
+	if a.contexts[key.id].key == key {
+		delete(a.contexts, key.id)
+	}
+	delete(a.contextFlights, key)
+}
+
 func (a *App) loadContextSnapshot(ctx context.Context, rec *Record, cached bool, load func(context.Context) (any, error)) (_ M, err error) {
 	key := contextKey(rec.Info)
 	a.contextMu.Lock()
@@ -163,7 +172,9 @@ func (a *App) loadContextSnapshot(ctx context.Context, rec *Record, cached bool,
 	defer func() {
 		a.contextMu.Lock()
 		flight.err = err
-		delete(a.contextFlights, key)
+		if a.contextFlights[key] == flight {
+			delete(a.contextFlights, key)
+		}
 		close(flight.done)
 		a.contextMu.Unlock()
 	}()
@@ -179,14 +190,14 @@ func (a *App) loadContextSnapshot(ctx context.Context, rec *Record, cached bool,
 	}
 	c := normalizeContext(value)
 	entry = contextCacheValue{key: key, at: time.Now(), detail: snapshotMap(c)}
-	if !a.applyContextSnapshot(entry) {
+	if !a.applyContextSnapshot(entry, flight) {
 		return nil, errors.New("Conversation changed while reading context")
 	}
 	flight.detail = entry.detail
 	return c, nil
 }
 
-func (a *App) applyContextSnapshot(entry contextCacheValue) bool {
+func (a *App) applyContextSnapshot(entry contextCacheValue, flight *contextFlight) bool {
 	s := a.Store
 	key, detail := entry.key, entry.detail
 	// A save or timeline update may hold the store lock. Other sessions can
@@ -197,6 +208,12 @@ func (a *App) applyContextSnapshot(entry contextCacheValue) bool {
 	if s.closed || rec == nil || contextKey(rec.Info) != key {
 		return false
 	}
+	a.contextMu.Lock()
+	defer a.contextMu.Unlock()
+	if a.contextFlights[key] != flight {
+		// A live event superseded this read. Only its original callers can see it.
+		return true
+	}
 	if max := N(detail, "maxTokens"); max > 0 {
 		ctx := M{"used": N(detail, "totalTokens"), "max": max, "percent": math.Round(N(detail, "percentage"))}
 		previous := providerMap(rec.Info["context"])
@@ -206,8 +223,6 @@ func (a *App) applyContextSnapshot(entry contextCacheValue) bool {
 			s.emitLocked(M{"type": "session", "session": rec.Info})
 		}
 	}
-	a.contextMu.Lock()
 	a.contexts[key.id] = entry
-	a.contextMu.Unlock()
 	return true
 }
