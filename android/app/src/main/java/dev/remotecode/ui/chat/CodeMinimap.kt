@@ -2,6 +2,9 @@ package dev.remotecode.ui.chat
 
 import android.graphics.Bitmap
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.material3.MaterialTheme
@@ -24,6 +27,8 @@ import dev.remotecode.ui.theme.Extra
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlin.math.roundToInt
+
+private val MinimapLineHeight = 2.dp
 
 /** A fixed-width map of logical lines. Only the viewport overlay changes during a scroll. */
 @Composable
@@ -58,18 +63,25 @@ internal fun <T> CodeMinimap(
     }
     val count = rows.size
     val accent = colors.primary
-    LazyListScrollTrack(listState, count, description, modifier.width(48.dp).background(colors.surfaceContainer)) { window, movable ->
-        val height = if (movable) size.height else minOf(size.height, count * 3.dp.toPx())
-        if (height < 1f || size.width < 1f) return@LazyListScrollTrack
-        val pad = 2.dp.roundToPx()
-        image?.let {
-            drawImage(it, dstOffset = androidx.compose.ui.unit.IntOffset(pad, 0),
-                dstSize = IntSize((size.width.roundToInt() - 2 * pad).coerceAtLeast(1), height.roundToInt()),
-                filterQuality = FilterQuality.Low)
+    Box(modifier.width(48.dp).background(colors.surfaceContainer)) {
+        LazyListScrollTrack(
+            listState, count, description,
+            Modifier.fillMaxWidth().height(MinimapLineHeight * count),
+        ) { window, _ ->
+            val height = size.height
+            if (height < 1f || size.width < 1f) return@LazyListScrollTrack
+            val pad = 2.dp.roundToPx()
+            image?.let {
+                drawImage(
+                    it, dstOffset = androidx.compose.ui.unit.IntOffset(pad, 0),
+                    dstSize = IntSize((size.width.roundToInt() - 2 * pad).coerceAtLeast(1), height.roundToInt()),
+                    filterQuality = if (height >= it.height) FilterQuality.None else FilterQuality.Low,
+                )
+            }
+            val thumb = window.thumb(height, 20.dp.toPx())
+            val top = window.progress * (height - thumb)
+            drawRect(accent.copy(alpha = 0.14f), Offset(0f, top), Size(size.width, thumb))
+            drawRect(accent.copy(alpha = 0.85f), Offset(size.width - 3.dp.toPx(), top), Size(3.dp.toPx(), thumb))
         }
-        val thumb = window.thumb(height, 20.dp.toPx())
-        val top = window.progress * (height - thumb)
-        drawRect(accent.copy(alpha = 0.14f), Offset(0f, top), Size(size.width, thumb))
-        drawRect(accent.copy(alpha = 0.85f), Offset(size.width - 3.dp.toPx(), top), Size(3.dp.toPx(), thumb))
     }
 }
