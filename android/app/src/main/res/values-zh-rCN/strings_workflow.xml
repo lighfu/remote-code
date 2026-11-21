@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="chat_workflow_title">工作流</string>
+    <string name="chat_workflow_empty">此会话还没有工作流或子代理记录。</string>
+    <string name="chat_workflow_unavailable">无法加载工作流。</string>
+    <string name="chat_workflow_summary">代理 %1$d 个 · 进行中 %2$d 个 · 已结束 %3$d 个</string>
+    <string name="chat_workflow_status_unknown">状态未知</string>
+    <string name="chat_workflow_expand_branch">展开子项</string>
+    <string name="chat_workflow_collapse_branch">收起子项</string>
+    <string name="chat_workflow_show_entry">在会话中查看</string>
+    <string name="chat_workflow_depth">第 %1$d 层</string>
+    <string name="chat_workflow_details">切换详情显示</string>
+    <string name="chat_workflow_earlier">早期活动</string>
+    <string name="chat_workflow_children">%1$d 个子项</string>
+    <string name="chat_workflow_phase">阶段</string>
+    <string name="chat_workflow_open_conversation">打开 %1$s 的对话</string>
+    <string name="chat_workflow_latest_activity">最新动态</string>
+    <string name="chat_workflow_conversation_empty">此子代理没有对话记录。</string>
+    <string name="chat_workflow_conversation_unavailable">无法加载子代理对话。</string>
+    <string name="chat_workflow_retry">重试</string>
+    <string name="chat_workflow_context_tokens">上下文 %1$s</string>
+    <string name="chat_workflow_input_tokens">输入 %1$s</string>
+    <string name="chat_workflow_output_tokens">输出 %1$s</string>
+    <string name="chat_workflow_cache_read">缓存读取 %1$s</string>
+    <string name="chat_workflow_cache_write">缓存写入 %1$s</string>
+    <string name="chat_workflow_usage_requests">请求 %1$s 次</string>
+    <string name="chat_workflow_usage_partial">根据可用记录统计</string>
+    <string name="chat_workflow_usage_empty">没有使用量记录。</string>
+    <string name="chat_workflow_older">加载更早的消息</string>
+</resources>

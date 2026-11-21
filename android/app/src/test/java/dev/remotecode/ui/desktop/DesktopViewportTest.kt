@@ -62,6 +62,18 @@ class DesktopViewportTest {
             wide.centeredOn(DesktopPoint(1.0, 1.0), 360, 800))
     }
 
+    @Test fun finePointerMovementKeepsTheZoomedImageInPlaceUntilItReachesAnEdge() {
+        val before = DesktopViewport(-300f, -250f, 1000f, 800f)
+        val slightMovement = DesktopPoint(0.505, 0.5025)
+        val still = before.followNearEdge(slightMovement, 400, 300)
+        assertEquals(before, still)
+        assertEquals(slightMovement.x, still.point(205f, 152f)!!.x, 0.000001)
+        assertEquals(slightMovement.y, still.point(205f, 152f)!!.y, 0.000001)
+        val nearEdge = before.followNearEdge(DesktopPoint(0.8, 0.7), 400, 300)
+        assertEquals(DesktopViewport(-480f, -320f, 1000f, 800f), nearEdge)
+        assertEquals(DesktopViewport(0f, 0f, 1000f, 800f), nearEdge.followNearEdge(DesktopPoint(0.0, 0.0), 400, 300))
+    }
+
     @Test fun zoomCentersOnTheCursorEvenWithDistantFingersOrAfterManualPan() {
         val before = DesktopViewport(-20f, -40f, 800f, 600f)
         val cursor = DesktopPoint(0.75, 0.625)

@@ -28,9 +28,6 @@
     <string name="desktop_quality_standard">Standard</string>
     <string name="desktop_quality_high">High</string>
     <string name="desktop_refresh_rate">Target frame rate</string>
-    <string name="desktop_rate_low">Low</string>
-    <string name="desktop_rate_normal">Normal</string>
-    <string name="desktop_rate_fast">Fast</string>
     <string name="desktop_direct_gestures">Tap with one finger to left-click. Double-tap to double-click, or drag with one finger. Touch and hold or two-finger tap to right-click. Drag with two fingers to pan, and pinch to zoom centered on the pointer.</string>
     <string name="desktop_input_options">Input controls</string>
     <string name="desktop_video_options">Video</string>
@@ -82,7 +79,7 @@
     <string name="desktop_graph_timing">Processing time</string>
     <string name="desktop_bitrate_target">Target video bitrate</string>
     <string name="desktop_bitrate_unlimited">Unlimited</string>
-    <string name="desktop_bitrate_hint">Auto reduces data usage when video arrives late. The received bitrate graph shows actual measured video data.</string>
+    <string name="desktop_bitrate_hint">Auto reduces data usage when video arrives late.</string>
     <string name="desktop_auto_bitrate">Auto (%1$.1f Mbps)</string>
     <string name="desktop_log_title">Connection log</string>
     <string name="desktop_log_displays">Retrieving PC display configuration</string>

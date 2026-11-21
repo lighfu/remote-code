@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="server_picker_title">Connected PC</string>
+    <string name="server_picker_default_pc">PC</string>
+    <string name="server_picker_current">PC %1$s</string>
+    <string name="server_picker_add">Add a PC</string>
+    <string name="server_picker_add_hint">Start Remote Code on the PC you want to add and display its connection QR code.</string>
+    <string name="server_picker_forget_title">Remove PC</string>
+    <string name="server_picker_forget">Remove %1$s from the list of PCs?</string>
+    <string name="server_picker_failed">Could not update the list of PCs.</string>
+</resources>

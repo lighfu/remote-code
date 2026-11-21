@@ -49,7 +49,7 @@ data class Timeline(
     val error: String? = null,
 )
 
-data class EntryEvent(val sessionId: String, val entry: Entry)
+data class EntryEvent(val sessionId: String, val entry: Entry, val server: ServerConfig)
 
 /** アプリ全体で接続と会話状態を共有する。 */
 class Repository(context: Context, private val scope: CoroutineScope) {
@@ -105,48 +105,61 @@ class Repository(context: Context, private val scope: CoroutineScope) {
             val next = api.check(target)
             var accepted = false
             metadataRefresh.publish(ticket) {
-                if (api.server?.connectionIdentity() == identity) {
-                    _meta.value = next
-                    accepted = true
+                synchronized(this@Repository) {
+                    if (api.server?.connectionIdentity() == identity) {
+                        _meta.value = next
+                        accepted = true
+                    }
                 }
             }
-            if (accepted) next.publicUrl?.let { rememberPublicUrl(it) }
+            if (accepted) next.publicUrl?.let { rememberPublicUrl(target, it) }
         }
     }
 
     private val _usage = MutableStateFlow<UsageInfo?>(null)
     val usage: StateFlow<UsageInfo?> = _usage.asStateFlow()
 
-    suspend fun refreshUsage(force: Boolean = false) {
-        val server = api.server?.connectionIdentity()
+    suspend fun refreshUsage(force: Boolean = false, expectedServer: ServerConfig? = null) {
+        val target = expectedServer ?: api.server ?: return
+        val server = target.connectionIdentity()
         reads.run(ReadKey(server, "usage:$force")) {
-            runCatching { api.usage(force) }.onSuccess { usage ->
-                if (api.server?.connectionIdentity() == server) _usage.update { mergeUsage(it, usage) }
+            runCatching { api.usage(force, expectedServer = target) }.onSuccess { usage ->
+                synchronized(this@Repository) {
+                    if (api.server?.connectionIdentity() == server) _usage.update { mergeUsage(it, usage) }
+                }
             }
         }
     }
 
     /** 選択画面用の永続キャッシュ。 */
     private val modelPrefs = context.getSharedPreferences("models_cache", Context.MODE_PRIVATE)
-    private val _models = MutableStateFlow(
-        Providers.all.mapNotNull { p ->
-            modelPrefs.getString(p, null)?.let { s -> runCatching { p to AppJson.decodeFromString(ListSerializer(ModelOption.serializer()), s) }.getOrNull() }
-        }.toMap(),
-    )
+    private val _models = MutableStateFlow<Map<String, List<ModelOption>>>(emptyMap())
     val models: StateFlow<Map<String, List<ModelOption>>> = _models.asStateFlow()
     private val modelRefresh = ModelRefresh()
+    private val modelSerializer = ListSerializer(ModelOption.serializer())
+
+    private fun loadCachedModels(server: ServerConfig?): Map<String, List<ModelOption>> {
+        val id = server?.pairedServerId() ?: return emptyMap()
+        return Providers.all.mapNotNull { provider ->
+            val saved = modelPrefs.getString("$id:$provider", null) ?: return@mapNotNull null
+            runCatching { provider to AppJson.decodeFromString(modelSerializer, saved) }.getOrNull()
+        }.toMap()
+    }
 
     /** 接続先別に 10 分再利用。force は再取得。 */
     suspend fun refreshModels(provider: String, force: Boolean = false) {
-        val server = api.server?.connectionIdentity()
+        val target = api.server ?: return
+        val server = target.connectionIdentity()
         if (!modelRefresh.needed(server, provider, force)) return
         reads.run(ReadKey(server, "models:$provider:$force")) {
             if (!modelRefresh.needed(server, provider, force)) return@run
-            val list = api.models(provider)
-            if (api.server?.connectionIdentity() != server) return@run
-            modelRefresh.fetched(server, provider)
-            _models.update { it + (provider to list) }
-            modelPrefs.edit().putString(provider, AppJson.encodeToString(ListSerializer(ModelOption.serializer()), list)).apply()
+            val list = api.models(provider, expectedServer = target)
+            synchronized(this@Repository) {
+                if (api.server?.connectionIdentity() != server) return@run
+                modelRefresh.fetched(server, provider)
+                _models.update { it + (provider to list) }
+                modelPrefs.edit().putString("${target.pairedServerId()}:$provider", AppJson.encodeToString(modelSerializer, list)).apply()
+            }
         }
     }
 
@@ -197,30 +210,7 @@ class Repository(context: Context, private val scope: CoroutineScope) {
 
     init {
         scope.launch {
-            settingsStore.settings.collect { s ->
-                val prev = _settings.value?.server
-                _settings.value = s
-                val otherPc = prev?.token != s.server?.token || prev?.url != s.server?.url
-                if (otherPc) {
-                    candidateIndex = 0
-                    applyServer()
-                    closeSocket()
-                    sessionSnapshots.clear()
-                    _meta.value = null
-                    _usage.value = null
-                    btwSnapshots.clear()
-                    modelRefresh.clear()
-                    synchronized(this@Repository) {
-                        timelines.clear()
-                        timelineSync.reconnected()
-                    }
-                    gitSnapshots.clear()
-                    if (holders.isNotEmpty()) connect()
-                } else if (prev != s.server) {
-                    applyServer()
-                    if (_conn.value !is ConnState.Connected && holders.isNotEmpty()) reconnectNow()
-                }
-            }
+            settingsStore.settings.collect(::applySettings)
         }
         scope.launch {
             combine(visibleSession, appForeground, _conn, sessions, apiIdentity) { id, foreground, connection, sessions, server ->
@@ -269,6 +259,35 @@ class Repository(context: Context, private val scope: CoroutineScope) {
         }
     }
 
+    @Synchronized
+    private fun applySettings(settings: AppSettings) {
+        val previous = _settings.value?.server
+        val next = settings.server
+        val serverChanged = previous?.token != next?.token || previous?.url != next?.url
+        if (serverChanged) {
+            closeSocket()
+            candidateIndex = 0
+            attempt = 0
+            if (previous?.token != next?.token) {
+                visibleSession.value = null
+                _models.value = loadCachedModels(next)
+            }
+            sessionSnapshots.clear()
+            _meta.value = null
+            _usage.value = null
+            btwSnapshots.clear()
+            modelRefresh.clear()
+            timelines.clear()
+            timelineSync.reconnected()
+            gitSnapshots.clear()
+        }
+        _settings.value = settings
+        if (previous != next) {
+            applyServer()
+            if (holders.isNotEmpty() && (serverChanged || _conn.value !is ConnState.Connected)) reconnectNow()
+        }
+    }
+
     private fun applyServer() {
         val s = _settings.value?.server
         api.server = s?.let {
@@ -278,9 +297,12 @@ class Repository(context: Context, private val scope: CoroutineScope) {
         apiIdentity.value = api.server?.connectionIdentity()
     }
 
-    private suspend fun rememberPublicUrl(url: String) {
-        val cur = _settings.value?.server ?: return
-        if (url.isNotBlank() && isPublicUrl(url) && url.trimEnd('/') != cur.publicUrl.trimEnd('/')) settingsStore.savePublicUrl(url.trimEnd('/'))
+    private suspend fun rememberPublicUrl(source: ServerConfig, url: String) {
+        val current = _settings.value?.server ?: return
+        val normalized = url.trimEnd('/')
+        if (current.token == source.token && isPublicUrl(normalized) && normalized != current.publicUrl.trimEnd('/')) {
+            settingsStore.savePublicUrl(source.token, normalized)
+        }
     }
 
     fun acquire(reason: String) {
@@ -299,6 +321,7 @@ class Repository(context: Context, private val scope: CoroutineScope) {
         }
     }
 
+    @Synchronized
     fun reconnectNow() {
         attempt = 0
         closeSocket()
@@ -346,12 +369,12 @@ class Repository(context: Context, private val scope: CoroutineScope) {
                 timelineSync.reconnected()
                 btwSnapshots.reconnected()
                 gitSnapshots.reconnected()
+                attempt = 0
+                _route.value = cfg.url
+                _conn.value = ConnState.Connected
             }
-            attempt = 0
-            _route.value = cfg.url
-            _conn.value = ConnState.Connected
             NetLog.socket("connected", true, routeLabel(cfg.url))
-            scope.launch { refreshAfterConnect() }
+            scope.launch { refreshAfterConnect(cfg) }
         }
 
         override fun onMessage(webSocket: WebSocket, text: String) {
@@ -362,7 +385,7 @@ class Repository(context: Context, private val scope: CoroutineScope) {
                 val note = if (type == "entry") (obj["entry"] as? JsonObject)?.str("kind") else null
                 NetLog.event(type, text.length.toLong(), note, body = text)
                 synchronized(this@Repository) {
-                    if (socket === webSocket) handle(obj)
+                    if (socket === webSocket) handle(obj, cfg)
                 }
             }
         }
@@ -372,21 +395,21 @@ class Repository(context: Context, private val scope: CoroutineScope) {
                 if (socket !== webSocket) return
                 socket = null
                 socketCfg = null
+                val msg = when {
+                    response?.code == 401 -> appString(R.string.core_token_invalid)
+                    response?.code == 403 && response.header("cf-ray") != null -> appString(R.string.core_access_denied)
+                    cfg.url.contains("trycloudflare.com") -> appString(R.string.core_public_url_unreachable)
+                    else -> appString(R.string.core_route_connection_error, routeLabel(cfg.url), t.message ?: appString(R.string.core_connection_lost))
+                }
+                _conn.value = ConnState.Failed(msg)
+                _route.value = null
+                NetLog.socket("failed", false, msg)
+                if (response?.code == 401) return
+                val count = _settings.value?.server?.candidates?.size ?: 1
+                candidateIndex++
+                applyServer()
+                scheduleRetry(soon = candidateIndex % count != 0)
             }
-            val msg = when {
-                response?.code == 401 -> appString(R.string.core_token_invalid)
-                response?.code == 403 && response.header("cf-ray") != null -> appString(R.string.core_access_denied)
-                cfg.url.contains("trycloudflare.com") -> appString(R.string.core_public_url_unreachable)
-                else -> appString(R.string.core_route_connection_error, routeLabel(cfg.url), t.message ?: appString(R.string.core_connection_lost))
-            }
-            _conn.value = ConnState.Failed(msg)
-            _route.value = null
-            NetLog.socket("failed", false, msg)
-            if (response?.code == 401) return
-            val count = _settings.value?.server?.candidates?.size ?: 1
-            candidateIndex++
-            applyServer()
-            scheduleRetry(soon = candidateIndex % count != 0)
         }
 
         override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
@@ -394,17 +417,18 @@ class Repository(context: Context, private val scope: CoroutineScope) {
                 if (socket !== webSocket) return
                 socket = null
                 socketCfg = null
+                _conn.value = ConnState.Failed(appString(R.string.core_connection_closed))
+                _route.value = null
+                NetLog.socket("closed", false, appString(R.string.core_connection_closed_code, code))
+                scheduleRetry()
             }
-            _conn.value = ConnState.Failed(appString(R.string.core_connection_closed))
-            _route.value = null
-            NetLog.socket("closed", false, appString(R.string.core_connection_closed_code, code))
-            scheduleRetry()
         }
     }
 
-    private suspend fun refreshAfterConnect() = coroutineScope {
-        launch { runCatching { refreshMeta() } }
-        launch { refreshUsage() }
+    private suspend fun refreshAfterConnect(source: ServerConfig) = coroutineScope {
+        if (api.server?.connectionIdentity() != source.connectionIdentity()) return@coroutineScope
+        launch { runCatching { refreshMeta(source) } }
+        launch { refreshUsage(expectedServer = source) }
         // 表示中の会話を先に復元する。
         visibleSession.value?.let { id ->
             launch { loadTimeline(id, force = true) }
@@ -416,7 +440,7 @@ class Repository(context: Context, private val scope: CoroutineScope) {
         }
     }
 
-    private fun handle(obj: JsonObject) {
+    private fun handle(obj: JsonObject, source: ServerConfig) {
         val timelineRevision = (obj["timelineRevision"] as? JsonPrimitive)?.longOrNull
         when (obj.str("type")) {
             "hello" -> {
@@ -446,7 +470,7 @@ class Repository(context: Context, private val scope: CoroutineScope) {
             }
             "url" -> {
                 val url = obj.str("url") ?: return
-                scope.launch { rememberPublicUrl(url) }
+                scope.launch { rememberPublicUrl(source, url) }
             }
             "session_removed" -> {
                 val id = obj.str("id") ?: return
@@ -481,7 +505,7 @@ class Repository(context: Context, private val scope: CoroutineScope) {
                 receiveTimelineChange(sid, timelineRevision, TimelineChange.Put(e))
                 if (visibleSession.value == sid) detailChanged(sid, entryDetails(e), session(sid)?.cwd)
                 if (e.isPendingAsk || e.kind == "result" || e.kind == "user" && e.clientMessageId != null) {
-                    _events.tryEmit(EntryEvent(sid, e))
+                    _events.tryEmit(EntryEvent(sid, e, source))
                 }
             }
             "delta" -> {

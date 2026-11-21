@@ -49,7 +49,7 @@
     <string name="desktop_bitrate_manual">手動</string>
     <string name="desktop_bitrate_mode">ビットレート調整</string>
     <string name="desktop_bitrate_unlimited">制限なし</string>
-    <string name="desktop_bitrate_hint">自動では映像の到着が遅れると通信量を抑えます。受信グラフは映像データの実測値です。</string>
+    <string name="desktop_bitrate_hint">自動では映像の到着が遅れると通信量を抑えます。</string>
     <string name="desktop_auto_bitrate">自動（%1$.1f Mbps）</string>
     <string name="desktop_log_title">接続ログ</string>
     <string name="desktop_log_displays">PC のディスプレイ構成を取得中</string>
@@ -68,9 +68,6 @@
     <string name="desktop_debug_capture">PC %1$d ms</string>
     <string name="desktop_frame_too_large">この解像度は端末で処理できません。個別の画面または低い解像度を選んでください。</string>
     <string name="desktop_refresh_rate">目標フレームレート</string>
-    <string name="desktop_rate_low">低</string>
-    <string name="desktop_rate_normal">標準</string>
-    <string name="desktop_rate_fast">高速</string>
     <string name="desktop_input_options">入力操作</string>
     <string name="desktop_video_options">映像</string>
     <string name="desktop_pointer_mode">マウスの操作方法</string>

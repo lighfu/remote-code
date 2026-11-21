@@ -40,11 +40,11 @@ var errDesktopDisplayChanged = errors.New("Display layout changed. Refresh the r
 var errDesktopFramePending = errors.New("Waiting for the first desktop frame")
 
 type desktopInput struct {
-	Display, Layout, Type string
-	FrameAt               int64
-	X, Y, EndX, EndY      float64
-	Delta                 int
-	Text, Key             string
+	Display, Layout, Type, DragID string
+	FrameAt                       int64
+	X, Y, EndX, EndY              float64
+	Delta                         int
+	Text, Key                     string
 }
 
 type desktopBackend struct {
@@ -262,9 +262,9 @@ func readDesktopInput(w http.ResponseWriter, r *http.Request) (desktopInput, err
 		default:
 			return input, errors.New("Unknown desktop key")
 		}
-	case "cursorClick", "cursorDoubleClick", "cursorRightClick", "cursorScroll":
+	case "cursorClick", "cursorDoubleClick", "cursorRightClick", "cursorScroll", "cursorDragStart", "cursorDragEnd":
 		// The destination is the live pointer on the selected display.
-	case "moveBy", "cursorDragBy":
+	case "moveBy", "cursorDragBy", "cursorDragMove":
 		x, xOK := body["x"].(float64)
 		y, yOK := body["y"].(float64)
 		if !xOK || !yOK || x < -1 || x > 1 || y < -1 || y > 1 {
@@ -289,6 +289,13 @@ func readDesktopInput(w http.ResponseWriter, r *http.Request) (desktopInput, err
 		}
 	default:
 		return input, errors.New("Unknown desktop input type")
+	}
+	switch input.Type {
+	case "cursorDragStart", "cursorDragMove", "cursorDragEnd":
+		input.DragID = S(body, "dragId")
+		if input.DragID == "" || len(input.DragID) > 64 {
+			return input, errors.New("Invalid desktop drag ID")
+		}
 	}
 	if input.Type == "scroll" || input.Type == "cursorScroll" {
 		delta, ok := body["delta"].(float64)
@@ -321,8 +328,8 @@ func desktopError(w http.ResponseWriter, err error) {
 	apiError(w, &HTTPError{http.StatusServiceUnavailable, err.Error()})
 }
 
-func registerDesktop(mux *http.ServeMux, backend desktopBackend, serverDone ...<-chan struct{}) {
-	var inputMu sync.Mutex
+func registerDesktop(mux *http.ServeMux, backend desktopBackend, serverDone ...<-chan struct{}) func() {
+	inputState := desktopInputState{apply: backend.input}
 	var shutdown <-chan struct{}
 	if len(serverDone) > 0 {
 		shutdown = serverDone[0]
@@ -346,7 +353,7 @@ func registerDesktop(mux *http.ServeMux, backend desktopBackend, serverDone ...<
 			return
 		}
 		writeJSON(w, http.StatusOK, M{"displays": displays, "layout": desktopLayoutID(displays), "captureMethods": backend.captureMethods(displays),
-			"codecs": []string{"jpeg", "png"}, "touchpad": true, "clipboard": true, "audio": true, "nativeResolution": true, "cursorMetadata": true, "conditionalFrames": true, "frameStream": true, "regionFrames": true, "streamBitrate": true, "compressionControls": true})
+			"codecs": []string{"jpeg", "png"}, "touchpad": true, "liveDrag": true, "clipboard": true, "audio": true, "nativeResolution": true, "cursorMetadata": true, "conditionalFrames": true, "frameStream": true, "regionFrames": true, "streamBitrate": true, "compressionControls": true})
 	})
 	mux.HandleFunc("GET /api/desktop/frame", func(w http.ResponseWriter, r *http.Request) {
 		if !supported(w) {
@@ -384,27 +391,10 @@ func registerDesktop(mux *http.ServeMux, backend desktopBackend, serverDone ...<
 			apiError(w, err)
 			return
 		}
-		if !inputMu.TryLock() {
-			apiError(w, &HTTPError{http.StatusTooManyRequests, "Another desktop input is in progress"})
+		revision, err := inputState.send(r.Context(), input)
+		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 			return
 		}
-		defer inputMu.Unlock()
-		if r.Context().Err() != nil {
-			return
-		}
-		desktopCursorState.Lock()
-		// Compare the echoed capture time to the same PC's clock, after acquiring
-		// the input lock. A proxy can deliver an old image immediately to the app.
-		if age := time.Now().UnixMilli() - input.FrameAt; input.FrameAt != 0 && (age < 0 || age >= (5*time.Second).Milliseconds()) {
-			err = &HTTPError{http.StatusConflict, "Desktop frame has expired. Wait for a fresh frame before sending input."}
-		} else {
-			err = backend.input(input)
-			if err == nil {
-				desktopCursorState.revision++
-			}
-		}
-		revision := desktopCursorState.revision
-		desktopCursorState.Unlock()
 		if err != nil {
 			desktopError(w, err)
 			return
@@ -412,4 +402,5 @@ func registerDesktop(mux *http.ServeMux, backend desktopBackend, serverDone ...<
 		w.Header().Set("X-Remote-Code-Desktop-Cursor-Revision", strconv.FormatUint(revision, 10))
 		w.WriteHeader(http.StatusNoContent)
 	})
+	return inputState.close
 }

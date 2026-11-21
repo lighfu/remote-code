@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="server_picker_title">연결된 PC</string>
+    <string name="server_picker_default_pc">PC</string>
+    <string name="server_picker_current">PC %1$s</string>
+    <string name="server_picker_add">PC 추가</string>
+    <string name="server_picker_add_hint">추가할 PC에서 Remote Code를 실행하고 연결용 QR 코드를 표시하세요.</string>
+    <string name="server_picker_forget_title">PC 삭제</string>
+    <string name="server_picker_forget">연결 목록에서 %1$s을(를) 삭제할까요?</string>
+    <string name="server_picker_failed">PC 연결 설정을 업데이트하지 못했습니다.</string>
+</resources>

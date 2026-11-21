@@ -15,6 +15,7 @@ import dev.remotecode.data.DesktopDisplay
 import dev.remotecode.data.DesktopImage
 import dev.remotecode.data.DesktopInput
 import dev.remotecode.data.DesktopPoint
+import java.util.UUID
 import kotlin.math.abs
 import kotlin.math.max
 import kotlin.math.hypot
@@ -47,6 +48,16 @@ internal data class DesktopViewport(val left: Float, val top: Float, val width: 
         return copy(left = origin(viewWidth, width, point.x), top = origin(viewHeight, height, point.y))
     }
 
+    fun followNearEdge(point: DesktopPoint, viewWidth: Int, viewHeight: Int): DesktopViewport {
+        fun follow(origin: Float, content: Float, view: Int, coordinate: Double): Float {
+            if (content <= view) return origin
+            val position = origin + coordinate.toFloat() * content
+            val visible = position.coerceIn(view * 0.2f, view * 0.8f)
+            return (origin + (visible - position)).coerceIn(view - content, 0f)
+        }
+        return copy(left = follow(left, width, viewWidth, point.x), top = follow(top, height, viewHeight, point.y))
+    }
+
     companion object {
         fun fit(viewWidth: Int, viewHeight: Int, bitmapWidth: Int, bitmapHeight: Int): DesktopViewport {
             val scale = min(viewWidth.toFloat() / bitmapWidth, viewHeight.toFloat() / bitmapHeight)
@@ -68,6 +79,10 @@ internal data class DesktopFinger(val id: Int, val x: Float, val y: Float) {
     fun distance(other: DesktopFinger) = hypot(x - other.x, y - other.y)
 }
 
+private const val DesktopDragHoldMs = 180L
+// Refresh the server's short lease so a disconnected client releases the button.
+private const val DesktopDragRefreshMs = 1250L
+
 /** Touches are classified before emitting PC input. A two-finger gesture never holds a Windows mouse button. */
 internal class DesktopTouchGestures(
     private val slop: Float,
@@ -84,10 +99,16 @@ internal class DesktopTouchGestures(
             if (field != value) cancel()
             field = value
         }
+    var liveDrag = false
+        set(value) {
+            if (field != value) cancel()
+            field = value
+        }
     var pointerSpeed = 1f
     private data class Contact(val start: DesktopFinger, val at: Long, var last: DesktopFinger = start,
                                var moved: Boolean = false, var held: Boolean = false)
     private data class Tap(val finger: DesktopFinger, val at: Long)
+    private data class Drag(val id: String?, var refreshAt: Long)
     private enum class PairMotion { Pending, Pan, Pinch, Wheel }
     private var first: Contact? = null
     private var second: Contact? = null
@@ -98,14 +119,19 @@ internal class DesktopTouchGestures(
     private var wheelRemainder = 0f
     private var pending: Tap? = null
     private var doubleTap: Tap? = null
+    private var drag: Drag? = null
     private var twoFingerTap = false
 
-    // The view uses the platform's gesture timeouts and uptime clock for this deadline.
+    // All deadlines use the same uptime clock as motion events.
     fun nextDeadline(): Long? {
         pending?.let { return it.at + doubleTimeout }
         val contact = first ?: return null
-        if (touchpad || second != null || contact.held || contact.moved || doubleTap != null) return null
-        return contact.at + longTimeout
+        if (second != null || contact.held) return null
+        if (touchpad && doubleTap != null) {
+            val active = drag ?: return contact.at + DesktopDragHoldMs
+            return active.id?.let { active.refreshAt }
+        }
+        return if (!touchpad && !contact.moved && doubleTap == null) contact.at + longTimeout else null
     }
 
     fun advance(now: Long) {
@@ -114,7 +140,16 @@ internal class DesktopTouchGestures(
             click("click", "cursorClick", it.finger)
         }
         val contact = first ?: return
-        if (!touchpad && second == null && doubleTap == null && !contact.held && !contact.moved && now >= contact.at + longTimeout) {
+        if (second != null || contact.held) return
+        if (touchpad && doubleTap != null) {
+            val active = drag
+            if (active == null && now >= contact.at + DesktopDragHoldMs) {
+                beginDrag(now)
+            } else if (active?.id != null && now >= active.refreshAt) {
+                active.refreshAt = now + DesktopDragRefreshMs
+                emit(DesktopInput("cursorDragMove", DesktopPoint(0.0, 0.0), dragId = active.id))
+            }
+        } else if (!touchpad && doubleTap == null && !contact.moved && now >= contact.at + longTimeout) {
             contact.held = true
             click("rightClick", "cursorRightClick", contact.start)
         }
@@ -139,11 +174,12 @@ internal class DesktopTouchGestures(
             cancel()
             return
         }
-        // An already completed single tap still counts when the next gesture uses two fingers.
-        previewDrag(null)
-        doubleTap?.let { click("click", "cursorClick", it.finger) }
+        val hadDrag = drag != null
+        finishDrag()
+        // Keep a preceding single tap if the next gesture did not start a drag.
+        if (!hadDrag) doubleTap?.let { click("click", "cursorClick", it.finger) }
         doubleTap = null
-        twoFingerTap = !one.moved && !one.held && firstNow.distance(one.start) <= slop && time - one.at < doubleTimeout
+        twoFingerTap = !hadDrag && !one.moved && !one.held && firstNow.distance(one.start) <= slop && time - one.at < doubleTimeout
         one.last = firstNow
         second = Contact(next, time)
         val pair = FingerPair.of(firstNow.x, firstNow.y, next.x, next.y)
@@ -154,7 +190,7 @@ internal class DesktopTouchGestures(
         wheelRemainder = 0f
     }
 
-    fun move(finger: DesktopFinger, other: DesktopFinger? = null) {
+    fun move(finger: DesktopFinger, other: DesktopFinger? = null, time: Long? = null) {
         val one = first ?: return
         val two = second
         if (two != null) {
@@ -171,13 +207,40 @@ internal class DesktopTouchGestures(
             return
         }
         if (finger.id != one.start.id) return
-        if (!one.moved && finger.distance(one.start) <= slop) return
+        val motionSlop = if (touchpad) slop * 0.5f else slop
+        if (touchpad && doubleTap != null) {
+            val now = time ?: one.at
+            if (drag == null && finger.distance(one.start) <= motionSlop && now < one.at + DesktopDragHoldMs) return
+            val active = drag ?: beginDrag(now)
+            if (active.id == null) {
+                previewDrag(relativeDelta(one.start, finger))
+            } else {
+                relativeDelta(one.last, finger)?.let { emit(DesktopInput("cursorDragMove", it, dragId = active.id)) }
+            }
+            if (one.last != finger) one.moved = true
+            one.last = finger
+            return
+        }
+        if (!one.moved && finger.distance(one.start) <= motionSlop) return
         one.moved = true
         if (touchpad && !one.held) {
-            if (doubleTap != null) previewDrag(relativeDelta(one.start, finger))
-            else relativeDelta(one.last, finger)?.let { emit(DesktopInput("moveBy", it)) }
+            relativeDelta(one.last, finger)?.let { emit(DesktopInput("moveBy", it)) }
         }
         one.last = finger
+    }
+
+    private fun beginDrag(now: Long): Drag {
+        val active = Drag(if (liveDrag) UUID.randomUUID().toString() else null, now + DesktopDragRefreshMs)
+        drag = active
+        active.id?.let { emit(DesktopInput("cursorDragStart", dragId = it)) }
+        return active
+    }
+
+    private fun finishDrag() {
+        val active = drag ?: return
+        drag = null
+        if (active.id == null) previewDrag(null)
+        else emit(DesktopInput("cursorDragEnd", dragId = active.id))
     }
 
     private fun handlePairMove(one: Contact, two: Contact) {
@@ -203,7 +266,13 @@ internal class DesktopTouchGestures(
         when (pairMotion) {
             PairMotion.Wheel -> {
                 val pixelsPerTick = (slop * 3f).coerceAtLeast(1f)
-                wheelRemainder += next.centerY - previous.centerY
+                val dy = next.centerY - previous.centerY
+                if (oldMotion != PairMotion.Wheel) {
+                    // The first notch starts at the gesture threshold. Keep full spacing after it.
+                    val lead = pixelsPerTick - slop
+                    wheelRemainder = if (dy > 0f) lead else -lead
+                }
+                wheelRemainder += dy
                 var ticks = (wheelRemainder / pixelsPerTick).toInt()
                 wheelRemainder -= ticks * pixelsPerTick
                 while (ticks != 0) {
@@ -224,15 +293,20 @@ internal class DesktopTouchGestures(
 
     fun up(finger: DesktopFinger, time: Long) {
         val one = first ?: return
-        move(finger)
+        move(finger, time = time)
+        val activeDrag = drag
         when {
             second != null -> if (twoFingerTap && time - one.at <= doubleTimeout) {
                 click("rightClick", "cursorRightClick", one.start)
             }
             one.held -> Unit
-            one.moved && touchpad && doubleTap != null -> {
-                previewDrag(null)
-                relativeDelta(one.start, finger)?.let { emit(DesktopInput("cursorDragBy", it)) }
+            activeDrag != null -> {
+                finishDrag()
+                if (activeDrag.id == null) {
+                    val delta = relativeDelta(one.start, finger)
+                    if (delta != null) emit(DesktopInput("cursorDragBy", delta))
+                    else if (!one.moved) click("click", "cursorClick", finger)
+                }
             }
             one.moved && !touchpad -> {
                 val box = viewport()
@@ -267,7 +341,7 @@ internal class DesktopTouchGestures(
     }
 
     fun cancel() {
-        previewDrag(null)
+        finishDrag()
         first = null
         second = null
         pending = null
@@ -323,12 +397,24 @@ internal class DesktopSurface(context: Context) : View(context) {
             if (value != gestures.touchpad) {
                 gestures.touchpad = value
                 followingPointer = value
-                if (centerOnPointer()) invalidate()
+                if (followPointer()) invalidate()
             }
         }
     var pointerSpeed: Float
         get() = gestures.pointerSpeed
         set(value) { gestures.pointerSpeed = value.coerceIn(0.25f, 4f) }
+    var liveDrag: Boolean
+        get() = gestures.liveDrag
+        set(value) {
+            if (value == gestures.liveDrag) return
+            gestures.liveDrag = value
+            scheduleTick()
+        }
+
+    fun cancelGestures() {
+        gestures.cancel()
+        scheduleTick()
+    }
 
     private val tick = Runnable {
         scheduled = null
@@ -351,7 +437,7 @@ internal class DesktopSurface(context: Context) : View(context) {
             this.image = image
             reportFrame = true
         }
-        val panned = centerOnPointer()
+        val panned = followPointer()
         if (newImage || panned || previous != pointer.position || embedded != pointer.embedded) postInvalidateOnAnimation()
     }
 
@@ -362,7 +448,7 @@ internal class DesktopSurface(context: Context) : View(context) {
     fun settleCursor(revision: Long?, moreQueued: Boolean) {
         val previous = pointer.position
         pointer.settle(revision, moreQueued)
-        if (centerOnPointer() || previous != pointer.position) postInvalidateOnAnimation()
+        if (followPointer() || previous != pointer.position) postInvalidateOnAnimation()
     }
 
     fun resetCursorPrediction() {
@@ -413,12 +499,12 @@ internal class DesktopSurface(context: Context) : View(context) {
         return DesktopViewport((width - w) / 2 + panX, (height - h) / 2 + panY, w, h)
     }
 
-    // Two fingers can look elsewhere. The next one-finger pointer movement resumes tracking.
-    private fun centerOnPointer(): Boolean {
+    // Keep the zoomed image still during precise movement and pan only near an edge.
+    private fun followPointer(): Boolean {
         if (!touchpad || !followingPointer || zoom <= 1f || width <= 0 || height <= 0) return false
         val point = dragPosition ?: pointer.location ?: return false
         val box = viewport()
-        val next = box.centeredOn(point, width, height)
+        val next = box.followNearEdge(point, width, height)
         if (box.left == next.left && box.top == next.top) return false
         panX = next.left - (width - box.width) / 2f
         panY = next.top - (height - box.height) / 2f
@@ -430,13 +516,13 @@ internal class DesktopSurface(context: Context) : View(context) {
         if (point == dragPosition) return
         dragPosition = point
         if (point != null) followingPointer = true
-        centerOnPointer()
+        followPointer()
         postInvalidateOnAnimation()
     }
 
     override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
         super.onSizeChanged(w, h, oldw, oldh)
-        centerOnPointer()
+        followPointer()
     }
 
     override fun onDraw(canvas: Canvas) {
@@ -495,11 +581,15 @@ internal class DesktopSurface(context: Context) : View(context) {
     }
 
     private fun dispatch(input: DesktopInput) {
-        if (!send(input)) return
+        val precise = pointer.quantize(input) ?: return
+        if (!send(precise)) return
         val previous = pointer.position
-        pointer.queued(input)
-        if (touchpad && (input.type == "moveBy" || input.type == "cursorDragBy")) followingPointer = true
-        if (centerOnPointer() || previous != pointer.position) postInvalidateOnAnimation()
+        pointer.queued(precise)
+        if (touchpad && precise.point?.let { it.x != 0.0 || it.y != 0.0 } == true &&
+            (precise.type == "moveBy" || precise.type == "cursorDragBy" || precise.type == "cursorDragMove")) {
+            followingPointer = true
+        }
+        if (followPointer() || previous != pointer.position) postInvalidateOnAnimation()
     }
 
     override fun performClick(): Boolean {
@@ -520,7 +610,7 @@ internal class DesktopSurface(context: Context) : View(context) {
                 gestures.secondDown(event.finger(1 - event.actionIndex), event.finger(event.actionIndex), time)
             } else gestures.cancel()
             MotionEvent.ACTION_MOVE, MotionEvent.ACTION_POINTER_UP -> if (event.pointerCount <= 2) {
-                gestures.move(event.finger(0), if (event.pointerCount == 2) event.finger(1) else null)
+                gestures.move(event.finger(0), if (event.pointerCount == 2) event.finger(1) else null, time)
             }
             MotionEvent.ACTION_UP -> gestures.up(event.finger(0), time)
             MotionEvent.ACTION_CANCEL -> gestures.cancel()

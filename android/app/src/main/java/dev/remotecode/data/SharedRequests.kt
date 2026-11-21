@@ -1,31 +1,18 @@
 package dev.remotecode.data
 
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.CoroutineStart
-import kotlinx.coroutines.Deferred
-import kotlinx.coroutines.async
-import java.util.concurrent.ConcurrentHashMap
+import java.security.MessageDigest
 
 /** 表示名や代替 URL は通信先の識別に含めない。 */
 internal data class ConnectionIdentity(val url: String, val token: String, val accessId: String, val accessSecret: String)
 
 internal fun ServerConfig.connectionIdentity() = ConnectionIdentity(url.trimEnd('/'), token, accessId, accessSecret)
 
-/** 進行中の同じ読み取りだけ共有し、結果はキャッシュしない。 */
-internal class SharedRequests<K>(private val scope: CoroutineScope) {
-    private val active = ConcurrentHashMap<K, Deferred<Unit>>()
+internal fun ServerConfig.pairedServerId(): String =
+    MessageDigest.getInstance("SHA-256").digest(token.encodeToByteArray()).toHexString()
 
-    suspend fun run(key: K, block: suspend () -> Unit) {
-        val request = synchronized(active) {
-            active[key]?.takeUnless { it.isCompleted } ?: scope.async(start = CoroutineStart.LAZY) { block() }.also { created ->
-                active[key] = created
-                created.invokeOnCompletion { active.remove(key, created) }
-            }
-        }
-        request.start()
-        request.await()
-    }
-}
+internal typealias SharedRequests<K> = SharedValues<K, Unit>
+
+internal suspend fun <K> SharedRequests<K>.run(key: K, block: suspend () -> Unit) = get(key, block)
 
 /** WS の新しい利用状況を古い HTTP 応答で上書きしない。 */
 internal fun mergeUsage(current: UsageInfo?, incoming: UsageInfo): UsageInfo {

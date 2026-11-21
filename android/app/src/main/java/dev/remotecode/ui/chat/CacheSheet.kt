@@ -167,7 +167,7 @@ fun CacheSheet(sessionId: String, onDismiss: () -> Unit) {
                                 style = MaterialTheme.typography.bodyMedium,
                             )
                             Text(
-                                if (d.expiredCount > 0) stringResource(R.string.chat_cache_sheet_013, d.expiredCount) else stringResource(R.string.chat_cache_sheet_012),
+                                stringResource(R.string.chat_cache_sheet_013, d.expiredCount.coerceAtLeast(0)),
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )

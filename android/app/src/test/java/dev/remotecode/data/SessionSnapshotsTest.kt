@@ -1,10 +1,30 @@
 package dev.remotecode.data
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class SessionSnapshotsTest {
+    @Test fun completedTurnCanStillHaveAnActiveShellCommand() {
+        val snapshots = SessionSnapshots()
+        val sessionFields = """ "id":"agy", "provider":"antigravity", "title":"Test", "cwd":"C:/work" """
+        val idle = AppJson.decodeFromString(SessionInfo.serializer(), "{$sessionFields}")
+        val background = AppJson.decodeFromString(SessionInfo.serializer(), """{$sessionFields, "backgroundCommandCount":1}""")
+        assertFalse(idle.isBackgroundCommandOnly)
+        assertTrue(background.isBackgroundCommandOnly)
+        assertFalse(background.isRunning)
+        assertFalse(background.isWaiting)
+        assertFalse(background.copy(status = "running").isBackgroundCommandOnly)
+        assertFalse(background.copy(pending = 1).isBackgroundCommandOnly)
+
+        snapshots.replaceFromSocket(listOf(background))
+        val beforeExit = snapshots.beginRead()
+        snapshots.receive(idle)
+        snapshots.applyRead(beforeExit, background)
+        assertFalse(snapshots.values.value.single().isBackgroundCommandOnly)
+    }
+
     @Test fun timelineResponseCannotRevertWorkingOrCompletedState() {
         val snapshots = SessionSnapshots()
         val idle = session("current")

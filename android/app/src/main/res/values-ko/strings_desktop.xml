@@ -28,9 +28,6 @@
     <string name="desktop_quality_standard">표준</string>
     <string name="desktop_quality_high">고화질</string>
     <string name="desktop_refresh_rate">목표 프레임 레이트</string>
-    <string name="desktop_rate_low">낮음</string>
-    <string name="desktop_rate_normal">보통</string>
-    <string name="desktop_rate_fast">빠름</string>
     <string name="desktop_direct_gestures">한 손가락으로 탭하여 좌클릭합니다. 두 번 탭하면 더블 클릭, 한 손가락을 밀면 드래그됩니다. 길게 누르거나 두 손가락으로 탭하여 우클릭합니다. 두 손가락으로 화면을 이동하고, 핀치하여 포인터 중심으로 확대/축소합니다.</string>
     <string name="desktop_input_options">입력 조작</string>
     <string name="desktop_video_options">영상</string>
@@ -82,7 +79,7 @@
     <string name="desktop_graph_timing">처리 시간</string>
     <string name="desktop_bitrate_target">목표 영상 비트레이트</string>
     <string name="desktop_bitrate_unlimited">제한 없음</string>
-    <string name="desktop_bitrate_hint">자동에서는 영상 도착이 지연되면 데이터 사용량을 줄입니다. 수신 그래프는 영상 데이터의 실제 측정값입니다.</string>
+    <string name="desktop_bitrate_hint">자동에서는 영상 도착이 지연되면 데이터 사용량을 줄입니다.</string>
     <string name="desktop_auto_bitrate">자동(%1$.1f Mbps)</string>
     <string name="desktop_log_title">연결 로그</string>
     <string name="desktop_log_displays">PC 디스플레이 구성 가져오는 중</string>

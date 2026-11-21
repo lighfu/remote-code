@@ -15,8 +15,8 @@
     <string name="core_approval_continue_plan">計画を続ける</string>
     <string name="core_approval_deny">拒否</string>
     <string name="core_approval_deny_stop">拒否して中断</string>
-    <string name="core_attachment_named_too_large">「%1$s」は 50 MB を超えています</string>
-    <string name="core_attachment_too_large">ファイルは 50 MB まで添付できます</string>
+    <string name="core_attachment_named_too_large">「%1$s」は %2$d MiB を超えています</string>
+    <string name="core_attachment_too_large">ファイルは %1$d MiB まで添付できます</string>
     <string name="core_cancel">やめる</string>
     <string name="core_channel_approval">承認・質問</string>
     <string name="core_channel_approval_description">Claude / Codex が許可や回答を待っているとき</string>
@@ -137,6 +137,8 @@
     <string name="core_upload_error">ファイルをアップロードできませんでした</string>
     <string name="core_upload_http_error">ファイルをアップロードできませんでした (%1$d)</string>
     <string name="core_upload_server_update_required">PC 側サーバーを更新すると、ファイルを添付できます</string>
+    <string name="core_large_upload_server_update_required">大きなファイルを添付するには、PC 側サーバーを更新してください</string>
+    <string name="core_upload_size_changed">ファイルのサイズが変わりました。選び直して送信してください</string>
     <string name="core_usage_all_models">全モデル</string>
     <string name="core_usage_by_model">モデル別</string>
     <string name="core_usage_days">%1$s日</string>

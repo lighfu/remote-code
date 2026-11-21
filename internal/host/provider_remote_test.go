@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -13,6 +14,73 @@ import (
 	"testing"
 	"time"
 )
+
+func testClaudeRemoteToken() (string, error) { return "test-secret", nil }
+
+func TestProviderRemoteRefreshesTokenWithoutDuplicatingMessage(t *testing.T) {
+	var credentials atomic.Value
+	credentials.Store("initial")
+	readToken := func() (string, error) { return credentials.Load().(string), nil }
+	var posts atomic.Int32
+	var rejected atomic.Value
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		auth := r.Header.Get("Authorization")
+		if r.Method == http.MethodGet {
+			if auth != "Bearer initial" {
+				t.Errorf("unexpected token on stream startup")
+			}
+			w.Header().Set("Content-Type", "text/event-stream")
+			w.(http.Flusher).Flush()
+			<-r.Context().Done()
+			return
+		}
+		body, err := io.ReadAll(r.Body)
+		if err != nil {
+			t.Error(err)
+		}
+		switch posts.Add(1) {
+		case 1:
+			if auth != "Bearer rotated" {
+				t.Error("send reused the token from the stream")
+			}
+			rejected.Store(string(body))
+			credentials.Store("fresh")
+			w.WriteHeader(http.StatusUnauthorized)
+		case 2:
+			if auth != "Bearer fresh" || string(body) != rejected.Load().(string) {
+				t.Error("authentication retry did not reuse the exact event with the fresh token")
+			}
+			w.WriteHeader(http.StatusNoContent)
+		case 3:
+			w.WriteHeader(http.StatusUnauthorized)
+		case 4:
+			credentials.Store("later")
+			w.WriteHeader(http.StatusBadGateway)
+		default:
+			t.Error("sent an unexpected duplicate")
+			w.WriteHeader(http.StatusInternalServerError)
+		}
+	}))
+	defer server.Close()
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	wire, err := startRemoteProviderWire(ctx, server.Client(), server.URL, "cse-example", readToken, func(M) {})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer wire.close()
+	message := func() M { return M{"type": "user", "message": M{"role": "user", "content": "Example"}} }
+	credentials.Store("rotated")
+	if err := wire.writeContext(ctx, message()); err != nil || posts.Load() != 2 {
+		t.Fatalf("send after rotation: %v (%d posts)", err, posts.Load())
+	}
+	if err := wire.writeContext(ctx, message()); !errors.Is(err, errClaudeRemoteUnauthorized) || posts.Load() != 3 {
+		t.Fatalf("rejection without token rotation: %v (%d posts)", err, posts.Load())
+	}
+	if err := wire.writeContext(ctx, message()); err == nil || posts.Load() != 4 {
+		t.Fatalf("delivery failure must not be retried: %v (%d posts)", err, posts.Load())
+	}
+}
 
 func TestProviderRemoteUsesWorkerResponsesAndPreservesSession(t *testing.T) {
 	frames := make(chan M, 16)
@@ -70,7 +138,7 @@ func TestProviderRemoteUsesWorkerResponsesAndPreservesSession(t *testing.T) {
 	defer server.Close()
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	wire, err := startRemoteProviderWire(ctx, server.Client(), server.URL, "cse-example", "test-secret", func(m M) { mu.Lock(); observed = append(observed, m); mu.Unlock() })
+	wire, err := startRemoteProviderWire(ctx, server.Client(), server.URL, "cse-example", testClaudeRemoteToken, func(m M) { mu.Lock(); observed = append(observed, m); mu.Unlock() })
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -117,6 +185,7 @@ func TestProviderRemoteDoesNotReplayHistory(t *testing.T) {
 	defer unsubscribe()
 	initialize := make(chan string, 1)
 	var connections atomic.Int32
+	var rotated atomic.Bool
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodPost {
 			var body M
@@ -160,12 +229,16 @@ func TestProviderRemoteDoesNotReplayHistory(t *testing.T) {
 				write(7, M{"type": "control_cancel_request", "request_id": "cancelled"})
 				write(8, assistant("live", "Live text"))
 				write(9, success)
+				rotated.Store(true)
 			case <-r.Context().Done():
 			}
 			return
 		}
 		if got := r.Header.Get("Last-Event-ID"); got != "9" {
 			t.Errorf("Reconnect cursor = %q, want 9", got)
+		}
+		if r.Header.Get("Authorization") != "Bearer rotated" {
+			t.Error("reconnected stream reused the old token")
 		}
 		write(2, permission("historical", "Edit"))
 		write(9, success)
@@ -177,7 +250,13 @@ func TestProviderRemoteDoesNotReplayHistory(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	runtime := &nativeSession{remote: true}
-	wire, err := startRemoteProviderWire(ctx, server.Client(), server.URL, "cse-example", "test-secret", func(msg M) {
+	readToken := func() (string, error) {
+		if rotated.Load() {
+			return "rotated", nil
+		}
+		return testClaudeRemoteToken()
+	}
+	wire, err := startRemoteProviderWire(ctx, server.Client(), server.URL, "cse-example", readToken, func(msg M) {
 		p.claudeMessage(sid, runtime, msg)
 	})
 	if err != nil {
@@ -272,7 +351,7 @@ func TestProviderRemoteContextRequestCancelsPost(t *testing.T) {
 
 	ctx, stop := context.WithTimeout(context.Background(), 5*time.Second)
 	defer stop()
-	wire, err := startRemoteProviderWire(ctx, server.Client(), server.URL, "cse-example", "test-secret", func(M) {})
+	wire, err := startRemoteProviderWire(ctx, server.Client(), server.URL, "cse-example", testClaudeRemoteToken, func(M) {})
 	if err != nil {
 		t.Fatal(err)
 	}

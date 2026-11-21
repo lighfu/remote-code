@@ -17,7 +17,7 @@ import (
 	"time"
 )
 
-var Version = "0.19.14"
+var Version = "0.19.25"
 
 type M = map[string]any
 
@@ -64,6 +64,7 @@ type Config struct {
 	USBReverse         bool
 	AccessClientID     string
 	AccessClientSecret string
+	AttachmentStorage  string
 	Raw                M
 }
 
@@ -78,6 +79,15 @@ func LoadConfig(dataDir string) (Config, error) {
 		return Config{}, err
 	}
 	c := Config{Port: 8787, Token: S(m, "token"), AllowLAN: B(m, "allowLan"), PublicURL: S(m, "publicUrl"), QuickTunnel: B(m, "quickTunnel"), USBReverse: true, AccessClientID: S(m, "accessClientId"), AccessClientSecret: S(m, "accessClientSecret"), Raw: m}
+	if value, ok := m["attachmentStorage"]; ok {
+		path, valid := value.(string)
+		if !valid || path != "" && !filepath.IsAbs(path) {
+			return c, errors.New("attachmentStorage must be an absolute path")
+		}
+		if path != "" {
+			c.AttachmentStorage = filepath.Clean(path)
+		}
+	}
 	if _, ok := m["port"]; ok {
 		c.Port = int(N(m, "port"))
 	}
@@ -115,6 +125,11 @@ func SaveConfig(dataDir string, c Config) error {
 	m["usbReverse"] = c.USBReverse
 	m["accessClientId"] = c.AccessClientID
 	m["accessClientSecret"] = c.AccessClientSecret
+	if c.AttachmentStorage != "" {
+		m["attachmentStorage"] = c.AttachmentStorage
+	} else {
+		delete(m, "attachmentStorage")
+	}
 	return atomicJSON(filepath.Join(dataDir, "config.json"), m)
 }
 func atomicJSON(path string, v any) error {

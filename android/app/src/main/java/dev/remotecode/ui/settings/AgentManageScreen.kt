@@ -26,40 +26,29 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.Delete
 import androidx.compose.material.icons.rounded.Description
-import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.LoadingIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.PrimaryTabRow
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.SnackbarHost
-import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
-import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -70,80 +59,31 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import dev.remotecode.RemoteCodeApp
 import dev.remotecode.data.AgentSkill
-import dev.remotecode.data.McpDetail
 import dev.remotecode.data.McpServerInfo
 import dev.remotecode.data.SettingField
 import dev.remotecode.data.SettingFile
-import dev.remotecode.data.SkillText
 import dev.remotecode.ui.common.hapticArea
 import dev.remotecode.ui.common.rememberHaptics
 import dev.remotecode.ui.theme.Mono
-import kotlinx.coroutines.launch
 
 @Composable
 fun AgentManageScreen(provider: String, onBack: () -> Unit) {
-    val scope = rememberCoroutineScope()
-    val snackbar = remember { SnackbarHostState() }
-    val haptics = rememberHaptics()
-    var tab by rememberSaveable { mutableStateOf(0) }
-    var busy by remember { mutableStateOf(false) }
-    var confirm by remember { mutableStateOf<Confirm?>(null) }
-    var reload by remember { mutableStateOf(0) }
     val label = if (provider == "codex") "Codex" else "Antigravity"
-
-    fun act(block: suspend () -> String) {
-        busy = true
-        scope.launch {
-            try {
-                val m = block()
-                haptics.confirm()
-                snackbar.showSnackbar(m)
-            } catch (e: Exception) {
-                haptics.reject()
-                snackbar.showSnackbar(e.message ?: appString(R.string.screen_agent_manage_001))
-            }
-            busy = false
-            reload++
+    ManageScaffold(
+        title = stringResource(R.string.screen_agent_manage_005, label),
+        tabs = listOf(appString(R.string.screen_agent_manage_002), "MCP", appString(R.string.screen_agent_manage_003), appString(R.string.screen_agent_manage_004)),
+        errorLabel = R.string.screen_agent_manage_001,
+        dismissLabel = R.string.screen_agent_manage_008,
+        introLabel = R.string.screen_agent_manage_009,
+        onBack = onBack,
+    ) { tab, reload, act, ask ->
+        when (tab) {
+            0 -> SettingsTab(provider, reload, act)
+            1 -> AgentMcpTab(provider, reload, act, ask)
+            2 -> AgentSkillsTab(provider, reload, act, ask)
+            else -> AgentPluginsTab(provider, reload, act, ask)
         }
     }
-
-    val tabs = listOf(appString(R.string.screen_agent_manage_002), "MCP", appString(R.string.screen_agent_manage_003), appString(R.string.screen_agent_manage_004))
-    Scaffold(
-        topBar = {
-            Column {
-                TopAppBar(
-                    title = { Text(stringResource(R.string.screen_agent_manage_005, label)) },
-                    navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Rounded.ArrowBack, stringResource(R.string.screen_agent_manage_006)) } },
-                    actions = { IconButton(onClick = { reload++ }) { Icon(Icons.Rounded.Refresh, stringResource(R.string.screen_agent_manage_007)) } },
-                )
-                PrimaryTabRow(selectedTabIndex = tab) {
-                    tabs.forEachIndexed { i, t -> Tab(selected = tab == i, onClick = { haptics.tick(); tab = i }, text = { Text(t) }) }
-                }
-                if (busy) LinearProgressIndicator(Modifier.fillMaxWidth())
-            }
-        },
-        snackbarHost = { SnackbarHost(snackbar) },
-    ) { pad ->
-        Box(Modifier.padding(pad).fillMaxSize()) {
-            when (tab) {
-                0 -> SettingsTab(provider, reload, ::act)
-                1 -> AgentMcpTab(provider, reload, ::act) { confirm = it }
-                2 -> AgentSkillsTab(provider, reload, ::act) { confirm = it }
-                else -> AgentPluginsTab(provider, reload, ::act) { confirm = it }
-            }
-        }
-    }
-    confirm?.let { c ->
-        AlertDialog(
-            modifier = hapticArea(),
-            onDismissRequest = { confirm = null },
-            title = { Text(c.title) },
-            text = { Text(c.text) },
-            confirmButton = { Button(onClick = { confirm = null; act(c.run) }) { Text(c.action) } },
-            dismissButton = { TextButton(onClick = { confirm = null }) { Text(stringResource(R.string.screen_agent_manage_008)) } },
-        )
-    }
-    LaunchedEffect(Unit) { snackbar.showSnackbar(appString(R.string.screen_agent_manage_009)) }
 }
 
 
@@ -312,7 +252,7 @@ private fun AgentMcpTab(provider: String, reload: Int, act: (suspend () -> Strin
         )
     }
     detailOf?.let { s ->
-        AgentMcpSheet(provider, s, onDismiss = { detailOf = null }) {
+        McpDetailSheet(s.name, load = { api.agentMcpGet(provider, s.name) }, hint = R.string.screen_agent_manage_034, onDismiss = { detailOf = null }) {
             detailOf = null
             ask(Confirm(appString(R.string.screen_agent_manage_027, s.name), appString(R.string.screen_agent_manage_028), appString(R.string.screen_agent_manage_029)) { api.agentMcpRemove(provider, s.name); appString(R.string.screen_agent_manage_030, s.name) })
         }
@@ -326,33 +266,6 @@ private fun AgentMcpTab(provider: String, reload: Int, act: (suspend () -> Strin
         act { api.agentMcpAdd(provider, body); appString(R.string.screen_agent_manage_033) }
     }
 }
-
-@Composable
-private fun AgentMcpSheet(provider: String, s: McpServerInfo, onDismiss: () -> Unit, onRemove: () -> Unit) {
-    val api = RemoteCodeApp.instance.repository.api
-    var detail by remember { mutableStateOf<McpDetail?>(null) }
-    var error by remember { mutableStateOf<String?>(null) }
-    LaunchedEffect(s.name) { runCatching { api.agentMcpGet(provider, s.name) }.onSuccess { detail = it }.onFailure { error = it.message } }
-    ModalBottomSheet(modifier = hapticArea(), onDismissRequest = onDismiss, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
-        Column(Modifier.padding(horizontal = 24.dp).padding(bottom = 32.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            Text(s.name, style = MaterialTheme.typography.titleLarge)
-            when {
-                detail != null -> SelectionContainer {
-                    Text(detail!!.text, style = MaterialTheme.typography.bodySmall.copy(fontFamily = Mono), modifier = Modifier.heightIn(max = 360.dp).verticalScroll(rememberScrollState()))
-                }
-                error != null -> Text(error!!, color = MaterialTheme.colorScheme.error)
-                else -> LoadingIndicator()
-            }
-            Hint(appString(R.string.screen_agent_manage_034))
-            OutlinedButton(onClick = onRemove, modifier = Modifier.fillMaxWidth()) {
-                Icon(Icons.Rounded.Delete, null, Modifier.size(18.dp))
-                Spacer(Modifier.size(8.dp))
-                Text(stringResource(R.string.screen_agent_manage_029))
-            }
-        }
-    }
-}
-
 
 @Composable
 private fun AgentSkillsTab(provider: String, reload: Int, act: (suspend () -> String) -> Unit, ask: (Confirm) -> Unit) {
@@ -394,7 +307,15 @@ private fun AgentSkillsTab(provider: String, reload: Int, act: (suspend () -> St
         )
     }
     open?.let { s ->
-        AgentSkillSheet(provider, s, onDismiss = { open = null }, onSave = { text -> open = null; act { api.agentSkillWrite(provider, s.path, text); appString(R.string.screen_agent_manage_038) } }) {
+        SkillEditorSheet(
+            s.name, s.source, s.path,
+            load = { api.agentSkillRead(provider, s.path) },
+            onDismiss = { open = null },
+            onSave = { text -> open = null; act { api.agentSkillWrite(provider, s.path, text); appString(R.string.screen_agent_manage_038) } },
+            cancelLabel = R.string.screen_agent_manage_008,
+            editLabel = R.string.screen_agent_manage_022,
+            readOnlyHint = R.string.screen_agent_manage_043,
+        ) {
             open = null
             ask(Confirm(appString(R.string.screen_agent_manage_027, s.name), appString(R.string.screen_agent_manage_039), appString(R.string.screen_agent_manage_029)) { api.agentSkillDelete(provider, s.path); appString(R.string.screen_agent_manage_040) })
         }
@@ -404,45 +325,6 @@ private fun AgentSkillsTab(provider: String, reload: Int, act: (suspend () -> St
         act { api.agentSkillCreate(provider, name, desc, body); appString(R.string.screen_agent_manage_041, name) }
     }
 }
-
-@Composable
-private fun AgentSkillSheet(provider: String, s: AgentSkill, onDismiss: () -> Unit, onSave: (String) -> Unit, onDelete: () -> Unit) {
-    val api = RemoteCodeApp.instance.repository.api
-    var loaded by remember { mutableStateOf<SkillText?>(null) }
-    var text by remember { mutableStateOf("") }
-    var editing by remember { mutableStateOf(false) }
-    var error by remember { mutableStateOf<String?>(null) }
-    LaunchedEffect(s.path) { runCatching { api.agentSkillRead(provider, s.path) }.onSuccess { loaded = it; text = it.text }.onFailure { error = it.message } }
-    ModalBottomSheet(modifier = hapticArea(), onDismissRequest = onDismiss, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
-        Column(Modifier.padding(horizontal = 20.dp).padding(bottom = 24.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            Text(s.name, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
-            Text(s.source, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            val l = loaded
-            when {
-                l == null && error == null -> LoadingIndicator()
-                error != null -> Text(error!!, color = MaterialTheme.colorScheme.error)
-                editing -> OutlinedTextField(text, { text = it }, textStyle = MaterialTheme.typography.bodySmall.copy(fontFamily = Mono), modifier = Modifier.fillMaxWidth().heightIn(min = 240.dp, max = 460.dp))
-                else -> Surface(color = MaterialTheme.colorScheme.surfaceContainerHigh, shape = RoundedCornerShape(12.dp)) {
-                    SelectionContainer { Text(text, style = MaterialTheme.typography.bodySmall.copy(fontFamily = Mono), modifier = Modifier.padding(12.dp).heightIn(max = 460.dp).verticalScroll(rememberScrollState())) }
-                }
-            }
-            if (l?.editable == true) {
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    if (editing) {
-                        Button(onClick = { onSave(text) }, modifier = Modifier.weight(1f)) { Text(stringResource(R.string.screen_agent_manage_017)) }
-                        OutlinedButton(onClick = { editing = false; text = l.text }) { Text(stringResource(R.string.screen_agent_manage_008)) }
-                    } else {
-                        Button(onClick = { editing = true }, modifier = Modifier.weight(1f)) { Text(stringResource(R.string.screen_agent_manage_022)) }
-                        OutlinedButton(onClick = onDelete) { Icon(Icons.Rounded.Delete, null, Modifier.size(18.dp)); Spacer(Modifier.size(6.dp)); Text(stringResource(R.string.screen_agent_manage_042)) }
-                    }
-                }
-            } else if (l != null) {
-                Hint(appString(R.string.screen_agent_manage_043))
-            }
-        }
-    }
-}
-
 
 @Composable
 private fun AgentPluginsTab(provider: String, reload: Int, act: (suspend () -> String) -> Unit, ask: (Confirm) -> Unit) {

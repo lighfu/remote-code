@@ -37,13 +37,10 @@
     <string name="chat_cache_sheet_009">"有效"</string>
     <string name="chat_cache_sheet_010">"过期"</string>
     <string name="chat_cache_sheet_011">"最近请求"</string>
-    <string name="chat_cache_sheet_012">"从未发生过期重写"</string>
-    <string name="chat_cache_sheet_013">"过期重写次数：%1$s 次"</string>
+    <string name="chat_cache_sheet_013">"重建 %1$d 次"</string>
     <string name="chat_cache_sheet_014">预估节省金额 %1$s</string>
     <string name="chat_cache_savings_partial">预估节省金额 %1$s (仅限已定价请求)</string>
-    <string name="chat_cache_sheet_015">"未使用"</string>
-    <string name="chat_cache_sheet_016">"写入（1 小时 %1$s / 5 分钟 %2$s）"</string>
-    <string name="chat_cache_sheet_017">"读取"</string>
+    <string name="chat_cache_sheet_016">"Write（1 小时 %1$s / 5 分钟 %2$s）"</string>
     <string name="chat_cache_sheet_018">"命中率 %1$.1f%%"</string>
     <string name="chat_cache_sheet_019">"本次会话整体（%1$s 次请求）"</string>
     <string name="chat_cache_sheet_020">"缓存"</string>
@@ -58,8 +55,6 @@
     <string name="chat_chat_screen_004">"查找"</string>
     <string name="chat_chat_screen_005">"命令"</string>
     <string name="chat_chat_screen_006">"记录 %1$s"</string>
-    <string name="chat_chat_screen_007">"输入 %1$s（%2$s）· 输出 %3$s"</string>
-    <string name="chat_chat_screen_008">" 缓存 %1$s%%"</string>
     <string name="chat_chat_screen_009">"停止"</string>
     <string name="chat_chat_screen_010">"语音输入"</string>
     <string name="chat_chat_screen_011">"中断任务并立即发送"</string>
@@ -178,7 +173,6 @@
     <string name="chat_code_viewer_022">"%1$s 行%2$s"</string>
     <string name="chat_code_viewer_023">"没有可添加引用的对话"</string>
     <string name="chat_code_viewer_024">"连接目标已更改。请重新打开文件"</string>
-    <string name="chat_code_viewer_025">"无法确认原始连接目标。请重新打开文件"</string>
     <string name="chat_code_viewer_026">"显示末尾在行中被截断。请选择排除该行的范围"</string>
     <string name="chat_completed">"完成"</string>
     <string name="chat_context">"上下文"</string>
@@ -194,7 +188,6 @@
     <string name="chat_context_sheet_010">"您的发言"</string>
     <string name="chat_context_sheet_011">"对话明细"</string>
     <string name="chat_context_sheet_012">"窗口外（仅在需要时加载）"</string>
-    <string name="chat_context_sheet_013">"总量为实际值。各项明细为根据对话记录内容大小估算的分摊参考值"</string>
     <string name="chat_context_sheet_014">" · 达到 %1$s 时自动压缩"</string>
     <string name="chat_context_sheet_015">"%1$s / %2$s Token"</string>
     <string name="chat_context_sheet_016">"压缩总结"</string>
@@ -405,19 +398,12 @@
     <string name="chat_usage_sheet_010">"使用量未知"</string>
     <string name="chat_usage_sheet_011">"于 %1$s 获取"</string>
     <string name="chat_usage_sheet_012">"刚刚获取"</string>
-    <string name="chat_usage_sheet_013">"刚刚"</string>
     <string name="chat_usage_sheet_014">"%1$s 的用量"</string>
     <string name="chat_usage_sheet_015">"用量"</string>
     <string name="chat_usage_sheet_016">"周"</string>
     <string name="chat_waiting">"等待中"</string>
     <string name="chat_widget_card_001">"图"</string>
     <string name="chat_working">"工作中"</string>
-    <string name="chat_input">"输入"</string>
-    <string name="chat_output">"输出"</string>
-    <string name="chat_input_wrap_enable">"自动换行输入"</string>
-    <string name="chat_input_wrap_disable">"取消输入自动换行"</string>
-    <string name="chat_output_wrap_enable">"自动换行输出"</string>
-    <string name="chat_output_wrap_disable">"取消输出自动换行"</string>
     <string name="chat_fast_mode_on">"Fast mode ON"</string>
     <string name="chat_fast_mode_state">"Fast mode: %1$s"</string>
     <string name="chat_on">"开启"</string>
@@ -596,8 +582,8 @@
     <string name="core_approval_continue_plan">"继续执行计划"</string>
     <string name="core_approval_deny">"拒绝"</string>
     <string name="core_approval_deny_stop">"拒绝并中止"</string>
-    <string name="core_attachment_named_too_large">"“%1$s”超过 50 MB"</string>
-    <string name="core_attachment_too_large">"附件大小最多 50 MB"</string>
+    <string name="core_attachment_named_too_large">"“%1$s”超过 %2$d MiB"</string>
+    <string name="core_attachment_too_large">"附件大小最多 %1$d MiB"</string>
     <string name="core_cancel">"取消"</string>
     <string name="core_channel_approval">"审批与提问"</string>
     <string name="core_channel_approval_description">"Claude / Codex 等待允许或回答时"</string>
@@ -718,6 +704,8 @@
     <string name="core_upload_error">"无法上传文件"</string>
     <string name="core_upload_http_error">"无法上传文件 (%1$d)"</string>
     <string name="core_upload_server_update_required">"更新 PC 端服务器后即可附加文件"</string>
+    <string name="core_large_upload_server_update_required">"请更新 PC 端服务器以附加大文件"</string>
+    <string name="core_upload_size_changed">"文件大小已变化，请重新选择后发送"</string>
     <string name="core_usage_all_models">"所有模型"</string>
     <string name="core_usage_by_model">"按模型"</string>
     <string name="core_usage_days">"%1$s 天"</string>
@@ -800,8 +788,6 @@
     <string name="screen_model_picker_016">"加快响应速度。用量和费用可能会增加"</string>
     <string name="screen_model_picker_017">"选择此项"</string>
     <string name="screen_model_picker_018">"默认模型"</string>
-    <string name="screen_remote_image_001">"无法创建保存目录"</string>
-    <string name="screen_remote_image_002">"无法写入保存目录"</string>
     <string name="screen_remote_image_003">"图片"</string>
     <string name="screen_remote_image_004">"重新加载图片"</string>
     <string name="screen_remote_image_005">"关闭"</string>
@@ -820,8 +806,6 @@
     <string name="screen_video_media_009">"重新播放"</string>
     <string name="screen_video_source_missing">在电脑上找不到原始视频文件，请重新附加。</string>
     <string name="screen_video_prepare_local">正在临时保存视频…</string>
-    <string name="screen_video_media_010">"无法创建保存目录"</string>
-    <string name="screen_video_media_011">"无法写入保存目录"</string>
     <string name="screen_native_project_code_editor_001">"代码编辑器"</string>
     <string name="screen_project_editor_001">"请重新加载文件"</string>
     <string name="screen_project_editor_002">"连接目标已更改。请返回原 PC 后再进行引用"</string>
@@ -1054,8 +1038,6 @@
     <string name="screen_agent_manage_003">"技能"</string>
     <string name="screen_agent_manage_004">"插件"</string>
     <string name="screen_agent_manage_005">"管理 %1$s"</string>
-    <string name="screen_agent_manage_006">"返回"</string>
-    <string name="screen_agent_manage_007">"重新加载"</string>
     <string name="screen_agent_manage_008">"放弃"</string>
     <string name="screen_agent_manage_009">"更改将在新开始的会话中生效"</string>
     <string name="screen_agent_manage_010">"主要设置"</string>
@@ -1090,7 +1072,6 @@
     <string name="screen_agent_manage_039">"将连同技能文件夹一并删除。此操作无法撤销。"</string>
     <string name="screen_agent_manage_040">"已删除"</string>
     <string name="screen_agent_manage_041">"已创建“%1$s”"</string>
-    <string name="screen_agent_manage_042">"删除"</string>
     <string name="screen_agent_manage_043">"内置和插件技能仅供查看"</string>
     <string name="screen_agent_manage_044">"安装插件"</string>
     <string name="screen_agent_manage_045">"名称@市场"</string>
@@ -1131,8 +1112,6 @@
     <string name="screen_control_paths_008">"控制路径显示"</string>
     <string name="screen_control_paths_009">"返回"</string>
     <string name="screen_control_paths_010">"刷新路径说明"</string>
-    <string name="screen_control_paths_011">"配置与路径说明"</string>
-    <string name="screen_control_paths_012">"基于 PC 端的实现和设置生成的说明。此界面不用于各阶段的连接或登录确认。"</string>
     <string name="screen_control_paths_013">"获取配置：%1$s"</string>
     <string name="screen_control_paths_014">"连接到 PC 后即可查看控制路径说明。"</string>
     <string name="screen_control_paths_015">"当前处于离线状态，显示上次获取的配置。设置更改将在重新连接刷新后生效。"</string>
@@ -1150,7 +1129,6 @@
     <string name="screen_control_paths_027">"显示的路径"</string>
     <string name="screen_control_paths_028">"各路径数量未测定"</string>
     <string name="screen_control_paths_029">"相关会话 %1$s 项"</string>
-    <string name="screen_control_paths_030">"数量是基于保存标记的相关对话数，而非正在运行或成功连接的会话数。"</string>
     <string name="screen_control_paths_031">"收起详情"</string>
     <string name="screen_control_paths_032">"查看详情"</string>
     <string name="screen_control_paths_033">"路径 %1$s / %2$s、%3$s、%4$s"</string>
@@ -1461,5 +1439,7 @@
     <string name="server_dependencies_title">"服务器依赖项"</string>
     <string name="server_dependencies_unavailable">"自动安装仅支持 Windows。"</string>
     <string name="server_dependencies_unknown">"未知依赖项。"</string>
-    <string name="server_dependencies_working">"另一项安装正在进行中。"</string>
+    <string name="session_background_command_running">Shell 命令运行中</string>
+    <string name="settings_background_commands">显示仍在运行 Shell 命令的对话</string>
+    <string name="settings_background_commands_description">Antigravity 回复结束后，只要 Shell 命令仍在运行，就将该对话显示在进行中的列表中。</string>
 </resources>

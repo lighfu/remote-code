@@ -28,9 +28,6 @@
     <string name="desktop_quality_standard">標準</string>
     <string name="desktop_quality_high">高畫質</string>
     <string name="desktop_refresh_rate">目標影格率</string>
-    <string name="desktop_rate_low">低</string>
-    <string name="desktop_rate_normal">標準</string>
-    <string name="desktop_rate_fast">高速</string>
     <string name="desktop_direct_gestures">單指輕觸即可在點擊處按左鍵；連點兩下為雙擊，單指滑動可拖曳。長按或雙指輕觸可按右鍵。雙指平移可移動顯示範圍，張開或捏合以滑鼠游標為中心縮放。</string>
     <string name="desktop_input_options">輸入操作</string>
     <string name="desktop_video_options">影像</string>
@@ -82,7 +79,7 @@
     <string name="desktop_graph_timing">處理時間</string>
     <string name="desktop_bitrate_target">目標視訊位元率</string>
     <string name="desktop_bitrate_unlimited">無限制</string>
-    <string name="desktop_bitrate_hint">自動模式下，視訊延遲送達時會降低資料傳輸量。接收圖表顯示視訊資料的實測值。</string>
+    <string name="desktop_bitrate_hint">自動模式下，視訊延遲送達時會降低資料傳輸量。</string>
     <string name="desktop_auto_bitrate">自動（%1$.1f Mbps）</string>
     <string name="desktop_log_title">連線記錄</string>
     <string name="desktop_log_displays">正在取得 PC 顯示器設定</string>

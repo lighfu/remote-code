@@ -613,6 +613,9 @@ func (p *nativeProvider) onExit(sid string, r *nativeSession, message string) {
 
 // clearDisconnectedLocked finalizes local state before a new connection can attach.
 func (p *nativeProvider) clearDisconnectedLocked(sid string, detach bool, reason string) {
+	if p.agyLogs != nil {
+		p.agyLogs.stopSession(sid)
+	}
 	for id, request := range p.pending {
 		if request.sid == sid {
 			delete(p.pending, id)

@@ -126,7 +126,7 @@ func TestProviderAgyChildAndBackgroundLogs(t *testing.T) {
 		return (&url.URL{Scheme: "file", Path: slash}).String()
 	}
 	created, _ := json.Marshal(M{"conversationId": child, "logAbsoluteUri": toURI(log)})
-	p.agyObserveTool(sid, "agent", string(created))
+	p.agyObserveTool(sid, M{"id": "agent", "tool": "Agent"}, string(created), "", nil)
 	wait := func(fn func() bool) {
 		t.Helper()
 		until := time.Now().Add(3 * time.Second)
@@ -151,7 +151,7 @@ func TestProviderAgyChildAndBackgroundLogs(t *testing.T) {
 		t.Fatal(err)
 	}
 	task := external + "/task-1"
-	p.agyObserveTool(sid, "bg", "running as a background task with task id: "+task+"\nTask logs are available at: "+toURI(taskLog))
+	p.agyObserveTool(sid, M{"id": "bg", "tool": "command"}, "", "running as a background task with task id: "+task+"\nTask logs are available at: "+toURI(taskLog), nil)
 	wait(func() bool {
 		for _, entry := range store.Get(sid).Entries {
 			if S(entry, "id") == "bg" {
@@ -170,5 +170,109 @@ func TestProviderAgyChildAndBackgroundLogs(t *testing.T) {
 		if S(entry, "id") == "agent" && S(entry, "status") != "done" {
 			t.Fatalf("agent completion lost %#v", entry)
 		}
+	}
+}
+
+func TestAgyBackgroundCommandsFollowLiveShells(t *testing.T) {
+	store := providerTestStore(t)
+	p := NewProvider("antigravity", store, t.TempDir()).(*nativeProvider)
+	t.Cleanup(func() { _ = p.Close() })
+	const external = "11111111-1111-1111-1111-111111111111"
+	rec := store.Create(M{"provider": "antigravity", "externalId": external, "status": "running", "live": true})
+	sid := S(rec.Info, "id")
+	r := &nativeSession{external: external}
+	p.sessions[sid] = r
+	p.byExternal[external] = sid
+	hub := p.agyHub()
+	assertState := func(count int, status string) {
+		t.Helper()
+		info := store.List()[0]
+		if N(info, "backgroundCommandCount") != float64(count) || S(info, "status") != status {
+			t.Fatalf("expected %d background commands, %s turn, got %#v", count, status, info)
+		}
+	}
+	assertTool := func(id, status string) {
+		t.Helper()
+		for _, entry := range store.Get(sid).Entries {
+			if S(entry, "id") == id && S(entry, "status") == status {
+				return
+			}
+		}
+		t.Fatalf("expected tool %s to be %s", id, status)
+	}
+	notify := func(id, kind, rawInput, output string) {
+		p.agyMessage(M{"method": "session/update", "params": M{"sessionId": external, "update": M{
+			"sessionUpdate": "tool_call", "toolCallId": id, "kind": kind, "status": "completed",
+			"rawInput": rawInput, "rawOutput": output,
+		}}})
+	}
+	marker := func(task string) string {
+		return "Command is running as a background task with task id: " + external + "/" + task
+	}
+	report := func(task string, exitCode int) {
+		hub.report(sid, fmt.Sprintf("<SYSTEM_MESSAGE>sender=%s/%s content=exited with code %d</SYSTEM_MESSAGE>", external, task, exitCode))
+	}
+
+	// Replayed ACP and transcript-only entries cannot mark the session active.
+	notify("historical-ACP", "execute", "", marker("historical-ACP"))
+	store.Add(sid, M{"id": "historical-row", "kind": "tool", "tool": "command", "status": "done"})
+	hub.startTask(sid, "historical-row", external+"/first", "", "", nil)
+	assertState(0, "running")
+
+	r.agyPromptActive.Store(true)
+	notify("read", "read", "", marker("read"))
+	notify("ordinary-command", "execute", marker("input-only"), "ordinary output")
+	assertState(0, "running")
+	report("before-start", 1)
+	notify("before-start", "execute", "", marker("before-start"))
+	assertState(0, "running")
+	assertTool("before-start", "error")
+
+	notify("first-live", "execute", "", marker("first"))
+	assertState(1, "running")
+	notify("second-live", "execute", "", marker("second"))
+	notify("second-live", "execute", "", marker("second"))
+	assertState(2, "running")
+	r.agyPromptActive.Store(false)
+	p.settle(sid, true, "Completed")
+	assertState(2, "idle")
+	assertTool("first-live", "running")
+	assertTool("second-live", "running")
+
+	report("first", 0)
+	assertState(1, "idle")
+	assertTool("first-live", "done")
+	assertTool("historical-row", "done")
+	report("second", 1)
+	assertState(0, "idle")
+	assertTool("second-live", "error")
+	store.patchEntry(sid, "second-live", M{"status": "done"}, "running")
+	assertTool("second-live", "error")
+	notify("second-live", "execute", "", marker("second"))
+	assertTool("second-live", "error")
+	assertState(0, "idle")
+
+	r.agyPromptActive.Store(true)
+	notify("disconnected", "execute", "", marker("disconnected"))
+	assertState(1, "idle")
+	p.rpcExit(M{"_exit": "connection closed"})
+	assertState(0, "idle")
+	assertTool("disconnected", "error")
+}
+
+func TestBackgroundCommandCountIsNotPersisted(t *testing.T) {
+	store := providerTestStore(t)
+	rec := store.Create(M{"provider": "antigravity"})
+	sid := S(rec.Info, "id")
+	store.Update(sid, M{"backgroundCommandCount": 1}, false)
+	if err := store.Flush(); err != nil {
+		t.Fatal(err)
+	}
+	data, err := os.ReadFile(filepath.Join(store.directory, sid+".json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(data), "backgroundCommandCount") {
+		t.Fatal("persisted a volatile background command count")
 	}
 }

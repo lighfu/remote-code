@@ -8,6 +8,7 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.lifecycle.lifecycleScope
 import dev.remotecode.data.ServerConfig
+import dev.remotecode.data.pairedServerId
 import dev.remotecode.notify.ConnectionService
 import dev.remotecode.ui.AppNav
 import dev.remotecode.ui.theme.RemoteCodeTheme
@@ -16,8 +17,12 @@ import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
+internal data class NotificationSessionTarget(val sessionId: String, val serverId: String)
+
+internal fun ServerConfig.notificationServerId(): String = pairedServerId()
+
 class MainActivity : ComponentActivity() {
-    val openSession = MutableStateFlow<String?>(null)
+    internal val openSession = MutableStateFlow<NotificationSessionTarget?>(null)
     val pairRequest = MutableStateFlow<ServerConfig?>(null)
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -66,12 +71,15 @@ class MainActivity : ComponentActivity() {
 
     private fun handleIntent(intent: Intent?) {
         intent ?: return
-        intent.getStringExtra(EXTRA_SESSION)?.let { openSession.value = it }
+        val sessionId = intent.getStringExtra(EXTRA_SESSION)
+        val serverId = intent.getStringExtra(EXTRA_NOTIFICATION_SERVER)
+        if (sessionId != null && serverId != null) openSession.value = NotificationSessionTarget(sessionId, serverId)
         parsePairUri(intent.data)?.let { pairRequest.value = it }
     }
 
     companion object {
         const val EXTRA_SESSION = "session"
+        internal const val EXTRA_NOTIFICATION_SERVER = "notificationServer"
 
         fun findPairLink(text: String): String? =
             Regex("""remotecode://pair\?[A-Za-z0-9%&=._~+\-]+""").find(text)?.value

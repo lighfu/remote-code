@@ -171,22 +171,10 @@ fun ControlPathsScreen(onBack: () -> Unit) {
                     host = settings?.server?.name?.ifBlank { null } ?: meta?.host ?: "PC",
                 )
             }
-            item {
-                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Text(
-                        stringResource(R.string.screen_control_paths_011),
-                        style = MaterialTheme.typography.titleMedium,
-                        modifier = Modifier.semantics { heading() },
-                    )
-                    Text(
-                        stringResource(R.string.screen_control_paths_012),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                    snapshot?.at?.takeIf { it > 0 }?.let { at ->
-                        val time = remember(at) { DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT).format(Date(at)) }
-                        Text(stringResource(R.string.screen_control_paths_013, time), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
+            snapshot?.at?.takeIf { it > 0 }?.let { at ->
+                item {
+                    val time = remember(at) { DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT).format(Date(at)) }
+                    Text(stringResource(R.string.screen_control_paths_013, time), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
             if (!connected) item {
@@ -312,7 +300,6 @@ private fun ControlModeSelector(modes: List<ControlMode>, selected: ControlMode?
                         ControlBadge(if (mode.activeSessions < 0) appString(R.string.screen_control_paths_028) else appString(R.string.screen_control_paths_029, mode.activeSessions))
                     }
                     if (mode.description.isNotBlank()) Text(localizedControlPathText(mode.description), style = MaterialTheme.typography.bodyMedium)
-                    if (mode.activeSessions >= 0) Text(stringResource(R.string.screen_control_paths_030), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
         }

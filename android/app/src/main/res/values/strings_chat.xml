@@ -37,13 +37,12 @@
     <string name="chat_cache_sheet_009">有効です</string>
     <string name="chat_cache_sheet_010">切れ</string>
     <string name="chat_cache_sheet_011">最近のリクエスト</string>
-    <string name="chat_cache_sheet_012">切れて書き直したことはありません</string>
-    <string name="chat_cache_sheet_013">切れて書き直した回数: %1$s 回</string>
+    <string name="chat_cache_sheet_013">再作成 %1$d回</string>
     <string name="chat_cache_sheet_014">推定節約額 %1$s</string>
     <string name="chat_cache_savings_partial">推定節約額 %1$s（一部のリクエストのみ）</string>
-    <string name="chat_cache_sheet_015">使わなかった</string>
-    <string name="chat_cache_sheet_016">書いた（1 時間 %1$s / 5 分 %2$s）</string>
-    <string name="chat_cache_sheet_017">読んだ</string>
+    <string name="chat_cache_sheet_015" translatable="false">Uncached</string>
+    <string name="chat_cache_sheet_016">Write（1 時間 %1$s / 5 分 %2$s）</string>
+    <string name="chat_cache_sheet_017" translatable="false">Read</string>
     <string name="chat_cache_sheet_018">ヒット率 %1$.1f%%</string>
     <string name="chat_cache_sheet_019">このセッション全体（%1$s 回のリクエスト）</string>
     <string name="chat_cache_sheet_020">キャッシュ</string>
@@ -58,8 +57,6 @@
     <string name="chat_chat_screen_004">探す</string>
     <string name="chat_chat_screen_005">コマンド</string>
     <string name="chat_chat_screen_006">記録 %1$s</string>
-    <string name="chat_chat_screen_007">入力 %1$s（%2$s）・出力 %3$s</string>
-    <string name="chat_chat_screen_008">" キャッシュ %1$s%%"</string>
     <string name="chat_chat_screen_009">止める</string>
     <string name="chat_chat_screen_010">音声で入力</string>
     <string name="chat_chat_screen_011">作業を止めて今すぐ送る</string>
@@ -178,7 +175,6 @@
     <string name="chat_code_viewer_022">%1$s 行%2$s</string>
     <string name="chat_code_viewer_023">引用を追加する会話がありません</string>
     <string name="chat_code_viewer_024">接続先が変わりました。ファイルを開き直してください</string>
-    <string name="chat_code_viewer_025">元の接続先を確認できません。ファイルを開き直してください</string>
     <string name="chat_code_viewer_026">表示の末尾は行の途中で省略されています。この行を除いた範囲を選択してください</string>
     <string name="chat_completed">完了</string>
     <string name="chat_context">コンテキスト</string>
@@ -194,7 +190,6 @@
     <string name="chat_context_sheet_010">あなたの発言</string>
     <string name="chat_context_sheet_011">会話の内訳</string>
     <string name="chat_context_sheet_012">ウィンドウの外（必要になるまで読み込まない）</string>
-    <string name="chat_context_sheet_013">合計は実際の量です。内訳は、会話記録の中身の大きさから割り振った目安です</string>
     <string name="chat_context_sheet_014">" · %1$s で自動要約"</string>
     <string name="chat_context_sheet_015">%1$s / %2$s トークン</string>
     <string name="chat_context_sheet_016">要約する</string>
@@ -408,19 +403,12 @@
     <string name="chat_usage_sheet_010">使用量はわかりません</string>
     <string name="chat_usage_sheet_011">%1$sに取得</string>
     <string name="chat_usage_sheet_012">たった今取得</string>
-    <string name="chat_usage_sheet_013">たった今</string>
     <string name="chat_usage_sheet_014">%1$s の使用量</string>
     <string name="chat_usage_sheet_015">使用量</string>
     <string name="chat_usage_sheet_016">週</string>
     <string name="chat_waiting">待機中</string>
     <string name="chat_widget_card_001">図</string>
     <string name="chat_working">作業中</string>
-    <string name="chat_input">入力</string>
-    <string name="chat_output">出力</string>
-    <string name="chat_input_wrap_enable">入力を折り返す</string>
-    <string name="chat_input_wrap_disable">入力の折り返しを解除</string>
-    <string name="chat_output_wrap_enable">出力を折り返す</string>
-    <string name="chat_output_wrap_disable">出力の折り返しを解除</string>
     <string name="chat_fast_mode_on">Fast mode ON</string>
     <string name="chat_fast_mode_state">Fast mode: %1$s</string>
     <string name="chat_on">ON</string>

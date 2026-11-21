@@ -17,7 +17,9 @@ import okio.BufferedSink
 import java.io.IOException
 import java.io.InputStream
 
-internal const val MAX_ATTACHMENT_BYTES = 50L * 1024 * 1024
+internal const val ATTACHMENT_MIB = 1024L * 1024
+internal const val LEGACY_ATTACHMENT_BYTES = 50 * ATTACHMENT_MIB
+internal const val MAX_ATTACHMENT_BYTES = 512 * ATTACHMENT_MIB
 internal const val MAX_FILE_ATTACHMENTS = 10
 
 @Serializable
@@ -43,7 +45,9 @@ internal suspend fun readSelectedFile(context: Context, uri: Uri): SelectedFile 
         }
     }
     val displayName = name?.takeIf { it.isNotBlank() } ?: uri.lastPathSegment?.substringAfterLast('/')?.takeIf { it.isNotBlank() } ?: appString(R.string.core_file)
-    if ((size ?: 0L) > MAX_ATTACHMENT_BYTES) throw IOException(appString(R.string.core_attachment_named_too_large, displayName))
+    if ((size ?: 0L) > MAX_ATTACHMENT_BYTES) {
+        throw IOException(appString(R.string.core_attachment_named_too_large, displayName, MAX_ATTACHMENT_BYTES / ATTACHMENT_MIB))
+    }
     SelectedFile(uri, displayName, size, context.contentResolver.getType(uri)?.takeIf { it.isNotBlank() } ?: "application/octet-stream")
 }
 
@@ -53,10 +57,11 @@ internal class FileUploadBody(
     private val onProgress: (Long) -> Unit,
     private val checkActive: () -> Unit = {},
     private val maximum: Long = MAX_ATTACHMENT_BYTES,
+    private val length: Long = -1,
     private val strings: AppStringResolver = applicationStrings,
 ) : RequestBody() {
     override fun contentType() = "application/octet-stream".toMediaType()
-    override fun contentLength(): Long = -1
+    override fun contentLength(): Long = length
     override fun isOneShot() = true
 
     override fun writeTo(sink: BufferedSink) {
@@ -69,7 +74,7 @@ internal class FileUploadBody(
                 val count = input.read(buffer)
                 if (count < 0) break
                 if (count == 0) continue
-                if (total + count > maximum) throw IOException(strings.text(R.string.core_attachment_too_large))
+                if (total + count > maximum) throw IOException(strings.text(R.string.core_attachment_too_large, maximum / ATTACHMENT_MIB))
                 sink.write(buffer, 0, count)
                 total += count
                 val now = System.nanoTime()

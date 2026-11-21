@@ -52,4 +52,31 @@ class DesktopInputQueueTest {
         assertEquals(6, accepted)
         queue.close()
     }
+
+    @Test fun dragMovesBatchWithinOneGestureAndPreserveReversals() = runBlocking {
+        val queue = DesktopInputQueue()
+        fun offer(type: String, id: String, x: Double? = null) = queue.offer(DesktopCommand(
+            DesktopInput(type, point = x?.let { DesktopPoint(it, 0.0) }, dragId = id), "A", 100,
+        ) {})
+        offer("cursorDragStart", "first")
+        offer("cursorDragMove", "first", 0.25)
+        offer("cursorDragMove", "first", 0.125)
+        offer("cursorDragMove", "first", -0.25)
+        offer("cursorDragEnd", "first")
+        offer("cursorDragStart", "second")
+        assertEquals("cursorDragStart", queue.next()!!.input.type)
+        assertEquals(0.375, queue.next()!!.input.point!!.x, 0.0)
+        assertEquals(-0.25, queue.next()!!.input.point!!.x, 0.0)
+        assertEquals("cursorDragEnd", queue.next()!!.input.type)
+        assertEquals("second", queue.next()!!.input.dragId)
+        queue.close()
+    }
+
+    @Test fun fullQueueHasRoomToReleaseAHeldButton() {
+        val queue = DesktopInputQueue()
+        repeat(16) { assertTrue(queue.offer(DesktopCommand(DesktopInput("cursorClick"), "A", 100) {})) }
+        assertFalse(queue.offer(DesktopCommand(DesktopInput("cursorClick"), "A", 100) {}))
+        assertTrue(queue.offer(DesktopCommand(DesktopInput("cursorDragEnd", dragId = "held"), "A", 100) {}))
+        queue.close()
+    }
 }

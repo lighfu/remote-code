@@ -190,6 +190,18 @@ func (a *App) handler(serverDone <-chan struct{}) http.Handler {
 		a.startTask(func() { a.refreshAnalytics(&Record{Info: clone(rec.Info)}) })
 		return M{"session": rec.Info, "entries": entries, "total": len(rec.Entries), "timelineRevision": revision}, nil
 	})
+	route(mux, "GET /api/sessions/{id}/workflow", func(r *http.Request, _ M) (any, error) {
+		return a.claudeWorkflow(r.PathValue("id"))
+	})
+	route(mux, "GET /api/sessions/{id}/workflow/agent", func(r *http.Request, _ M) (any, error) {
+		return a.claudeWorkflowAgentTranscript(r.PathValue("id"), r.URL.Query().Get("entryId"))
+	})
+	route(mux, "GET /api/sessions/{id}/workflow/agent/timeline", func(r *http.Request, _ M) (any, error) {
+		return a.claudeWorkflowAgentTimeline(r.PathValue("id"), r.URL.Query().Get("entryId"), r.URL.Query().Get("before"))
+	})
+	route(mux, "GET /api/sessions/{id}/workflow/agent/usage", func(r *http.Request, _ M) (any, error) {
+		return a.claudeWorkflowAgentUsage(r.PathValue("id"), r.URL.Query().Get("entryId"))
+	})
 	route(mux, "PATCH /api/sessions/{id}", func(r *http.Request, b M) (any, error) {
 		rec, err := a.session(r.PathValue("id"))
 		if err != nil {
@@ -391,7 +403,7 @@ func (a *App) handler(serverDone <-chan struct{}) http.Handler {
 	})
 	mux.HandleFunc("GET /api/events", a.events)
 	registerDesktopClipboard(mux, desktopSupported(), desktopClipboardRead, desktopClipboardWrite)
-	registerDesktop(mux, desktopBackend{desktopSupported(), listDesktopDisplays, desktopCaptureMethods, captureDesktopFrame, applyDesktopInput}, serverDone)
+	a.OnClose(registerDesktop(mux, desktopBackend{desktopSupported(), listDesktopDisplays, desktopCaptureMethods, captureDesktopFrame, applyDesktopInput}, serverDone))
 	a.registerBtw(mux)
 	a.registerFolders(mux)
 	a.registerManage(mux)
@@ -432,7 +444,7 @@ func maps(v any) []M {
 	return rows
 }
 func (a *App) messageText(body M) (string, error) {
-	files, err := ResolveUploads(a.DataDir, body["files"])
+	files, err := ResolveUploads(a.attachmentStorage(), body["files"], a.DataDir)
 	if err != nil {
 		return "", err
 	}

@@ -88,10 +88,10 @@ func TestDesktopPairedRoutes(t *testing.T) {
 		Displays                                                                              []desktopDisplay
 		CaptureMethods, Codecs                                                                []string
 		Touchpad, Clipboard, NativeResolution, CursorMetadata, ConditionalFrames, FrameStream bool
-		CompressionControls                                                                   bool
+		CompressionControls, LiveDrag                                                         bool
 	}
 	if err := json.Unmarshal(list.Body.Bytes(), &result); err != nil || result.Layout != layout || len(result.Displays) != 2 || result.Displays[1].X != -1200 ||
-		!slices.Equal(result.Codecs, []string{"jpeg", "png"}) || !slices.Contains(result.CaptureMethods, "dxgi") || !result.Touchpad || !result.Clipboard || !result.NativeResolution || !result.CursorMetadata || !result.ConditionalFrames || !result.FrameStream || !result.CompressionControls {
+		!slices.Equal(result.Codecs, []string{"jpeg", "png"}) || !slices.Contains(result.CaptureMethods, "dxgi") || !result.Touchpad || !result.Clipboard || !result.NativeResolution || !result.CursorMetadata || !result.ConditionalFrames || !result.FrameStream || !result.CompressionControls || !result.LiveDrag {
 		t.Fatalf("display list: %s", list.Body)
 	}
 	request("HEAD", "/api/desktop/frame", "", true)

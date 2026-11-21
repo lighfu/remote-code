@@ -37,13 +37,10 @@
     <string name="chat_cache_sheet_009">"Valid"</string>
     <string name="chat_cache_sheet_010">"Expired"</string>
     <string name="chat_cache_sheet_011">"Recent requests"</string>
-    <string name="chat_cache_sheet_012">"Never rewritten due to cache expiration"</string>
-    <string name="chat_cache_sheet_013">"Rewritten due to cache expiration: %1$s times"</string>
+    <string name="chat_cache_sheet_013">"Rebuilds: %1$d"</string>
     <string name="chat_cache_sheet_014">Estimated savings %1$s</string>
     <string name="chat_cache_savings_partial">Estimated savings %1$s (priced requests only)</string>
-    <string name="chat_cache_sheet_015">"Unused"</string>
-    <string name="chat_cache_sheet_016">"Written (1h %1$s / 5m %2$s)"</string>
-    <string name="chat_cache_sheet_017">"Read"</string>
+    <string name="chat_cache_sheet_016">"Write (1h %1$s / 5m %2$s)"</string>
     <string name="chat_cache_sheet_018">"Hit rate %1$.1f%%"</string>
     <string name="chat_cache_sheet_019">"Entire session (%1$s requests)"</string>
     <string name="chat_cache_sheet_020">"Cache"</string>
@@ -58,8 +55,6 @@
     <string name="chat_chat_screen_004">"Search"</string>
     <string name="chat_chat_screen_005">"Commands"</string>
     <string name="chat_chat_screen_006">"Logs %1$s"</string>
-    <string name="chat_chat_screen_007">"In %1$s (%2$s) · Out %3$s"</string>
-    <string name="chat_chat_screen_008">" Cache %1$s%%"</string>
     <string name="chat_chat_screen_009">"Stop"</string>
     <string name="chat_chat_screen_010">"Voice input"</string>
     <string name="chat_chat_screen_011">"Interrupt and send now"</string>
@@ -178,7 +173,6 @@
     <string name="chat_code_viewer_022">"%1$s lines%2$s"</string>
     <string name="chat_code_viewer_023">"No conversation to add quote to"</string>
     <string name="chat_code_viewer_024">"Connection changed. Please reopen the file"</string>
-    <string name="chat_code_viewer_025">"Could not verify original connection. Please reopen the file"</string>
     <string name="chat_code_viewer_026">"End of display is truncated mid-line. Please select a range excluding this line"</string>
     <string name="chat_completed">"Completed"</string>
     <string name="chat_context">"Context"</string>
@@ -194,7 +188,6 @@
     <string name="chat_context_sheet_010">"Your messages"</string>
     <string name="chat_context_sheet_011">"Conversation breakdown"</string>
     <string name="chat_context_sheet_012">"Outside window (loaded on demand)"</string>
-    <string name="chat_context_sheet_013">"Total is exact. Breakdown is estimated based on conversation log size"</string>
     <string name="chat_context_sheet_014">" · Auto-compact at %1$s"</string>
     <string name="chat_context_sheet_015">"%1$s / %2$s tokens"</string>
     <string name="chat_context_sheet_016">"Compact"</string>
@@ -405,19 +398,12 @@
     <string name="chat_usage_sheet_010">"Usage unknown"</string>
     <string name="chat_usage_sheet_011">"Fetched %1$s"</string>
     <string name="chat_usage_sheet_012">"Fetched just now"</string>
-    <string name="chat_usage_sheet_013">"Just now"</string>
     <string name="chat_usage_sheet_014">"%1$s Usage"</string>
     <string name="chat_usage_sheet_015">"Usage"</string>
     <string name="chat_usage_sheet_016">"Week"</string>
     <string name="chat_waiting">"Waiting"</string>
     <string name="chat_widget_card_001">"Diagram"</string>
     <string name="chat_working">"Working"</string>
-    <string name="chat_input">"Input"</string>
-    <string name="chat_output">"Output"</string>
-    <string name="chat_input_wrap_enable">"Enable input wrap"</string>
-    <string name="chat_input_wrap_disable">"Disable input wrap"</string>
-    <string name="chat_output_wrap_enable">"Enable output wrap"</string>
-    <string name="chat_output_wrap_disable">"Disable output wrap"</string>
     <string name="chat_fast_mode_on">"Fast mode ON"</string>
     <string name="chat_fast_mode_state">"Fast mode: %1$s"</string>
     <string name="chat_on">"ON"</string>
@@ -596,8 +582,8 @@
     <string name="core_approval_continue_plan">"Continue plan"</string>
     <string name="core_approval_deny">"Deny"</string>
     <string name="core_approval_deny_stop">"Deny and abort"</string>
-    <string name="core_attachment_named_too_large">"\"%1$s\" exceeds 50 MB"</string>
-    <string name="core_attachment_too_large">"Files up to 50 MB can be attached"</string>
+    <string name="core_attachment_named_too_large">"\"%1$s\" exceeds %2$d MiB"</string>
+    <string name="core_attachment_too_large">"Files up to %1$d MiB can be attached"</string>
     <string name="core_cancel">"Cancel"</string>
     <string name="core_channel_approval">"Approvals &amp; Questions"</string>
     <string name="core_channel_approval_description">"When Claude / Codex is waiting for permission or an answer"</string>
@@ -718,6 +704,8 @@
     <string name="core_upload_error">"Could not upload file"</string>
     <string name="core_upload_http_error">"Could not upload file (%1$d)"</string>
     <string name="core_upload_server_update_required">"Update the PC server to attach files"</string>
+    <string name="core_large_upload_server_update_required">"Update the PC server to attach large files"</string>
+    <string name="core_upload_size_changed">"The file size changed. Select the file again before sending"</string>
     <string name="core_usage_all_models">"All models"</string>
     <string name="core_usage_by_model">"By model"</string>
     <string name="core_usage_days">"%1$sd"</string>
@@ -800,8 +788,6 @@
     <string name="screen_model_picker_016">"Faster responses. May increase token usage and costs"</string>
     <string name="screen_model_picker_017">"Select"</string>
     <string name="screen_model_picker_018">"Default model"</string>
-    <string name="screen_remote_image_001">"Could not create destination folder"</string>
-    <string name="screen_remote_image_002">"Could not write to destination"</string>
     <string name="screen_remote_image_003">"Image"</string>
     <string name="screen_remote_image_004">"Reload image"</string>
     <string name="screen_remote_image_005">"Close"</string>
@@ -820,8 +806,6 @@
     <string name="screen_video_media_009">"Play again"</string>
     <string name="screen_video_source_missing">The original video file could not be found on the PC. Please attach it again.</string>
     <string name="screen_video_prepare_local">Downloading video for playback…</string>
-    <string name="screen_video_media_010">"Could not create destination folder"</string>
-    <string name="screen_video_media_011">"Could not write to destination"</string>
     <string name="screen_native_project_code_editor_001">"Code editor"</string>
     <string name="screen_project_editor_001">"Please reload file"</string>
     <string name="screen_project_editor_002">"Server changed. Switch back to original PC before quoting"</string>
@@ -1054,8 +1038,6 @@
     <string name="screen_agent_manage_003">"Skills"</string>
     <string name="screen_agent_manage_004">"Plugins"</string>
     <string name="screen_agent_manage_005">"Manage %1$s"</string>
-    <string name="screen_agent_manage_006">"Back"</string>
-    <string name="screen_agent_manage_007">"Reload"</string>
     <string name="screen_agent_manage_008">"Cancel"</string>
     <string name="screen_agent_manage_009">"Changes will apply to newly started sessions"</string>
     <string name="screen_agent_manage_010">"Main settings"</string>
@@ -1090,7 +1072,6 @@
     <string name="screen_agent_manage_039">"Deletes the entire skill folder. This cannot be undone."</string>
     <string name="screen_agent_manage_040">"Deleted"</string>
     <string name="screen_agent_manage_041">"Created \"%1$s\""</string>
-    <string name="screen_agent_manage_042">"Delete"</string>
     <string name="screen_agent_manage_043">"Built-in and plugin skills are read-only"</string>
     <string name="screen_agent_manage_044">"Install plugin"</string>
     <string name="screen_agent_manage_045">"name@marketplace"</string>
@@ -1131,8 +1112,6 @@
     <string name="screen_control_paths_008">"View control paths"</string>
     <string name="screen_control_paths_009">"Back"</string>
     <string name="screen_control_paths_010">"Refresh path descriptions"</string>
-    <string name="screen_control_paths_011">"Configuration &amp; path descriptions"</string>
-    <string name="screen_control_paths_012">"Descriptions are based on the PC\'s implementation and configuration. This screen does not perform connection or login checks for each stage."</string>
     <string name="screen_control_paths_013">"Configuration retrieval: %1$s"</string>
     <string name="screen_control_paths_014">"Connect to the PC to view control path descriptions."</string>
     <string name="screen_control_paths_015">"Showing previously retrieved configuration because you are offline. Setting changes will take effect after reconnecting and refreshing."</string>
@@ -1150,7 +1129,6 @@
     <string name="screen_control_paths_027">"Paths to display"</string>
     <string name="screen_control_paths_028">"Path count undetermined"</string>
     <string name="screen_control_paths_029">"%1$s matching sessions"</string>
-    <string name="screen_control_paths_030">"Count reflects matching conversations based on saved flags, not currently running or successfully connected counts."</string>
     <string name="screen_control_paths_031">"Hide details"</string>
     <string name="screen_control_paths_032">"Show details"</string>
     <string name="screen_control_paths_033">"Path %1$s / %2$s, %3$s, %4$s"</string>
@@ -1458,8 +1436,10 @@
     <string name="server_dependencies_load_error">"Could not load dependency status."</string>
     <string name="server_dependencies_changed">"The connected server changed. Refresh and try again."</string>
     <string name="server_dependencies_unknown">"Unknown dependency."</string>
-    <string name="server_dependencies_working">"Another installation is in progress."</string>
     <string name="server_dependencies_status_unknown">"Status unavailable"</string>
     <string name="server_dependencies_login">"After installation, sign in to the provider on the PC. The PowerShell command is shown in the details when available."</string>
     <string name="chat_skill_loaded">"Loaded skill"</string>
+    <string name="session_background_command_running">Shell running</string>
+    <string name="settings_background_commands">Show chats with running shell commands</string>
+    <string name="settings_background_commands_description">Keep Antigravity chats in the active list while a shell command is still running after a response finishes.</string>
 </resources>

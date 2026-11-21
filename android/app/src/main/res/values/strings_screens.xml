@@ -41,8 +41,6 @@
     <string name="screen_model_picker_016">"応答を速くします。使用量・料金が増える場合があります"</string>
     <string name="screen_model_picker_017">"これにする"</string>
     <string name="screen_model_picker_018">"既定のモデル"</string>
-    <string name="screen_remote_image_001">"保存先を作れませんでした"</string>
-    <string name="screen_remote_image_002">"保存先に書けませんでした"</string>
     <string name="screen_remote_image_003">"画像"</string>
     <string name="screen_remote_image_004">"画像を再読み込み"</string>
     <string name="screen_remote_image_005">"閉じる"</string>
@@ -61,8 +59,6 @@
     <string name="screen_video_media_009">"もう一度再生する"</string>
     <string name="screen_video_source_missing">PC 上に元の動画ファイルが見つかりません。もう一度添付してください。</string>
     <string name="screen_video_prepare_local">動画を一時保存中…</string>
-    <string name="screen_video_media_010">"保存先を作れませんでした"</string>
-    <string name="screen_video_media_011">"保存先に書けませんでした"</string>
     <string name="screen_native_project_code_editor_001">"コードエディター"</string>
     <string name="screen_project_editor_001">"ファイルを読み直してください"</string>
     <string name="screen_project_editor_002">"接続先が変わりました。元の PC に戻ってから引用してください"</string>
@@ -295,8 +291,6 @@
     <string name="screen_agent_manage_003">"スキル"</string>
     <string name="screen_agent_manage_004">"プラグイン"</string>
     <string name="screen_agent_manage_005">"%1$s の管理"</string>
-    <string name="screen_agent_manage_006">"戻る"</string>
-    <string name="screen_agent_manage_007">"読み直す"</string>
     <string name="screen_agent_manage_008">"やめる"</string>
     <string name="screen_agent_manage_009">"変更は、新しく始めるセッションから反映されます"</string>
     <string name="screen_agent_manage_010">"おもな設定"</string>
@@ -331,7 +325,6 @@
     <string name="screen_agent_manage_039">"スキルのフォルダごと消します。元に戻せません。"</string>
     <string name="screen_agent_manage_040">"削除しました"</string>
     <string name="screen_agent_manage_041">"「%1$s」を作りました"</string>
-    <string name="screen_agent_manage_042">"削除"</string>
     <string name="screen_agent_manage_043">"組み込みやプラグインのスキルは見るだけです"</string>
     <string name="screen_agent_manage_044">"プラグインを入れる"</string>
     <string name="screen_agent_manage_045">"名前@マーケットプレイス"</string>
@@ -374,8 +367,6 @@
     <string name="screen_control_paths_008">"制御経路の表示"</string>
     <string name="screen_control_paths_009">"戻る"</string>
     <string name="screen_control_paths_010">"経路の説明を更新"</string>
-    <string name="screen_control_paths_011">"構成・経路の説明"</string>
-    <string name="screen_control_paths_012">"PC の実装と設定に基づく説明です。各段階の接続確認やログイン確認を行う画面ではありません。"</string>
     <string name="screen_control_paths_013">"構成の取得: %1$s"</string>
     <string name="screen_control_paths_014">"PC に接続すると、制御経路の説明を確認できます。"</string>
     <string name="screen_control_paths_015">"オフラインのため、前回取得した構成を表示しています。設定変更は再接続後の更新で反映されます。"</string>
@@ -393,7 +384,6 @@
     <string name="screen_control_paths_027">"表示する経路"</string>
     <string name="screen_control_paths_028">"経路別の件数は未判定"</string>
     <string name="screen_control_paths_029">"該当セッション %1$s 件"</string>
-    <string name="screen_control_paths_030">"件数は保存フラグに基づく該当会話の数で、実行中・接続成功の件数ではありません。"</string>
     <string name="screen_control_paths_031">"詳細を閉じる"</string>
     <string name="screen_control_paths_032">"詳細を表示"</string>
     <string name="screen_control_paths_033">"経路 %1$s / %2$s、%3$s、%4$s"</string>

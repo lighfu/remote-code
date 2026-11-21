@@ -27,6 +27,15 @@ class DesktopTouchGesturesTest {
         assertEquals(DesktopPoint(0.0, -0.25), inputs.last().point)
     }
 
+    @Test fun aSmallTouchpadMovementStartsBeforeTheFullTouchSlop() {
+        gestures.down(finger(50, 50), 0)
+        gestures.move(finger(53, 50), time = 50)
+        gestures.up(finger(53, 50), 80)
+        gestures.advance(500)
+        assertEquals("moveBy", inputs.single().type)
+        assertEquals(0.015, inputs.single().point!!.x, 0.0001)
+    }
+
     @Test fun oneAndTwoFingerTapsClickAtTheCurrentCursor() {
         val a = finger(11, 12)
         val b = finger(31, 14, 7)
@@ -111,15 +120,35 @@ class DesktopTouchGesturesTest {
         gestures.down(a, 0)
         gestures.secondDown(a, b, 10)
         gestures.move(finger(11, 28), finger(82, 26, 1))
-        assertTrue(inputs.isEmpty())
+        assertEquals(listOf(1), inputs.map { it.delta })
         gestures.move(finger(12, 34), finger(82, 32, 1))
+        assertEquals(listOf(1), inputs.map { it.delta })
         gestures.move(finger(12, 59), finger(82, 57, 1))
         // Still scrolling even if the fingers spread apart near the end.
-        gestures.move(finger(0, 19), finger(130, 17, 1))
+        gestures.move(finger(0, 11), finger(130, 9, 1))
         gestures.up(a, 210)
         gestures.advance(600)
         assertEquals(listOf(1, 2, -3), inputs.map { it.delta })
         assertTrue(inputs.all { it.type == "cursorScroll" })
+        assertTrue(transforms.isEmpty())
+    }
+
+    @Test fun smallTwoFingerScrollSendsTheFirstNotchBeforeReleaseInEitherDirection() {
+        val a = finger(10, 20)
+        val b = finger(80, 20, 1)
+        for ((index, direction) in listOf(-1, 1).withIndex()) {
+            val at = index * 500L
+            gestures.down(a, at)
+            gestures.secondDown(a, b, at + 10)
+            gestures.move(finger(10, 20 + direction * 4), finger(80, 20 + direction * 4, 1))
+            assertEquals(index, inputs.size)
+            val moved = finger(10, 20 + direction * 5)
+            gestures.move(moved, finger(80, 20 + direction * 5, 1))
+            assertEquals(index + 1, inputs.size)
+            assertEquals(DesktopInput("cursorScroll", delta = direction), inputs.last())
+            gestures.up(moved, at + 100)
+        }
+        assertEquals(listOf(-1, 1), inputs.map { it.delta })
         assertTrue(transforms.isEmpty())
     }
 
@@ -172,6 +201,57 @@ class DesktopTouchGesturesTest {
         gestures.cancel()
         gestures.advance(1800)
         assertEquals(2, inputs.size)
+    }
+
+    @Test fun holdingTheSecondTapStartsTheDragAndMovementReachesThePcBeforeRelease() {
+        gestures.liveDrag = true
+        val start = finger(30, 30)
+        gestures.down(start, 0)
+        gestures.up(start, 60)
+        gestures.down(start, 140)
+        assertEquals(320L, gestures.nextDeadline())
+        gestures.advance(319)
+        assertTrue(inputs.isEmpty())
+        gestures.advance(320)
+        gestures.move(finger(31, 30), time = 340)
+        gestures.move(start, time = 360)
+        assertEquals(listOf("cursorDragStart", "cursorDragMove", "cursorDragMove"), inputs.map { it.type })
+        assertEquals(0.005, inputs[1].point!!.x, 0.0001)
+        assertEquals(-0.005, inputs[2].point!!.x, 0.0001)
+        gestures.advance(1570)
+        assertEquals(DesktopPoint(0.0, 0.0), inputs.last().point)
+        gestures.up(start, 1580)
+        assertEquals("cursorDragEnd", inputs.last().type)
+        assertTrue(inputs.first().dragId.orEmpty().isNotEmpty())
+        assertTrue(inputs.all { it.dragId == inputs.first().dragId })
+        assertNull(gestures.nextDeadline())
+    }
+
+    @Test fun draggingTheSecondTapCanStartImmediatelyAndCancelReleasesTheButton() {
+        gestures.liveDrag = true
+        val start = finger(30, 30)
+        gestures.down(start, 0)
+        gestures.up(start, 60)
+        gestures.down(start, 140)
+        gestures.move(finger(33, 30), time = 150)
+        gestures.cancel()
+        gestures.up(start, 170)
+        assertEquals(listOf("cursorDragStart", "cursorDragMove", "cursorDragEnd"), inputs.map { it.type })
+        assertTrue(inputs.all { it.dragId == inputs.first().dragId })
+    }
+
+    @Test fun aSecondFingerReleasesTheActiveDragWithoutAlsoRightClicking() {
+        gestures.liveDrag = true
+        val start = finger(30, 30)
+        gestures.down(start, 0)
+        gestures.up(start, 60)
+        gestures.down(start, 140)
+        gestures.advance(320)
+        gestures.secondDown(start, finger(80, 30, 2), 330)
+        gestures.up(start, 360)
+        gestures.advance(1800)
+        assertEquals(listOf("cursorDragStart", "cursorDragEnd"), inputs.map { it.type })
+        assertEquals(inputs.first().dragId, inputs.last().dragId)
     }
 
     @Test fun directTouchKeepsDragAndLongPress() {

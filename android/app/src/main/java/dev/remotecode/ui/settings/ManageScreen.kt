@@ -45,6 +45,7 @@ import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.PrimaryScrollableTabRow
+import androidx.compose.material3.PrimaryTabRow
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
@@ -91,7 +92,36 @@ internal data class Confirm(val title: String, val text: String, val action: Str
 
 @Composable
 fun ManageScreen(onBack: () -> Unit) {
-    val repo = RemoteCodeApp.instance.repository
+    ManageScaffold(
+        title = stringResource(R.string.screen_manage_006),
+        tabs = listOf(appString(R.string.screen_manage_002), "MCP", appString(R.string.screen_manage_003), appString(R.string.screen_manage_004), appString(R.string.screen_manage_005)),
+        scrollableTabs = true,
+        errorLabel = R.string.screen_manage_001,
+        dismissLabel = R.string.screen_manage_009,
+        introLabel = R.string.screen_manage_010,
+        onBack = onBack,
+    ) { tab, reload, act, ask ->
+        when (tab) {
+            0 -> SettingsTab("claude", reload, act)
+            1 -> McpTab(reload, act, ask)
+            2 -> PluginsTab(reload, act, ask)
+            3 -> MarketTab(reload, act, ask)
+            else -> SkillsTab(reload, act, ask)
+        }
+    }
+}
+
+@Composable
+internal fun ManageScaffold(
+    title: String,
+    tabs: List<String>,
+    scrollableTabs: Boolean = false,
+    errorLabel: Int,
+    dismissLabel: Int,
+    introLabel: Int,
+    onBack: () -> Unit,
+    content: @Composable (Int, Int, (suspend () -> String) -> Unit, (Confirm) -> Unit) -> Unit,
+) {
     val scope = rememberCoroutineScope()
     val snackbar = remember { SnackbarHostState() }
     val haptics = rememberHaptics()
@@ -109,38 +139,33 @@ fun ManageScreen(onBack: () -> Unit) {
                 snackbar.showSnackbar(m)
             } catch (e: Exception) {
                 haptics.reject()
-                snackbar.showSnackbar(e.message ?: appString(R.string.screen_manage_001))
+                snackbar.showSnackbar(e.message ?: appString(errorLabel))
             }
             busy = false
             reload++
         }
     }
 
-    val tabs = listOf(appString(R.string.screen_manage_002), "MCP", appString(R.string.screen_manage_003), appString(R.string.screen_manage_004), appString(R.string.screen_manage_005))
     Scaffold(
         topBar = {
             Column {
                 TopAppBar(
-                    title = { Text(stringResource(R.string.screen_manage_006)) },
+                    title = { Text(title) },
                     navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Rounded.ArrowBack, stringResource(R.string.screen_manage_007)) } },
                     actions = { IconButton(onClick = { reload++ }) { Icon(Icons.Rounded.Refresh, stringResource(R.string.screen_manage_008)) } },
                 )
-                PrimaryScrollableTabRow(selectedTabIndex = tab, edgePadding = 8.dp) {
+                val tabItems: @Composable () -> Unit = {
                     tabs.forEachIndexed { i, t -> Tab(selected = tab == i, onClick = { haptics.tick(); tab = i }, text = { Text(t) }) }
                 }
+                if (scrollableTabs) PrimaryScrollableTabRow(selectedTabIndex = tab, edgePadding = 8.dp, tabs = tabItems)
+                else PrimaryTabRow(selectedTabIndex = tab, tabs = tabItems)
                 if (busy) LinearProgressIndicator(Modifier.fillMaxWidth())
             }
         },
         snackbarHost = { SnackbarHost(snackbar) },
     ) { pad ->
         Box(Modifier.padding(pad).fillMaxSize()) {
-            when (tab) {
-                0 -> SettingsTab("claude", reload, ::act)
-                1 -> McpTab(reload, ::act) { confirm = it }
-                2 -> PluginsTab(reload, ::act) { confirm = it }
-                3 -> MarketTab(reload, ::act) { confirm = it }
-                else -> SkillsTab(reload, ::act) { confirm = it }
-            }
+            content(tab, reload, ::act) { confirm = it }
         }
     }
 
@@ -151,11 +176,10 @@ fun ManageScreen(onBack: () -> Unit) {
             title = { Text(c.title) },
             text = { Text(c.text) },
             confirmButton = { Button(onClick = { confirm = null; act(c.run) }) { Text(c.action) } },
-            dismissButton = { TextButton(onClick = { confirm = null }) { Text(stringResource(R.string.screen_manage_009)) } },
+            dismissButton = { TextButton(onClick = { confirm = null }) { Text(stringResource(dismissLabel)) } },
         )
     }
-    LaunchedEffect(Unit) { snackbar.showSnackbar(appString(R.string.screen_manage_010)) }
-    @Suppress("UNUSED_VARIABLE") val unused = repo
+    LaunchedEffect(Unit) { snackbar.showSnackbar(appString(introLabel)) }
 }
 
 @Composable
@@ -232,12 +256,20 @@ private fun McpTab(reload: Int, act: (suspend () -> String) -> Unit, ask: (Confi
             modifier = Modifier.align(Alignment.BottomEnd).padding(16.dp),
         )
     }
-    detailOf?.let { s -> McpDetailSheet(s, onDismiss = { detailOf = null }) { scopeName ->
-        detailOf = null
-        ask(Confirm(appString(R.string.screen_manage_014, s.name), appString(R.string.screen_manage_015), appString(R.string.screen_manage_016)) {
-            api.mcpRemove(s.name, scopeName); appString(R.string.screen_manage_017, s.name)
-        })
-    } }
+    detailOf?.let { s ->
+        McpDetailSheet(
+            name = s.name,
+            load = { api.mcpGet(s.name) },
+            hint = R.string.screen_manage_019,
+            readOnlyHint = R.string.screen_manage_020.takeIf { s.connector },
+            onDismiss = { detailOf = null },
+        ) { scopeName ->
+            detailOf = null
+            ask(Confirm(appString(R.string.screen_manage_014, s.name), appString(R.string.screen_manage_015), appString(R.string.screen_manage_016)) {
+                api.mcpRemove(s.name, scopeName); appString(R.string.screen_manage_017, s.name)
+            })
+        }
+    }
     if (adding) McpAddDialog(onDismiss = { adding = false }) { body ->
         adding = false
         act { api.mcpAdd(body); appString(R.string.screen_manage_018) }
@@ -245,14 +277,20 @@ private fun McpTab(reload: Int, act: (suspend () -> String) -> Unit, ask: (Confi
 }
 
 @Composable
-private fun McpDetailSheet(s: McpServerInfo, onDismiss: () -> Unit, onRemove: (String?) -> Unit) {
-    val api = RemoteCodeApp.instance.repository.api
+internal fun McpDetailSheet(
+    name: String,
+    load: suspend () -> McpDetail,
+    hint: Int,
+    onDismiss: () -> Unit,
+    readOnlyHint: Int? = null,
+    onRemove: (String?) -> Unit,
+) {
     var detail by remember { mutableStateOf<McpDetail?>(null) }
     var error by remember { mutableStateOf<String?>(null) }
-    LaunchedEffect(s.name) { runCatching { api.mcpGet(s.name) }.onSuccess { detail = it }.onFailure { error = it.message } }
+    LaunchedEffect(name) { runCatching { load() }.onSuccess { detail = it }.onFailure { error = it.message } }
     ModalBottomSheet(modifier = hapticArea(), onDismissRequest = onDismiss, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
         Column(Modifier.padding(horizontal = 24.dp).padding(bottom = 32.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            Text(s.name, style = MaterialTheme.typography.titleLarge)
+            Text(name, style = MaterialTheme.typography.titleLarge)
             when {
                 detail != null -> SelectionContainer {
                     Text(detail!!.text, style = MaterialTheme.typography.bodySmall.copy(fontFamily = Mono), modifier = Modifier.heightIn(max = 360.dp).verticalScroll(rememberScrollState()))
@@ -260,9 +298,9 @@ private fun McpDetailSheet(s: McpServerInfo, onDismiss: () -> Unit, onRemove: (S
                 error != null -> Text(error!!, color = MaterialTheme.colorScheme.error)
                 else -> LoadingIndicator()
             }
-            Hint(appString(R.string.screen_manage_019))
-            if (s.connector) {
-                Hint(appString(R.string.screen_manage_020))
+            Hint(appString(hint))
+            if (readOnlyHint != null) {
+                Hint(appString(readOnlyHint))
             } else {
                 OutlinedButton(onClick = { onRemove(detail?.scope) }, modifier = Modifier.fillMaxWidth()) {
                     Icon(Icons.Rounded.Delete, null, Modifier.size(18.dp))
@@ -510,7 +548,7 @@ private fun SkillsTab(reload: Int, act: (suspend () -> String) -> Unit, ask: (Co
         )
     }
     open?.let { s ->
-        SkillSheet(s, onDismiss = { open = null }, onSave = { text -> open = null; act { api.skillWrite(s.path, text); appString(R.string.screen_manage_055) } }) {
+        SkillEditorSheet(s.name, s.source, s.path, load = { api.skillRead(s.path) }, onDismiss = { open = null }, onSave = { text -> open = null; act { api.skillWrite(s.path, text); appString(R.string.screen_manage_055) } }) {
             open = null
             ask(Confirm(appString(R.string.screen_manage_014, s.name), appString(R.string.screen_manage_056, s.name), appString(R.string.screen_manage_016)) { api.skillDelete(s.path); appString(R.string.screen_manage_057) })
         }
@@ -522,17 +560,27 @@ private fun SkillsTab(reload: Int, act: (suspend () -> String) -> Unit, ask: (Co
 }
 
 @Composable
-private fun SkillSheet(s: SkillInfo, onDismiss: () -> Unit, onSave: (String) -> Unit, onDelete: () -> Unit) {
-    val api = RemoteCodeApp.instance.repository.api
+internal fun SkillEditorSheet(
+    name: String,
+    source: String,
+    path: String,
+    load: suspend () -> SkillText,
+    onDismiss: () -> Unit,
+    onSave: (String) -> Unit,
+    cancelLabel: Int = R.string.screen_manage_009,
+    editLabel: Int = R.string.screen_manage_060,
+    readOnlyHint: Int = R.string.screen_manage_061,
+    onDelete: () -> Unit,
+) {
     var loaded by remember { mutableStateOf<SkillText?>(null) }
     var text by remember { mutableStateOf("") }
     var editing by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
-    LaunchedEffect(s.path) { runCatching { api.skillRead(s.path) }.onSuccess { loaded = it; text = it.text }.onFailure { error = it.message } }
+    LaunchedEffect(path) { runCatching { load() }.onSuccess { loaded = it; text = it.text }.onFailure { error = it.message } }
     ModalBottomSheet(modifier = hapticArea(), onDismissRequest = onDismiss, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
         Column(Modifier.padding(horizontal = 20.dp).padding(bottom = 24.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            Text(s.name, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
-            Text(s.source, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(name, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
+            Text(source, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
             val l = loaded
             when {
                 l == null && error == null -> LoadingIndicator()
@@ -546,14 +594,14 @@ private fun SkillSheet(s: SkillInfo, onDismiss: () -> Unit, onSave: (String) -> 
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     if (editing) {
                         Button(onClick = { onSave(text) }, modifier = Modifier.weight(1f)) { Text(stringResource(R.string.screen_manage_059)) }
-                        OutlinedButton(onClick = { editing = false; text = l.text }) { Text(stringResource(R.string.screen_manage_009)) }
+                        OutlinedButton(onClick = { editing = false; text = l.text }) { Text(stringResource(cancelLabel)) }
                     } else {
-                        Button(onClick = { editing = true }, modifier = Modifier.weight(1f)) { Text(stringResource(R.string.screen_manage_060)) }
+                        Button(onClick = { editing = true }, modifier = Modifier.weight(1f)) { Text(stringResource(editLabel)) }
                         OutlinedButton(onClick = onDelete) { Icon(Icons.Rounded.Delete, null, Modifier.size(18.dp)); Spacer(Modifier.size(6.dp)); Text(stringResource(R.string.screen_manage_053)) }
                     }
                 }
             } else if (l != null) {
-                Hint(appString(R.string.screen_manage_061))
+                Hint(appString(readOnlyHint))
             }
         }
     }

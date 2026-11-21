@@ -129,6 +129,7 @@ func activeCodexDesktopRecord(info M) bool {
 
 func resetSessionRuntime(rec *Record, onEntryChanged func(M)) {
 	rec.Info["pending"] = 0
+	delete(rec.Info, "backgroundCommandCount")
 	if S(rec.Info, "status") != "error" {
 		rec.Info["status"] = "idle"
 	}
@@ -386,6 +387,10 @@ func (s *Store) Create(init M) *Record {
 func (s *Store) Update(id string, patch M, touch bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	s.updateLocked(id, patch, touch)
+}
+
+func (s *Store) updateLocked(id string, patch M, touch bool) {
 	r := s.records[id]
 	if r == nil {
 		return
@@ -474,6 +479,9 @@ func (s *Store) addDesktopEntry(id string, entry M) M {
 func (s *Store) addEntry(id string, entry M, transcript, updatePreview bool) M {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	return s.addEntryLocked(id, entry, transcript, updatePreview)
+}
+func (s *Store) addEntryLocked(id string, entry M, transcript, updatePreview bool) M {
 	e := clone(entry)
 	s.flushDeltasLocked(id, "")
 	storeLimitEntry(e)
@@ -501,6 +509,12 @@ func (s *Store) addEntry(id string, entry M, transcript, updatePreview bool) M {
 			if transcript {
 				return clone(old)
 			}
+			if S(r.Info, "provider") == "claude" && claudeWorkflowTool(S(e, "tool")) && S(e, "status") == "running" && S(old, "claudeTaskId") != "" {
+				delete(e, "status")
+				if title := S(e, "title"); title == "Subagent" || title == "Workflow" {
+					delete(e, "title")
+				}
+			}
 			s.flushDeltasLocked(id, S(old, "id"))
 			for k, v := range e {
 				old[k] = v
@@ -523,14 +537,23 @@ func (s *Store) addEntry(id string, entry M, transcript, updatePreview bool) M {
 	return clone(e)
 }
 func (s *Store) Patch(id, entryID string, patch M) {
+	s.patchEntry(id, entryID, patch, "")
+}
+func (s *Store) patchEntry(id, entryID string, patch M, expectedStatus string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	s.patchEntryLocked(id, entryID, patch, expectedStatus)
+}
+func (s *Store) patchEntryLocked(id, entryID string, patch M, expectedStatus string) {
 	r := s.records[id]
 	if r == nil {
 		return
 	}
 	for _, e := range r.Entries {
 		if S(e, "id") == entryID {
+			if expectedStatus != "" && S(e, "status") != expectedStatus {
+				return
+			}
 			previousDetails := sessionEntryDetails(e)
 			s.flushDeltasLocked(id, entryID)
 			for k, v := range patch {
@@ -853,6 +876,7 @@ func (s *Store) Flush() error {
 		delete(s.dirty, id)
 		s.mu.Unlock()
 		if record != nil {
+			delete(record.Info, "backgroundCommandCount")
 			if err := atomicJSON(filepath.Join(s.directory, id+".json"), record); err != nil {
 				s.mu.Lock()
 				s.dirty[id] = true

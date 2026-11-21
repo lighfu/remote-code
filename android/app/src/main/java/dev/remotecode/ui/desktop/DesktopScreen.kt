@@ -32,8 +32,11 @@ import dev.remotecode.RemoteCodeApp
 import dev.remotecode.data.*
 import dev.remotecode.i18n.appString
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import java.io.EOFException
 import java.io.IOException
 import java.net.SocketException
@@ -102,6 +105,7 @@ internal fun DesktopScreen(onBack: () -> Unit) {
     val codec = prefs.codec.takeIf { it in codecs } ?: codecs.first()
     val compression = prefs.compressionFor(codec, capabilities?.compressionControls == true)
     val touchpad = prefs.touchpad && capabilities?.touchpad == true
+    val liveDrag = touchpad && capabilities?.liveDrag == true
     var displayError by remember(identity) { mutableStateOf<String?>(null) }
     var frame by remember(identity, display, resolution, active, refresh, capture, codec) { mutableStateOf<VisibleFrame?>(null) }
     var frameError by remember(identity, display, resolution, active, refresh, capture, codec) { mutableStateOf<String?>(null) }
@@ -129,9 +133,15 @@ internal fun DesktopScreen(onBack: () -> Unit) {
     var lastPoint by remember(identity, display) { mutableStateOf<Pair<String, DesktopPoint>?>(null) }
     var draft by remember(identity) { mutableStateOf("") }
     val inputLayout = seenLayout
-    val commands = remember(identity, display, resolution, capture, codec, touchpad, active, control, refresh, inputLayout) { DesktopInputQueue() }
+    val commands = remember(identity, display, resolution, capture, codec, touchpad, liveDrag, active, control, refresh, inputLayout) { DesktopInputQueue() }
     var sendingText by remember(commands) { mutableStateOf(false) }
-    DisposableEffect(commands) { onDispose { commands.close(); surface?.resetCursorPrediction() } }
+    DisposableEffect(commands) {
+        onDispose {
+            commands.close()
+            surface?.cancelGestures()
+            surface?.resetCursorPrediction()
+        }
+    }
 
     fun updatePreferences(next: DesktopPreferences) {
         prefs = next
@@ -302,45 +312,82 @@ internal fun DesktopScreen(onBack: () -> Unit) {
 
     LaunchedEffect(commands, target) {
         if (target == null || !active || !control) return@LaunchedEffect
-        while (true) {
-            val cmd = commands.next() ?: break
-            try {
-                val shown = frame
-                if (shown == null || !shown.fresh() || shown.image.layout != cmd.layout || awaitingLayout != null ||
-                    SystemClock.elapsedRealtime() - cmd.capturedAt >= FrameLifetimeMs ||
-                    !lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) {
-                    throw DesktopFrameExpired(appString(R.string.desktop_input_wait_frame))
+        val targetDisplay = display
+        var heldDrag: DesktopCommand? = null
+        suspend fun releaseDrag() {
+            val start = heldDrag ?: return
+            heldDrag = null
+            // A start whose reply was lost may still have pressed the PC mouse button.
+            withContext(NonCancellable) {
+                withTimeoutOrNull(1_250L) {
+                    try {
+                        val end = DesktopInput("cursorDragEnd", dragId = start.input.dragId)
+                        desktop.input(target, targetDisplay, start.layout, end)
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (_: Exception) {
+                        // The server releases the button when the drag lease expires.
+                    }
                 }
-                val revision = desktop.input(target, display, cmd.layout, cmd.input, cmd.frameAt)
-                surface?.settleCursor(revision, commands.hasPending)
-                inputNotice = null
-                if (cmd.input.type in setOf("click", "doubleClick", "rightClick", "drag", "scroll")) {
-                    (cmd.input.end ?: cmd.input.point)?.let { lastPoint = cmd.layout to it }
-                }
-                cmd.accepted()
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                surface?.settleCursor(null, commands.hasPending)
-                val layoutChanged = (e as? ApiException)?.code == 409
-                val rejected = if (e is DesktopFrameExpired || layoutChanged) {
-                    RejectedDesktopFrame(cmd.layout, cmd.capturedAt, cmd.frameAt)
-                } else null
-                inputNotice = DesktopInputNotice(e.localizedMessage ?: appString(R.string.desktop_input_failed), rejected)
-                if (layoutChanged) {
-                    frame = null
-                    refresh++
-                    displayRefresh++
-                    break
-                }
-            } finally {
-                if (cmd.input.type == "text") sendingText = false
             }
+        }
+        try {
+            while (true) {
+                val cmd = commands.next() ?: break
+                val start = cmd.input.type == "cursorDragStart"
+                val end = cmd.input.type == "cursorDragEnd"
+                val dragId = cmd.input.dragId
+                if (dragId != null && !start && heldDrag?.input?.dragId != dragId) continue
+                try {
+                    val shown = frame
+                    if (!end && (shown == null || !shown.fresh() || shown.image.layout != cmd.layout || awaitingLayout != null ||
+                        SystemClock.elapsedRealtime() - cmd.capturedAt >= FrameLifetimeMs ||
+                        !lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED))) {
+                        throw DesktopFrameExpired(appString(R.string.desktop_input_wait_frame))
+                    }
+                    if (start) {
+                        releaseDrag()
+                        heldDrag = cmd
+                    }
+                    val revision = desktop.input(target, targetDisplay, cmd.layout, cmd.input, cmd.frameAt)
+                    if (end) heldDrag = null
+                    surface?.settleCursor(revision, commands.hasPending)
+                    inputNotice = null
+                    if (cmd.input.type in setOf("click", "doubleClick", "rightClick", "drag", "scroll")) {
+                        (cmd.input.end ?: cmd.input.point)?.let { lastPoint = cmd.layout to it }
+                    }
+                    cmd.accepted()
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    surface?.settleCursor(null, commands.hasPending)
+                    val layoutChanged = (e as? ApiException)?.code == 409
+                    val rejected = if (e is DesktopFrameExpired || layoutChanged) {
+                        RejectedDesktopFrame(cmd.layout, cmd.capturedAt, cmd.frameAt)
+                    } else null
+                    inputNotice = DesktopInputNotice(e.localizedMessage ?: appString(R.string.desktop_input_failed), rejected)
+                    if (dragId != null) releaseDrag()
+                    if (layoutChanged) {
+                        frame = null
+                        refresh++
+                        displayRefresh++
+                        break
+                    }
+                } finally {
+                    if (cmd.input.type == "text") sendingText = false
+                }
+            }
+        } finally {
+            releaseDrag()
         }
     }
 
     fun send(input: DesktopInput, accepted: () -> Unit = {}): Boolean {
         if (!control || !lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) return false
+        if (input.type == "cursorDragEnd") {
+            val layout = inputLayout ?: return false
+            return commands.offer(DesktopCommand(input, layout, SystemClock.elapsedRealtime(), accepted = accepted))
+        }
         val shown = frame
         if (shown == null || !shown.fresh() || awaitingLayout != null || shown.image.layout != inputLayout) {
             inputNotice = DesktopInputNotice(appString(R.string.desktop_input_wait_frame),
@@ -398,6 +445,7 @@ internal fun DesktopScreen(onBack: () -> Unit) {
                             it.contentDescription = description
                             it.pixelated = prefs.pixelated
                             it.touchpad = touchpad
+                            it.liveDrag = liveDrag
                             it.pointerSpeed = prefs.pointerSpeed
                             it.onZoomChanged = { factor -> zoom = factor }
                             it.onFrameDrawn = { drawnRate.record(SystemClock.elapsedRealtime()) }

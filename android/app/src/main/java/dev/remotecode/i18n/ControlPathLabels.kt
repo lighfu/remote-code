@@ -149,6 +149,8 @@ private val controlPathCatalog = mapOf(
     "agy からの認証を検証します。" to R.string.control_path_catalog_144,
     "この画面では認証方式やログイン済みアカウントを調査しません。" to R.string.control_path_catalog_145,
 )
+internal fun controlPathResource(value: String): Int? = controlPathCatalog[value]
+
 private val liveSessionNote = Regex("live\\ として保存されている会話は\\ ([0-9]+)\\ 件です。PC\\ の記録表示と\\ ACP\\ 実行を保存フラグだけでは区別できないため、経路別の件数は確定できません。")
 private val englishLiveSessionNote = Regex(
     Regex.escape("There are ") + "([0-9]+)" + Regex.escape(" conversations saved as live. Because transcript viewing and ACP execution cannot be distinguished by saved flags alone, exact counts by path cannot be determined."),

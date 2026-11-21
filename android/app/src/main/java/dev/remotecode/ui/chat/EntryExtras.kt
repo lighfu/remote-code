@@ -198,40 +198,56 @@ private fun fileParts(path: String): Pair<String, String> {
 }
 
 @Composable
-fun DetailedToolCard(e: Entry, wrap: ToolWrapPreferences) {
-    var open by rememberSaveable(e.id) { mutableStateOf(false) }
+internal fun ToolCard(e: Entry, wrap: ToolWrapPreferences, detailed: Boolean) {
+    var open by rememberSaveable(e.id, detailed) { mutableStateOf(false) }
     val isEdit = e.tool in EDIT_TOOLS
     val isCommand = e.tool in COMMAND_TOOLS
-    val isTodo = e.tool == "TodoWrite"
-    val input = remember(e, open) { toolCardInput(e, showDetail = open || isTodo) }
+    val isTodo = detailed && e.tool == "TodoWrite"
+    val input = remember(e, open, isTodo) { toolCardInput(e, showDetail = open || isTodo) }
     val files = rememberToolFiles(e)
     val multipleEdits = isEdit && files.size > 1
-    val editPath = files.singleOrNull()
-    val changedCount = if (multipleEdits) editFileCount(e, files).toString() else if (e.tool == "fileChange") changedFileSummaryCount(e.title) else null
+    val editPath = files.singleOrNull().takeIf { detailed && isEdit }
+    val heading = when {
+        multipleEdits -> stringResource(R.string.chat_chat_screen_050, editFileCount(e, files))
+        detailed && e.tool == "fileChange" -> changedFileSummaryCount(e.title)?.let {
+            stringResource(R.string.chat_chat_screen_050, it)
+        } ?: localizedServerMessage(e.title.orEmpty())
+        else -> input.heading
+    }
+    val preview = multipleEdits || isEdit && e.hasToolDetail
+    val previewLines = if (open) Int.MAX_VALUE else 12
+    val hasMedia = !e.media.isNullOrEmpty() || !e.videos.isNullOrEmpty()
+    val headerPadding = Modifier.padding(horizontal = 14.dp, vertical = 10.dp)
+    val compactBodyPadding = Modifier.padding(start = 14.dp, end = 14.dp, bottom = 12.dp)
     val x = Extra.colors
     Card(
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
         shape = RoundedCornerShape(18.dp),
         modifier = Modifier.fillMaxWidth().then(toolFileGesture(files) { open = !open }).animateContentSize(),
     ) {
-        Column(Modifier.padding(horizontal = 14.dp, vertical = 10.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
+        Column(
+            modifier = if (detailed) headerPadding else Modifier,
+            verticalArrangement = if (detailed) Arrangement.spacedBy(8.dp) else Arrangement.Top,
+        ) {
+            Row(if (detailed) Modifier else headerPadding, verticalAlignment = Alignment.CenterVertically) {
                 Icon(toolIcon(e.tool), null, Modifier.size(20.dp), tint = MaterialTheme.colorScheme.primary)
                 Spacer(Modifier.size(10.dp))
                 Column(Modifier.weight(1f)) {
-                    if (isEdit && editPath != null) {
+                    if (editPath != null) {
                         val (name, dir) = fileParts(editPath)
                         Text(name, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
                         if (dir.isNotBlank()) Text(dir, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.StartEllipsis)
                     } else {
-                        val heading = if (changedCount != null) stringResource(R.string.chat_chat_screen_050, changedCount)
-                            else if (e.tool == "fileChange") localizedServerMessage(e.title.orEmpty()) else input.heading
                         if (heading != null) Text(
                             highlightedCode(heading, if (isCommand) commandCodeLanguage(e.tool, heading) else codeLanguage("plain.txt")),
                             style = MaterialTheme.typography.bodyMedium.copy(fontFamily = Mono),
                             softWrap = wrap.input,
                             modifier = if (wrap.input) Modifier else Modifier.horizontalScroll(rememberScrollState()),
-                            maxLines = if (open) 8 else if (isCommand) 3 else 1,
+                            maxLines = when {
+                                open -> if (detailed) 8 else 6
+                                detailed && isCommand -> 3
+                                else -> 1
+                            },
                             overflow = TextOverflow.Ellipsis,
                         )
                         if (multipleEdits && !e.title.isNullOrBlank() && !isFileChangeSummary(e.title)) {
@@ -242,7 +258,7 @@ fun DetailedToolCard(e: Entry, wrap: ToolWrapPreferences) {
                         }
                     }
                 }
-                if (isEdit) {
+                if (detailed && isEdit) {
                     val (add, del) = remember(e.detail, e.tool, e.title, e.files) { editStats(e) }
                     if (add + del > 0) {
                         Text("+$add", style = MaterialTheme.typography.labelMedium, color = x.diffAdd, fontFamily = Mono)
@@ -250,25 +266,36 @@ fun DetailedToolCard(e: Entry, wrap: ToolWrapPreferences) {
                         Text("−$del", style = MaterialTheme.typography.labelMedium, color = x.diffRemove, fontFamily = Mono)
                         Spacer(Modifier.size(8.dp))
                     }
-                }
+                } else if (!detailed) Spacer(Modifier.size(8.dp))
                 StatusIcon(e.status)
             }
+            if (hasMedia && !detailed) EntryMedia(e.media, e.videos, compactBodyPadding)
             when {
-                multipleEdits || (isEdit && e.hasToolDetail) -> EditPreview(e, maxLines = if (open) Int.MAX_VALUE else 12, wrapLines = wrap.input, files = files)
+                detailed && preview -> EditPreview(e, maxLines = previewLines, wrapLines = wrap.input, files = files)
                 isTodo && input.detail != null -> Text(input.detail, style = MaterialTheme.typography.bodyMedium)
-                isCommand -> {
+                detailed && isCommand -> {
                     if (input.detail != null) CodeBlock(input.detail, diff = false, language = commandCodeLanguage(e.tool, input.detail), wrapLines = wrap.input)
                     if (!e.output.isNullOrBlank()) CodeBlock(e.output, diff = false, maxLines = if (open) Int.MAX_VALUE else 6, tail = true, wrapLines = wrap.output)
                 }
-                open -> {
-                    if (input.detail != null) CodeBlock(input.detail, diff = false, wrapLines = wrap.input)
-                    if (!e.output.isNullOrBlank()) CodeBlock(e.output, diff = false, wrapLines = wrap.output)
-                    if (e.detail.isNullOrBlank() && e.output.isNullOrBlank()) {
-                        Text(stringResource(R.string.chat_entry_extras_013), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                open || multipleEdits -> {
+                    Column(if (detailed) Modifier else compactBodyPadding, verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        if (preview) {
+                            EditPreview(e, maxLines = previewLines, wrapLines = wrap.input, files = files)
+                        } else if (input.detail != null) {
+                            CodeBlock(input.detail, diff = false, language = if (isCommand) commandCodeLanguage(e.tool, input.detail) else null, wrapLines = wrap.input)
+                        }
+                        if (open && !e.output.isNullOrBlank()) {
+                            if (!detailed) Text(stringResource(R.string.chat_entry_views_028), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            CodeBlock(e.output, diff = false, wrapLines = wrap.output)
+                        }
+                        val missingDetail = if (detailed) e.detail.isNullOrBlank() else input.detail == null && !e.hasToolDetail
+                        if (open && missingDetail && e.output.isNullOrBlank()) {
+                            Text(stringResource(R.string.chat_entry_extras_013), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
                     }
                 }
             }
-            if (!e.media.isNullOrEmpty() || !e.videos.isNullOrEmpty()) EntryMedia(e.media, e.videos)
+            if (hasMedia && detailed) EntryMedia(e.media, e.videos)
         }
     }
 }
@@ -322,10 +349,7 @@ fun AgentCard(e: Entry, children: List<Entry>, display: Display, respond: Respon
                 )
             }
             if (open) {
-                if (!e.detail.isNullOrBlank()) {
-                    Text(stringResource(R.string.chat_entry_extras_009), style = MaterialTheme.typography.labelMedium)
-                    CodeBlock(e.detail, diff = false, maxHeight = 200, wrapLines = display.toolWrap.input)
-                }
+                LabeledToolCode(R.string.chat_entry_extras_009, e.detail, maxHeight = 200, wrapLines = display.toolWrap.input)
                 if (children.isEmpty()) {
                     Text(if (running) stringResource(R.string.chat_entry_extras_008) else stringResource(R.string.chat_entry_extras_007), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
@@ -339,17 +363,21 @@ fun AgentCard(e: Entry, children: List<Entry>, display: Display, respond: Respon
                         key(c.id) { EntryView(c, respond, display = display, children = allChildren) }
                     }
                 }
-                if (!e.output.isNullOrBlank()) {
-                    Text(stringResource(R.string.chat_entry_extras_005), style = MaterialTheme.typography.labelMedium)
-                    CodeBlock(e.output, diff = false, maxHeight = 260, wrapLines = display.toolWrap.output)
-                }
+                LabeledToolCode(R.string.chat_entry_extras_005, e.output, maxHeight = 260, wrapLines = display.toolWrap.output)
             }
         }
     }
 }
 
 @Composable
-private fun ChatEntrySheet(onDismiss: () -> Unit, content: @Composable ColumnScope.() -> Unit) {
+internal fun LabeledToolCode(label: Int, text: String?, maxHeight: Int, wrapLines: Boolean) {
+    if (text.isNullOrBlank()) return
+    Text(stringResource(label), style = MaterialTheme.typography.labelMedium)
+    CodeBlock(text, diff = false, maxHeight = maxHeight, wrapLines = wrapLines)
+}
+
+@Composable
+internal fun ChatEntrySheet(onDismiss: () -> Unit, content: @Composable ColumnScope.() -> Unit) {
     val chatLinks = LocalUriHandler.current
     ModalBottomSheet(modifier = dev.remotecode.ui.common.hapticArea(), onDismissRequest = onDismiss, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
         // The sheet has its own Android window. Resolve file paths with the chat's handler.
@@ -398,7 +426,7 @@ fun ChangedFilesSheet(edits: List<Entry>, wrap: ToolWrapPreferences, onDismiss: 
         }
         LazyColumn(Modifier.heightIn(max = 640.dp)) {
             items(edits.asReversed(), key = { it.id }) { e ->
-                Box(Modifier.padding(horizontal = 14.dp, vertical = 4.dp)) { DetailedToolCard(e, wrap) }
+                Box(Modifier.padding(horizontal = 14.dp, vertical = 4.dp)) { ToolCard(e, wrap, detailed = true) }
             }
         }
         Surface(Modifier.padding(8.dp)) { TextButton(onClick = onDismiss) { Text(stringResource(R.string.chat_close)) } }

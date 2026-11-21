@@ -34,9 +34,11 @@ data class SessionInfo(
     val live: Boolean = false,
     val pending: Int = 0,
     val archived: Boolean = false,
+    val backgroundCommandCount: Int = 0,
 ) {
     val isRunning get() = status == "running"
     val isWaiting get() = status == "waiting" || pending > 0
+    val isBackgroundCommandOnly get() = backgroundCommandCount > 0 && !isRunning && !isWaiting
     val fastModeActive get() = fastMode == true && fastModeState != "off"
 }
 
@@ -98,9 +100,29 @@ data class Entry(
     /** Widget 用 HTML / SVG。 */
     val html: String? = null,
     val clientMessageId: String? = null,
+    val activityAt: Long? = null,
+    val agentUsage: WorkflowAgentUsage? = null,
 ) {
     val isPendingAsk get() = (kind == "approval" || kind == "question") && status == "pending"
 }
+
+@Serializable
+data class WorkflowAgentUsage(
+    val contextTokens: Long? = null,
+    val inputTokens: Long = 0,
+    val outputTokens: Long = 0,
+    val cachedInputTokens: Long = 0,
+    val cacheWriteTokens: Long = 0,
+    val requestCount: Int = 0,
+    val partial: Boolean = false,
+)
+
+@Serializable
+internal data class WorkflowAgentTimeline(
+    val entries: List<Entry> = emptyList(),
+    val before: String? = null,
+    val active: Boolean? = null,
+)
 
 /** 本会話を止めず、履歴に残さない /btw。 */
 @Serializable
@@ -443,6 +465,7 @@ data class FsListing(val path: String, val parent: String? = null, val dirs: Lis
 @Serializable
 data class ImagePayload(val mime: String, val data: String)
 
+@Serializable
 data class ServerConfig(
     val url: String,
     val token: String,

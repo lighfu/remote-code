@@ -48,6 +48,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.automirrored.rounded.Send
 import androidx.compose.material.icons.automirrored.rounded.WrapText
+import androidx.compose.material.icons.rounded.AccountTree
 import androidx.compose.material.icons.rounded.AddPhotoAlternate
 import androidx.compose.material.icons.rounded.Mic
 import androidx.compose.material.icons.rounded.Terminal
@@ -91,11 +92,13 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
@@ -124,6 +127,7 @@ import dev.remotecode.data.CodeQuoteDrafts
 import dev.remotecode.data.appendConversationQuote
 import dev.remotecode.data.codeQuotePrompt
 import dev.remotecode.data.CommandInfo
+import dev.remotecode.data.Entry
 import dev.remotecode.data.ImagePayload
 import dev.remotecode.data.ThinkingModes
 import dev.remotecode.ui.common.ModelPicker
@@ -143,7 +147,6 @@ import androidx.compose.material.icons.rounded.Image
 import androidx.compose.material.icons.rounded.PlayCircle
 import androidx.compose.material.icons.rounded.Description
 import androidx.compose.material.icons.rounded.FolderOpen
-import dev.remotecode.data.Providers
 import dev.remotecode.data.ApiException
 import dev.remotecode.data.SelectedFile
 import dev.remotecode.data.MAX_FILE_ATTACHMENTS
@@ -186,7 +189,15 @@ private data class ChatSubmission(
 private val attachmentDrafts = java.util.concurrent.ConcurrentHashMap<String, List<DraftAttachment>>()
 
 @Composable
-fun ChatScreen(sessionId: String, onBack: () -> Unit, onTerminals: (String) -> Unit = {}, onOpenTerminal: (String) -> Unit = {}, onProjectFiles: () -> Unit = {}) {
+fun ChatScreen(
+    sessionId: String,
+    onBack: () -> Unit,
+    onTerminals: (String) -> Unit = {},
+    onOpenTerminal: (String) -> Unit = {},
+    onProjectFiles: () -> Unit = {},
+    showWorkflowInForeground: Boolean = true,
+    onOpenWorkflowAgent: (Entry) -> Unit = {},
+) {
     val app = RemoteCodeApp.instance
     val repo = app.repository
     val sessions by repo.sessions.collectAsState()
@@ -196,6 +207,8 @@ fun ChatScreen(sessionId: String, onBack: () -> Unit, onTerminals: (String) -> U
     val modelOptions by repo.models.collectAsState()
     val conn by repo.connection.collectAsState()
     val settings by repo.settings.collectAsState()
+    val chatServerToken = remember(sessionId) { settings?.server?.token }
+    fun chatTarget() = repo.api.server?.takeIf { it.token == chatServerToken }
     val route by repo.route.collectAsState()
     val quoteIdentity = remember(settings?.server, route, conn) { repo.api.server?.connectionIdentity() }
     val quoteDrafts = remember(quoteIdentity, sessionId) { quoteIdentity?.let { CodeQuoteDrafts.quotes(it, sessionId) } ?: MutableStateFlow(emptyList<CodeQuote>()) }
@@ -267,6 +280,13 @@ fun ChatScreen(sessionId: String, onBack: () -> Unit, onTerminals: (String) -> U
     val haptics = dev.remotecode.ui.common.rememberHaptics()
     var confirmTakeover by remember { mutableStateOf(false) }
     var showAgents by remember { mutableStateOf(false) }
+    val workflowServer = remember(settings?.server) { settings?.server?.connectionIdentity() }
+    var showWorkflow by key(sessionId, workflowServer) { rememberSaveable { mutableStateOf(false) } }
+    val workflowSheetState = key(sessionId, workflowServer) { rememberSaveableStateHolder() }
+    fun dismissWorkflow() {
+        showWorkflow = false
+        workflowSheetState.removeState(sessionId)
+    }
     var showFiles by remember { mutableStateOf(false) }
     var commands by remember { mutableStateOf<List<CommandInfo>?>(null) }
     var paletteOpen by remember { mutableStateOf(false) }
@@ -289,6 +309,13 @@ fun ChatScreen(sessionId: String, onBack: () -> Unit, onTerminals: (String) -> U
     val agents = remember(allEntries) { allEntries.filter { it.kind == "tool" && it.tool == "Agent" } }
     val edits = remember(allEntries) { allEntries.filter { it.kind == "tool" && it.tool in EDIT_TOOLS } }
     val running = session?.isRunning == true || session?.isWaiting == true
+    val backgroundCommandOnly = settings?.showBackgroundCommands == true && conn is ConnState.Connected && session?.isBackgroundCommandOnly == true
+    val workingStatus = when {
+        session?.isWaiting == true -> R.string.chat_chat_screen_028
+        running -> R.string.chat_chat_screen_027
+        backgroundCommandOnly -> R.string.session_background_command_running
+        else -> null
+    }
 
     LaunchedEffect(session?.thinking, settings?.thinking) {
         val want = settings?.thinking ?: return@LaunchedEffect
@@ -306,7 +333,7 @@ fun ChatScreen(sessionId: String, onBack: () -> Unit, onTerminals: (String) -> U
         snapshotFlow { list.firstVisibleItemIndex == 0 && list.firstVisibleItemScrollOffset < 120 }
             .collect { atBottom -> if (list.isScrollInProgress || atBottom) follow = atBottom }
     }
-    LaunchedEffect(allEntries.size, entries.lastOrNull()?.id, running) {
+    LaunchedEffect(allEntries.size, entries.lastOrNull()?.id, workingStatus != null) {
         if (follow && entries.isNotEmpty()) list.scrollToItem(0)
     }
 
@@ -374,7 +401,7 @@ fun ChatScreen(sessionId: String, onBack: () -> Unit, onTerminals: (String) -> U
     LaunchedEffect(sessionId) {
         repo.events.collect { event ->
             val sent = submission
-            if (event.sessionId == sessionId && sent != null && sent.draft.matchesReceipt(event.entry)) {
+            if (event.sessionId == sessionId && sent != null && event.server.token == sent.owner?.token && sent.draft.matchesReceipt(event.entry)) {
                 acknowledge(sent)
             }
         }
@@ -388,6 +415,7 @@ fun ChatScreen(sessionId: String, onBack: () -> Unit, onTerminals: (String) -> U
         val quoteSource = quoteIdentity
         val text = codeQuotePrompt(typed, selectedQuotes)
         if (text.isEmpty() && attachments.isEmpty()) return
+        val target = chatTarget()
         if (now) haptics.reject() else haptics.confirm()
         val draft = ComposerSubmission(input, inputRevision, attachments.toList())
         val sent = ChatSubmission(draft, settings?.server?.connectionIdentity(), quoteSource, selectedQuotes)
@@ -398,17 +426,18 @@ fun ChatScreen(sessionId: String, onBack: () -> Unit, onTerminals: (String) -> U
         scope.launch {
             var failure: String? = null
             try {
-                val target = if (selectedFiles.isNotEmpty() || selectedQuotes.isNotEmpty()) repo.api.server ?: throw ApiException(appString(R.string.chat_chat_screen_079)) else null
-                if (selectedQuotes.isNotEmpty() && target?.connectionIdentity() != quoteSource) throw ApiException(appString(R.string.chat_chat_screen_078))
+                if (target == null) throw ApiException(appString(R.string.core_send_server_changed_retry))
+                if (selectedQuotes.isNotEmpty() && target.connectionIdentity() != quoteSource) throw ApiException(appString(R.string.chat_chat_screen_078))
                 val fileIds = mutableListOf<String>()
-                if (target != null) {
+                if (selectedFiles.isNotEmpty()) {
                     val identity = target.connectionIdentity()
                     selectedFiles.forEachIndexed { index, file ->
                         if (repo.api.server?.connectionIdentity() != identity) throw ApiException(appString(R.string.chat_chat_screen_075))
                         val uploaded = file.uploaded?.takeIf { file.uploadedFor == identity } ?: run {
                             fileTransfer.value = appString(R.string.chat_chat_screen_077, index + 1, selectedFiles.size)
                             repo.api.uploadFile(context, file, target) { bytes ->
-                                val progress = file.size?.takeIf { it > 0 }?.let { " ${((bytes * 100 / it).coerceIn(0, 100))}%" }.orEmpty()
+                                val progress = file.size?.takeIf { it > 0 }?.let { " ${((bytes * 100 / it).coerceIn(0, 100))}%" }
+                                    ?: " ${bytesText(bytes)}"
                                 fileTransfer.value = appString(R.string.chat_chat_screen_076, index + 1, selectedFiles.size, progress)
                             }.also {
                                 if (repo.api.server?.connectionIdentity() != identity) throw ApiException(appString(R.string.chat_chat_screen_075))
@@ -424,7 +453,7 @@ fun ChatScreen(sessionId: String, onBack: () -> Unit, onTerminals: (String) -> U
                 val cmd = Regex("^[/\$]([^\\s]+)\\s*([\\s\\S]*)\$").find(text)
                 val known = cmd?.let { m -> commands?.firstOrNull { it.name == m.groupValues[1] } }
                 if (session?.provider == "codex" && known != null && imgs.isEmpty() && selectedFiles.isEmpty() && selectedQuotes.isEmpty()) {
-                    repo.api.runCommand(sessionId, known.name, cmd.groupValues[2].trim())
+                    repo.api.runCommand(sessionId, known.name, cmd.groupValues[2].trim(), expectedServer = target)
                 } else {
                     repo.api.send(
                         sessionId, text, imgs, now, files = fileIds, expectedServer = target,
@@ -456,10 +485,12 @@ fun ChatScreen(sessionId: String, onBack: () -> Unit, onTerminals: (String) -> U
 
     fun reply(text: String) {
         if (sending) return
+        val target = chatTarget()
         sending = true
         scope.launch {
             try {
-                repo.api.send(sessionId, text, emptyList())
+                if (target == null) throw ApiException(appString(R.string.core_send_server_changed_retry))
+                repo.api.send(sessionId, text, emptyList(), expectedServer = target)
                 follow = true
             } catch (e: Exception) {
                 snackbar.showSnackbar(e.message ?: appString(R.string.chat_chat_screen_073))
@@ -521,17 +552,21 @@ fun ChatScreen(sessionId: String, onBack: () -> Unit, onTerminals: (String) -> U
                         ) { headerMenu = true },
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        if (session != null) ProviderBadge(session.provider, running = session.isRunning, waiting = session.isWaiting, size = 34.dp)
+                        if (session != null) {
+                            ProviderBadge(session.provider, running = session.isRunning || backgroundCommandOnly, waiting = session.isWaiting, size = 34.dp)
+                        }
                         Spacer(Modifier.size(10.dp))
                         Column {
                             Text(session?.title ?: "", maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.titleMedium)
-                            Text(
-                                listOfNotNull(session?.provider?.let(Providers::label), session?.cwd?.let { shortPath(it) }).joinToString(" · "),
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                                style = MaterialTheme.typography.labelMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
+                            session?.cwd?.takeIf { it.isNotBlank() }?.let { path ->
+                                Text(
+                                    shortPath(path),
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
                         }
                     }
                     DropdownMenu(
@@ -671,6 +706,13 @@ fun ChatScreen(sessionId: String, onBack: () -> Unit, onTerminals: (String) -> U
                                 leadingIcon = { Icon(Icons.Rounded.SmartToy, null) },
                                 onClick = { moreMenu = false; showAgents = true },
                             )
+                            if (session?.provider == "claude") {
+                                DropdownMenuItem(
+                                    text = { Text(stringResource(R.string.chat_workflow_title)) },
+                                    leadingIcon = { Icon(Icons.Rounded.AccountTree, null) },
+                                    onClick = { moreMenu = false; showWorkflow = true },
+                                )
+                            }
                             DropdownMenuItem(
                                 text = { Text(stringResource(R.string.chat_chat_screen_050, remember(edits) { changedFileCount(edits) })) },
                                 leadingIcon = { Icon(Icons.Rounded.EditNote, null) },
@@ -792,9 +834,9 @@ fun ChatScreen(sessionId: String, onBack: () -> Unit, onTerminals: (String) -> U
                 contentPadding = PaddingValues(top = 8.dp, bottom = 8.dp),
                 modifier = Modifier.fillMaxSize(),
             ) {
-                if (running) {
+                if (workingStatus != null) {
                     item(key = "__status") {
-                        WorkingRow(waiting = session?.isWaiting == true, modifier = Modifier.animateItem())
+                        WorkingRow(workingStatus, modifier = Modifier.animateItem())
                     }
                 }
                 items(entries.asReversed(), key = { it.id }, contentType = { it.kind }) { e ->
@@ -812,7 +854,7 @@ fun ChatScreen(sessionId: String, onBack: () -> Unit, onTerminals: (String) -> U
                 }
             }
             }
-            val listOffset = if (running) 1 else 0
+            val listOffset = if (workingStatus != null) 1 else 0
             ConversationRail(list, entries, listOffset, Modifier.align(Alignment.CenterEnd).fillMaxHeight())
             ScrollHaptics(list, entries, listOffset)
             AnimatedVisibility(
@@ -863,6 +905,32 @@ fun ChatScreen(sessionId: String, onBack: () -> Unit, onTerminals: (String) -> U
     androidx.compose.runtime.CompositionLocalProvider(androidx.compose.ui.platform.LocalUriHandler provides linkHandler) {
         if (showAgents) AgentsSheet(agents, children, display, respond) { showAgents = false }
         if (showFiles) ChangedFilesSheet(edits, display.toolWrap) { showFiles = false }
+        if (showWorkflow && showWorkflowInForeground && session?.provider == "claude") {
+            val visiblePositions = remember(entries) {
+                entries.asReversed().mapIndexed { index, entry -> entry.id to index }.toMap()
+            }
+            workflowSheetState.SaveableStateProvider(sessionId) {
+                SessionClaudeWorkflowSheet(
+                    api = repo.api,
+                    sessionId = sessionId,
+                    serverIdentity = quoteIdentity,
+                    connected = conn is ConnState.Connected,
+                    running = running,
+                    timeline = allEntries,
+                    onDismiss = ::dismissWorkflow,
+                    canJumpToEntry = visiblePositions::containsKey,
+                    onOpenAgent = onOpenWorkflowAgent,
+                    onJumpToEntry = { id ->
+                        visiblePositions[id]?.let { position ->
+                            dismissWorkflow()
+                            follow = false
+                            val index = position + if (workingStatus != null) 1 else 0
+                            scope.launch { list.scrollToItem(index) }
+                        }
+                    },
+                )
+            }
+        }
     }
     if (showContext) ContextSheet(sessionId) { showContext = false }
     if (showCache) CacheSheet(sessionId) { showCache = false }
@@ -1009,7 +1077,7 @@ private fun tokens(n: Long): String = when {
 }
 
 @Composable
-private fun WorkingRow(waiting: Boolean, modifier: Modifier = Modifier) {
+private fun WorkingRow(@androidx.annotation.StringRes label: Int, modifier: Modifier = Modifier) {
     Row(
         modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -1017,7 +1085,7 @@ private fun WorkingRow(waiting: Boolean, modifier: Modifier = Modifier) {
         LoadingIndicator(Modifier.size(36.dp))
         Spacer(Modifier.size(10.dp))
         Text(
-            if (waiting) stringResource(R.string.chat_chat_screen_028) else stringResource(R.string.chat_chat_screen_027),
+            stringResource(label),
             style = MaterialTheme.typography.labelLarge,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )

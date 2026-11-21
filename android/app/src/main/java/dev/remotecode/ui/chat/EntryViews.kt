@@ -138,8 +138,7 @@ fun EntryView(
                 e.tool == "Widget" && !e.html.isNullOrBlank() -> WidgetCard(e)
                 e.tool == "Artifact" -> ArtifactCard(e)
                 e.tool == "Agent" -> AgentCard(e, children[e.id].orEmpty(), display, respond, children)
-                display.toolDetail -> DetailedToolCard(e, display.toolWrap)
-                else -> ToolCard(e, display.toolWrap)
+                else -> ToolCard(e, display.toolWrap, detailed = display.toolDetail)
             }
             "approval" -> ApprovalCard(e, respond, wrapInput = display.toolWrap.input)
             "question" -> QuestionCard(e, respond)
@@ -362,62 +361,6 @@ internal fun StatusIcon(status: String?) {
         "error" -> Icon(Icons.Rounded.Error, stringResource(R.string.chat_failed), Modifier.size(20.dp), tint = MaterialTheme.colorScheme.error)
         "declined" -> Icon(Icons.Rounded.Block, stringResource(R.string.chat_entry_views_029), Modifier.size(20.dp), tint = MaterialTheme.colorScheme.error)
         else -> Icon(Icons.Rounded.CheckCircle, stringResource(R.string.chat_completed), Modifier.size(20.dp), tint = x.success)
-    }
-}
-
-@Composable
-private fun ToolCard(e: Entry, wrap: ToolWrapPreferences) {
-    var open by rememberSaveable(e.id) { mutableStateOf(false) }
-    val files = rememberToolFiles(e)
-    val multipleEdits = e.tool in EDIT_TOOLS && files.size > 1
-    val input = remember(e, open) { toolCardInput(e, showDetail = open) }
-    val title = if (multipleEdits) stringResource(R.string.chat_chat_screen_050, editFileCount(e, files)) else input.heading
-    Card(
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
-        shape = RoundedCornerShape(18.dp),
-        modifier = Modifier.fillMaxWidth().then(toolFileGesture(files) { open = !open }).animateContentSize(),
-    ) {
-        Row(Modifier.padding(horizontal = 14.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
-            Icon(toolIcon(e.tool), null, Modifier.size(20.dp), tint = MaterialTheme.colorScheme.primary)
-            Spacer(Modifier.size(10.dp))
-            Column(Modifier.weight(1f)) {
-                if (title != null) Text(
-                    highlightedCode(title, if (e.tool in COMMAND_TOOLS) commandCodeLanguage(e.tool, title) else codeLanguage("plain.txt")),
-                    style = MaterialTheme.typography.bodyMedium.copy(fontFamily = Mono),
-                    softWrap = wrap.input,
-                    modifier = if (wrap.input) Modifier else Modifier.horizontalScroll(rememberScrollState()),
-                    maxLines = if (open) 6 else 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-                if (multipleEdits && !e.title.isNullOrBlank() && !isFileChangeSummary(e.title)) {
-                    Text(e.title, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
-                if (input.description != null) {
-                    Text(input.description, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                }
-            }
-            Spacer(Modifier.size(8.dp))
-            StatusIcon(e.status)
-        }
-        if (!e.media.isNullOrEmpty() || !e.videos.isNullOrEmpty()) {
-            dev.remotecode.ui.common.EntryMedia(e.media, e.videos, Modifier.padding(start = 14.dp, end = 14.dp, bottom = 12.dp))
-        }
-        if (open || multipleEdits) {
-            Column(Modifier.padding(start = 14.dp, end = 14.dp, bottom = 12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                if (multipleEdits || (e.tool in EDIT_TOOLS && e.hasToolDetail)) {
-                    EditPreview(e, maxLines = if (open) Int.MAX_VALUE else 12, wrapLines = wrap.input, files = files)
-                } else if (input.detail != null) {
-                    CodeBlock(input.detail, diff = false, language = if (e.tool in COMMAND_TOOLS) commandCodeLanguage(e.tool, input.detail) else null, wrapLines = wrap.input)
-                }
-                if (open && !e.output.isNullOrBlank()) {
-                    Text(stringResource(R.string.chat_entry_views_028), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    CodeBlock(e.output, diff = false, wrapLines = wrap.output)
-                }
-                if (open && input.detail == null && !e.hasToolDetail && e.output.isNullOrBlank()) {
-                    Text(stringResource(R.string.chat_entry_extras_013), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
-            }
-        }
     }
 }
 

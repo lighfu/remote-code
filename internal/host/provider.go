@@ -10,12 +10,14 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
 type nativeSession struct {
 	mu                            sync.Mutex
 	agyPromptMu                   sync.Mutex
+	agyPromptActive               atomic.Bool
 	agyCommands                   []M
 	agyModeConfigID               string
 	agyModeRevision               uint64
@@ -64,6 +66,7 @@ type nativeProvider struct {
 	history          []M
 	historyUntil     time.Time
 	claudeHistory    map[string]claudeHistoryEntry
+	claudeWorkflow   claudeWorkflowActivityCache
 	transcriptMu     sync.Mutex
 	transcriptSeen   map[string]map[string]bool
 	transcriptSizes  map[string]int64
@@ -293,6 +296,9 @@ func (p *nativeProvider) settle(sid string, ok bool, text string) {
 			p.store.Patch(sid, S(e, "id"), M{"streaming": false})
 		}
 		if S(e, "kind") == "tool" && S(e, "status") == "running" && S(e, "tool") != "Agent" {
+			if p.name == "claude" && S(e, "tool") == "Workflow" && B(e, "claudeTaskLaunched") {
+				continue
+			}
 			if p.name == "antigravity" && p.agyBackgroundEntry(sid, S(e, "id")) {
 				continue
 			}
@@ -300,7 +306,8 @@ func (p *nativeProvider) settle(sid string, ok bool, text string) {
 			if !ok {
 				status = "error"
 			}
-			p.store.Patch(sid, S(e, "id"), M{"status": status})
+			// A background tool can report its own result after the snapshot was taken.
+			p.store.patchEntry(sid, S(e, "id"), M{"status": status}, "running")
 		}
 	}
 	p.store.Add(sid, M{"kind": "result", "ok": ok, "text": text})
@@ -354,8 +361,11 @@ func (p *nativeProvider) send(ctx context.Context, rec *Record, body M) error {
 	if p.name == "antigravity" {
 		p.dismissAgyQuestions(sid)
 	}
-	p.store.Add(sid, entry)
-	p.store.Update(sid, M{"status": "running"}, true)
+	remoteClaude := p.name == "claude" && r.Remote()
+	if !remoteClaude {
+		p.store.Add(sid, entry)
+		p.store.Update(sid, M{"status": "running"}, true)
+	}
 	if p.name == "claude" {
 		content := []any{}
 		if text != "" {
@@ -367,6 +377,9 @@ func (p *nativeProvider) send(ctx context.Context, rec *Record, body M) error {
 		message := M{"type": "user", "session_id": r.External(), "origin": M{"kind": "human"}, "parent_tool_use_id": nil, "uuid": userID, "message": M{"role": "user", "content": content}}
 		if B(body, "now") {
 			message["priority"] = "now"
+		}
+		if remoteClaude {
+			return p.sendClaudeRemoteUser(ctx, sid, r.Wire(), entry, message, S(body, "clientMessageId"))
 		}
 		return r.Wire().write(message)
 	}
@@ -471,7 +484,6 @@ func providerTurnMode(mode string) M {
 func (p *nativeProvider) detach(ctx context.Context, rec *Record) error {
 	sid := S(rec.Info, "id")
 	p.stopTranscriptFollower(sid)
-	p.stopAgyLogs(sid)
 	p.cancelPending(sid)
 	p.mu.Lock()
 	r := p.sessions[sid]

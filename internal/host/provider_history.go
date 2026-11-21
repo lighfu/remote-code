@@ -507,7 +507,8 @@ func (p *nativeProvider) readTranscript(rec *Record, path string) error {
 		for _, m := range messages {
 			if id := S(m, "uuid"); id != "" {
 				byID[id] = m
-				if !B(m, "isSidechain") && (S(m, "type") == "user" || S(m, "type") == "assistant" || S(m, "type") == "system") {
+				kind := S(m, "type")
+				if !B(m, "isSidechain") && (kind == "user" || kind == "assistant" || kind == "system" && !isClaudeTaskEvent(S(m, "subtype"))) {
 					last = id
 				}
 			}
@@ -617,13 +618,15 @@ func (p *nativeProvider) readClaudeTranscript(rec *Record, messages []M, chain, 
 	for _, m := range messages {
 		typ := S(m, "type")
 		uuid := S(m, "uuid")
-		if typ != "user" && typ != "assistant" || uuid != "" && len(chain) > 0 && !chain[uuid] {
+		taskEvent := typ == "system" && isClaudeTaskEvent(S(m, "subtype"))
+		unlinkedTask := taskEvent && !B(m, "isSidechain") && S(m, "parentUuid") == "" && S(m, "logicalParentUuid") == ""
+		if typ != "user" && typ != "assistant" && !taskEvent || !unlinkedTask && uuid != "" && len(chain) > 0 && !chain[uuid] {
 			continue
 		}
 		if typ == "user" {
 			m = p.claudeSkillMessage(sid, m)
 		}
-		if B(m, "isMeta") && !claudeHasInjectedSkill(m) {
+		if B(m, "isMeta") && !taskEvent && !claudeHasInjectedSkill(m) {
 			continue
 		}
 		if typ == "user" {
@@ -699,9 +702,18 @@ func (p *nativeProvider) readClaudeTranscript(rec *Record, messages []M, chain, 
 	}
 	p.store.repairTranscriptUserEntries(sid, repairs)
 	r := &nativeSession{external: S(rec.Info, "externalId"), parents: map[string]string{}, blocks: map[int]string{}}
-	for _, m := range rows[lastSaved+1:] {
-		if !seen[S(m, "_transcript_hash")] {
+	for i, m := range rows {
+		if seen[S(m, "_transcript_hash")] {
+			continue
+		}
+		if i > lastSaved || S(m, "type") == "system" {
 			p.claudeMessage(sid, r, m)
+		} else if S(m, "type") == "user" {
+			for _, block := range providerRows(providerMap(m["message"])["content"]) {
+				if S(block, "type") == "tool_result" {
+					p.store.claudeTaskLaunchResult(sid, S(block, "tool_use_id"), m, block)
+				}
+			}
 		}
 	}
 	p.store.repairClaudeSkillEntries(sid, skillEntries)

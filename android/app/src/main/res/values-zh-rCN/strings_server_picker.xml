@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="server_picker_title">连接的电脑</string>
+    <string name="server_picker_default_pc">电脑</string>
+    <string name="server_picker_current">电脑 %1$s</string>
+    <string name="server_picker_add">添加电脑</string>
+    <string name="server_picker_add_hint">在要添加的电脑上启动 Remote Code，并显示连接二维码。</string>
+    <string name="server_picker_forget_title">移除电脑</string>
+    <string name="server_picker_forget">要从连接列表中移除“%1$s”吗？</string>
+    <string name="server_picker_failed">无法更新电脑连接设置。</string>
+</resources>

@@ -90,6 +90,7 @@ import androidx.compose.ui.unit.dp
 import dev.remotecode.RemoteCodeApp
 import dev.remotecode.data.ConnState
 import dev.remotecode.data.Providers
+import dev.remotecode.data.ServerConfig
 import dev.remotecode.data.routeLabel
 import dev.remotecode.data.SessionInfo
 import dev.remotecode.ui.common.ProviderBadge
@@ -134,9 +135,13 @@ fun SessionsScreen(onOpen: (String) -> Unit, onHistory: () -> Unit, onSettings: 
         if (fabOpen) fabOpen = false else showArchived = false
     }
 
-    fun act(block: suspend () -> Unit) {
+    val displayedServer = settings?.server?.token
+    fun sessionTarget() = repo.api.server?.takeIf { it.token == displayedServer }
+
+    fun act(block: suspend (ServerConfig) -> Unit) {
+        val target = sessionTarget() ?: return
         scope.launch {
-            runCatching { block() }.onFailure { snackbar.showSnackbar(it.message ?: appString(R.string.screen_sessions_001)) }
+            runCatching { block(target) }.onFailure { snackbar.showSnackbar(it.message ?: appString(R.string.screen_sessions_001)) }
         }
     }
 
@@ -145,11 +150,12 @@ fun SessionsScreen(onOpen: (String) -> Unit, onHistory: () -> Unit, onSettings: 
     val swipeHaptics = dev.remotecode.ui.common.rememberHaptics()
 
     fun swipeArchive(s: SessionInfo) {
+        val target = sessionTarget() ?: return
         val to = !s.archived
         swipeHaptics.confirm()
         scope.launch {
             try {
-                repo.api.patch(s.id, archived = to)
+                repo.api.patch(s.id, archived = to, expectedServer = target)
             } catch (e: Exception) {
                 snackbar.showSnackbar(e.message ?: appString(R.string.screen_sessions_001))
                 return@launch
@@ -161,13 +167,14 @@ fun SessionsScreen(onOpen: (String) -> Unit, onHistory: () -> Unit, onSettings: 
                 duration = androidx.compose.material3.SnackbarDuration.Long,
             )
             if (r == androidx.compose.material3.SnackbarResult.ActionPerformed) {
-                runCatching { repo.api.patch(s.id, archived = !to) }.onFailure { snackbar.showSnackbar(it.message ?: appString(R.string.screen_sessions_005)) }
+                runCatching { repo.api.patch(s.id, archived = !to, expectedServer = target) }.onFailure { snackbar.showSnackbar(it.message ?: appString(R.string.screen_sessions_005)) }
             }
         }
     }
 
     /** 取り消し猶予が終わったら削除し、画面離脱でも確定する。 */
     fun swipeDelete(s: SessionInfo) {
+        val target = sessionTarget() ?: return
         swipeHaptics.reject()
         pendingDelete += s.id
         scope.launch {
@@ -187,7 +194,7 @@ fun SessionsScreen(onOpen: (String) -> Unit, onHistory: () -> Unit, onSettings: 
             }
             // 画面離脱でキャンセルされても削除を完了させる。
             val err = kotlinx.coroutines.withContext(kotlinx.coroutines.NonCancellable) {
-                runCatching { repo.api.delete(s.id) }.exceptionOrNull()
+                runCatching { repo.api.delete(s.id, expectedServer = target) }.exceptionOrNull()
             }
             if (err != null) {
                 pendingDelete -= s.id
@@ -196,10 +203,12 @@ fun SessionsScreen(onOpen: (String) -> Unit, onHistory: () -> Unit, onSettings: 
         }
     }
 
+    val showBackgroundCommands = settings?.showBackgroundCommands == true && conn is ConnState.Connected
+    fun isActive(s: SessionInfo) = s.isRunning || (showBackgroundCommands && s.isBackgroundCommandOnly)
     val visible = sessions.filter { it.archived == showArchived && it.id !in pendingDelete }
     val waiting = visible.filter { it.isWaiting }
-    val running = visible.filter { it.isRunning && !it.isWaiting }
-    val rest = visible.filter { !it.isWaiting && !it.isRunning }
+    val running = visible.filter { isActive(it) && !it.isWaiting }
+    val rest = visible.filter { !it.isWaiting && !isActive(it) }
 
     Scaffold(
         modifier = Modifier.nestedScroll(scroll.nestedScrollConnection),
@@ -340,7 +349,7 @@ fun SessionsScreen(onOpen: (String) -> Unit, onHistory: () -> Unit, onSettings: 
                             item(key = "__empty") { EmptyState(conn, showArchived) }
                         } else {
                             section(appString(R.string.screen_sessions_024), waiting, onOpen, ::swipeArchive, ::swipeDelete) { menuFor = it }
-                            section(appString(R.string.screen_sessions_025), running, onOpen, ::swipeArchive, ::swipeDelete) { menuFor = it }
+                            section(appString(R.string.screen_sessions_025), running, onOpen, ::swipeArchive, ::swipeDelete, showBackgroundCommands) { menuFor = it }
                             section(if (waiting.isEmpty() && running.isEmpty()) null else appString(R.string.screen_sessions_026), rest, onOpen, ::swipeArchive, ::swipeDelete) { menuFor = it }
                         }
                     }
@@ -365,8 +374,8 @@ fun SessionsScreen(onOpen: (String) -> Unit, onHistory: () -> Unit, onSettings: 
             s,
             onDismiss = { menuFor = null },
             onRename = { menuFor = null; renameFor = s },
-            onArchive = { menuFor = null; act { repo.api.patch(s.id, archived = !s.archived) } },
-            onDetach = { menuFor = null; act { repo.api.detach(s.id) } },
+            onArchive = { menuFor = null; act { repo.api.patch(s.id, archived = !s.archived, expectedServer = it) } },
+            onDetach = { menuFor = null; act { repo.api.detach(s.id, expectedServer = it) } },
             onDelete = { menuFor = null; deleteFor = s },
         )
     }
@@ -376,7 +385,7 @@ fun SessionsScreen(onOpen: (String) -> Unit, onHistory: () -> Unit, onSettings: 
             onDismissRequest = { renameFor = null },
             title = { Text(stringResource(R.string.screen_sessions_027)) },
             text = { OutlinedTextField(value = title, onValueChange = { title = it }, singleLine = true) },
-            confirmButton = { Button(onClick = { renameFor = null; act { repo.api.patch(s.id, title = title) } }) { Text(stringResource(R.string.screen_sessions_028)) } },
+            confirmButton = { Button(onClick = { renameFor = null; act { repo.api.patch(s.id, title = title, expectedServer = it) } }) { Text(stringResource(R.string.screen_sessions_028)) } },
             dismissButton = { TextButton(onClick = { renameFor = null }) { Text(stringResource(R.string.screen_sessions_029)) } },
         )
     }
@@ -385,7 +394,7 @@ fun SessionsScreen(onOpen: (String) -> Unit, onHistory: () -> Unit, onSettings: 
             onDismissRequest = { deleteFor = null },
             title = { Text(stringResource(R.string.screen_sessions_030)) },
             text = { Text(stringResource(R.string.screen_sessions_031, s.title, Providers.label(s.provider))) },
-            confirmButton = { Button(onClick = { deleteFor = null; act { repo.api.delete(s.id) } }) { Text(stringResource(R.string.screen_sessions_032)) } },
+            confirmButton = { Button(onClick = { deleteFor = null; act { repo.api.delete(s.id, expectedServer = it) } }) { Text(stringResource(R.string.screen_sessions_032)) } },
             dismissButton = { TextButton(onClick = { deleteFor = null }) { Text(stringResource(R.string.screen_sessions_029)) } },
         )
     }
@@ -397,6 +406,7 @@ private fun androidx.compose.foundation.lazy.LazyListScope.section(
     onOpen: (String) -> Unit,
     onArchive: (SessionInfo) -> Unit,
     onDelete: (SessionInfo) -> Unit,
+    showBackgroundCommands: Boolean = false,
     onLongPress: (SessionInfo) -> Unit,
 ) {
     if (list.isEmpty()) return
@@ -411,7 +421,15 @@ private fun androidx.compose.foundation.lazy.LazyListScope.section(
         }
     }
     itemsIndexed(list, key = { _, s -> s.id }) { i, s ->
-        SwipeableSessionRow(s, i, list.size, onOpen = { onOpen(s.id) }, onLongPress = { onLongPress(s) }, onArchive = { onArchive(s) }, onDelete = { onDelete(s) }, modifier = Modifier.animateItem())
+        SwipeableSessionRow(
+            s, i, list.size,
+            backgroundCommandOnly = showBackgroundCommands && s.isBackgroundCommandOnly,
+            onOpen = { onOpen(s.id) },
+            onLongPress = { onLongPress(s) },
+            onArchive = { onArchive(s) },
+            onDelete = { onDelete(s) },
+            modifier = Modifier.animateItem(),
+        )
     }
 }
 
@@ -420,6 +438,7 @@ private fun SwipeableSessionRow(
     s: SessionInfo,
     index: Int,
     count: Int,
+    backgroundCommandOnly: Boolean,
     onOpen: () -> Unit,
     onLongPress: () -> Unit,
     onArchive: () -> Unit,
@@ -476,26 +495,28 @@ private fun SwipeableSessionRow(
             }
         },
     ) {
-        SessionRow(s, index, count, onClick = onOpen, onLongClick = onLongPress)
+        SessionRow(s, index, count, backgroundCommandOnly, onClick = onOpen, onLongClick = onLongPress)
     }
 }
 
 @Composable
-private fun SessionRow(s: SessionInfo, index: Int, count: Int, onClick: () -> Unit, onLongClick: () -> Unit, modifier: Modifier = Modifier) {
+private fun SessionRow(
+    s: SessionInfo,
+    index: Int,
+    count: Int,
+    backgroundCommandOnly: Boolean,
+    onClick: () -> Unit,
+    onLongClick: () -> Unit,
+) {
     SegmentedListItem(
         onClick = onClick,
         onLongClick = onLongClick,
         onLongClickLabel = appString(R.string.screen_sessions_034),
         shapes = ListItemDefaults.segmentedShapes(index = index, count = count),
         colors = ListItemDefaults.segmentedColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
-        modifier = modifier,
-        leadingContent = { ProviderBadge(s.provider, running = s.isRunning, waiting = s.isWaiting) },
-        overlineContent = {
-            Text(
-                "${Providers.label(s.provider)} · ${shortPath(s.cwd)}",
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
+        leadingContent = { ProviderBadge(s.provider, running = s.isRunning || backgroundCommandOnly, waiting = s.isWaiting) },
+        overlineContent = if (s.cwd.isBlank()) null else {
+            { Text(shortPath(s.cwd), maxLines = 1, overflow = TextOverflow.Ellipsis) }
         },
         supportingContent = {
             if (s.preview.isNotBlank()) Text(s.preview, maxLines = 2, overflow = TextOverflow.Ellipsis)
@@ -505,6 +526,11 @@ private fun SessionRow(s: SessionInfo, index: Int, count: Int, onClick: () -> Un
                 Text(relativeTime(s.updatedAt), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 when {
                     s.pending > 0 -> Badge(containerColor = MaterialTheme.colorScheme.error) { Text("${s.pending}") }
+                    backgroundCommandOnly -> Text(
+                        stringResource(R.string.session_background_command_running),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.primary,
+                    )
                     s.isRunning || s.status == "error" -> Text(
                         statusLabel(s.status, s.pending),
                         style = MaterialTheme.typography.labelSmall,

@@ -37,13 +37,10 @@
     <string name="chat_cache_sheet_009">"有效"</string>
     <string name="chat_cache_sheet_010">"已過期"</string>
     <string name="chat_cache_sheet_011">"最近的請求"</string>
-    <string name="chat_cache_sheet_012">"從未因過期而重寫"</string>
-    <string name="chat_cache_sheet_013">"過期重寫次數：%1$s 次"</string>
+    <string name="chat_cache_sheet_013">"重建 %1$d 次"</string>
     <string name="chat_cache_sheet_014">預估節省金額 %1$s</string>
     <string name="chat_cache_savings_partial">預估節省金額 %1$s (僅限已定價請求)</string>
-    <string name="chat_cache_sheet_015">"未命中"</string>
-    <string name="chat_cache_sheet_016">"寫入（1 小時 %1$s / 5 分鐘 %2$s）"</string>
-    <string name="chat_cache_sheet_017">"讀取"</string>
+    <string name="chat_cache_sheet_016">"Write（1 小時 %1$s / 5 分鐘 %2$s）"</string>
     <string name="chat_cache_sheet_018">"命中率 %1$.1f%%"</string>
     <string name="chat_cache_sheet_019">"此工作階段整體（%1$s 次請求）"</string>
     <string name="chat_cache_sheet_020">"快取"</string>
@@ -58,8 +55,6 @@
     <string name="chat_chat_screen_004">"搜尋"</string>
     <string name="chat_chat_screen_005">"指令"</string>
     <string name="chat_chat_screen_006">"記錄 %1$s"</string>
-    <string name="chat_chat_screen_007">"輸入 %1$s（%2$s）· 輸出 %3$s"</string>
-    <string name="chat_chat_screen_008">" 快取 %1$s%%"</string>
     <string name="chat_chat_screen_009">"停止"</string>
     <string name="chat_chat_screen_010">"語音輸入"</string>
     <string name="chat_chat_screen_011">"中斷作業並立即傳送"</string>
@@ -178,7 +173,6 @@
     <string name="chat_code_viewer_022">"%1$s 行%2$s"</string>
     <string name="chat_code_viewer_023">"沒有可新增引用的對話"</string>
     <string name="chat_code_viewer_024">"連線目的地已變更。請重新開啟檔案"</string>
-    <string name="chat_code_viewer_025">"無法確認原始連線目標。請重新開啟檔案"</string>
     <string name="chat_code_viewer_026">"顯示結尾已在行中截斷。請選取不包含此行的範圍"</string>
     <string name="chat_completed">"完成"</string>
     <string name="chat_context">"Context"</string>
@@ -194,7 +188,6 @@
     <string name="chat_context_sheet_010">"您的發言"</string>
     <string name="chat_context_sheet_011">"對話用量分佈"</string>
     <string name="chat_context_sheet_012">"視窗之外（需要時才載入）"</string>
-    <string name="chat_context_sheet_013">"總計為實際用量。分佈明細是根據對話記錄大小估算的比重"</string>
     <string name="chat_context_sheet_014">" · 達 %1$s 時自動摘要"</string>
     <string name="chat_context_sheet_015">"%1$s / %2$s 個 Token"</string>
     <string name="chat_context_sheet_016">"摘要"</string>
@@ -405,19 +398,12 @@
     <string name="chat_usage_sheet_010">"用量未知"</string>
     <string name="chat_usage_sheet_011">"於 %1$s 取得"</string>
     <string name="chat_usage_sheet_012">"剛剛取得"</string>
-    <string name="chat_usage_sheet_013">"剛剛"</string>
     <string name="chat_usage_sheet_014">"%1$s 的用量"</string>
     <string name="chat_usage_sheet_015">"用量"</string>
     <string name="chat_usage_sheet_016">"週"</string>
     <string name="chat_waiting">"等待中"</string>
     <string name="chat_widget_card_001">"圖表"</string>
     <string name="chat_working">"處理中"</string>
-    <string name="chat_input">"輸入"</string>
-    <string name="chat_output">"輸出"</string>
-    <string name="chat_input_wrap_enable">"開啟輸入自動換行"</string>
-    <string name="chat_input_wrap_disable">"關閉輸入自動換行"</string>
-    <string name="chat_output_wrap_enable">"開啟輸出自動換行"</string>
-    <string name="chat_output_wrap_disable">"關閉輸出自動換行"</string>
     <string name="chat_fast_mode_on">"Fast mode ON"</string>
     <string name="chat_fast_mode_state">"Fast mode：%1$s"</string>
     <string name="chat_on">"開啟"</string>
@@ -596,8 +582,8 @@
     <string name="core_approval_continue_plan">"繼續執行計畫"</string>
     <string name="core_approval_deny">"拒絕"</string>
     <string name="core_approval_deny_stop">"拒絕並中斷"</string>
-    <string name="core_attachment_named_too_large">"「%1$s」已超過 50 MB"</string>
-    <string name="core_attachment_too_large">"最多可附加 50 MB 的檔案"</string>
+    <string name="core_attachment_named_too_large">"「%1$s」已超過 %2$d MiB"</string>
+    <string name="core_attachment_too_large">"最多可附加 %1$d MiB 的檔案"</string>
     <string name="core_cancel">"取消"</string>
     <string name="core_channel_approval">"核准與詢問"</string>
     <string name="core_channel_approval_description">"Claude / Codex 等待允許或回覆時"</string>
@@ -718,6 +704,8 @@
     <string name="core_upload_error">"無法上傳檔案"</string>
     <string name="core_upload_http_error">"無法上傳檔案 (%1$d)"</string>
     <string name="core_upload_server_update_required">"更新 PC 端伺服器後即可附加檔案"</string>
+    <string name="core_large_upload_server_update_required">"請更新 PC 端伺服器以附加大型檔案"</string>
+    <string name="core_upload_size_changed">"檔案大小已變更，請重新選取後傳送"</string>
     <string name="core_usage_all_models">"所有模型"</string>
     <string name="core_usage_by_model">"按模型"</string>
     <string name="core_usage_days">"%1$s 天"</string>
@@ -800,8 +788,6 @@
     <string name="screen_model_picker_016">"提高回應速度，用量與費用可能會增加"</string>
     <string name="screen_model_picker_017">"選擇此項"</string>
     <string name="screen_model_picker_018">"預設模型"</string>
-    <string name="screen_remote_image_001">"無法建立儲存目的地"</string>
-    <string name="screen_remote_image_002">"無法寫入儲存目的地"</string>
     <string name="screen_remote_image_003">"圖片"</string>
     <string name="screen_remote_image_004">"重新載入圖片"</string>
     <string name="screen_remote_image_005">"關閉"</string>
@@ -820,8 +806,6 @@
     <string name="screen_video_media_009">"重新播放"</string>
     <string name="screen_video_source_missing">在電腦上找不到原始影片檔案，請重新附加。</string>
     <string name="screen_video_prepare_local">正在暫存影片…</string>
-    <string name="screen_video_media_010">"無法建立儲存目的地"</string>
-    <string name="screen_video_media_011">"無法寫入儲存目的地"</string>
     <string name="screen_native_project_code_editor_001">"程式碼編輯器"</string>
     <string name="screen_project_editor_001">"請重新載入檔案"</string>
     <string name="screen_project_editor_002">"連線目標已變更，請返回原 PC 後再引用"</string>
@@ -1054,8 +1038,6 @@
     <string name="screen_agent_manage_003">"技能"</string>
     <string name="screen_agent_manage_004">"外掛程式"</string>
     <string name="screen_agent_manage_005">"管理 %1$s"</string>
-    <string name="screen_agent_manage_006">"返回"</string>
-    <string name="screen_agent_manage_007">"重新載入"</string>
     <string name="screen_agent_manage_008">"放棄"</string>
     <string name="screen_agent_manage_009">"變更將自新建立的工作階段起生效"</string>
     <string name="screen_agent_manage_010">"主要設定"</string>
@@ -1090,7 +1072,6 @@
     <string name="screen_agent_manage_039">"將連同技能資料夾一併刪除。此操作無法復原。"</string>
     <string name="screen_agent_manage_040">"已刪除"</string>
     <string name="screen_agent_manage_041">"已建立「%1$s」"</string>
-    <string name="screen_agent_manage_042">"刪除"</string>
     <string name="screen_agent_manage_043">"內建或外掛程式技能僅供檢視"</string>
     <string name="screen_agent_manage_044">"安裝外掛程式"</string>
     <string name="screen_agent_manage_045">"名稱@市集"</string>
@@ -1131,8 +1112,6 @@
     <string name="screen_control_paths_008">"顯示控制路徑"</string>
     <string name="screen_control_paths_009">"返回"</string>
     <string name="screen_control_paths_010">"重新整理路徑說明"</string>
-    <string name="screen_control_paths_011">"設定與路徑說明"</string>
-    <string name="screen_control_paths_012">"此說明基於 PC 端的實作與設定。本畫面並非用於各階段的連線或登入確認。"</string>
     <string name="screen_control_paths_013">"取得設定: %1$s"</string>
     <string name="screen_control_paths_014">"連線至 PC 後即可查看控制路徑說明。"</string>
     <string name="screen_control_paths_015">"目前處於離線狀態，顯示上次取得的設定。設定變更將在重新連線並重新整理後生效。"</string>
@@ -1150,7 +1129,6 @@
     <string name="screen_control_paths_027">"顯示路徑"</string>
     <string name="screen_control_paths_028">"各路徑件數尚未判定"</string>
     <string name="screen_control_paths_029">"符合的工作階段 %1$s 件"</string>
-    <string name="screen_control_paths_030">"件數為依據儲存標記的相應對話數，非執行中或成功連線的件數。"</string>
     <string name="screen_control_paths_031">"收起詳細資訊"</string>
     <string name="screen_control_paths_032">"顯示詳細資訊"</string>
     <string name="screen_control_paths_033">"路徑 %1$s / %2$s、%3$s、%4$s"</string>
@@ -1461,5 +1439,7 @@
     <string name="server_dependencies_title">"伺服器相依套件"</string>
     <string name="server_dependencies_unavailable">"自動安裝僅適用於 Windows。"</string>
     <string name="server_dependencies_unknown">"未知的相依套件。"</string>
-    <string name="server_dependencies_working">"正在進行另一項安裝作業。"</string>
+    <string name="session_background_command_running">Shell 指令執行中</string>
+    <string name="settings_background_commands">顯示仍在執行 Shell 指令的對話</string>
+    <string name="settings_background_commands_description">Antigravity 回覆結束後，只要 Shell 指令仍在執行，就將該對話顯示在進行中的清單中。</string>
 </resources>

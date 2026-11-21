@@ -115,7 +115,9 @@ func (p *nativeProvider) sendAgyPrompt(sid string, r *nativeSession, input []any
 		p.store.Update(sid, M{"status": "running"}, false)
 		ctx, cancel := context.WithTimeout(context.Background(), 24*time.Hour)
 		defer cancel()
+		r.agyPromptActive.Store(true)
 		res, err := r.Wire().request(ctx, "session/prompt", M{"sessionId": r.External(), "prompt": input})
+		r.agyPromptActive.Store(false)
 		if p.session(sid) != r {
 			return
 		}
@@ -417,8 +419,8 @@ func (p *nativeProvider) agyMessage(msg M) {
 		if len(out) > 0 {
 			entry["output"] = strings.Join(out, "\n")
 		}
-		p.store.Add(sid, entry)
-		p.agyObserveTool(sid, id, S(entry, "output")+"\n"+providerPretty(u))
+		savedEntry := p.store.Add(sid, entry)
+		p.agyObserveTool(sid, savedEntry, providerPretty(u), S(entry, "output"), r)
 	case "plan":
 		items := []M{}
 		for _, item := range providerRows(u["entries"]) {

@@ -53,6 +53,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import dev.remotecode.RemoteCodeApp
@@ -90,55 +91,37 @@ fun SettingsScreen(onBack: () -> Unit, onChangeServer: () -> Unit, onAppearance:
             Modifier.padding(pad).fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 12.dp),
             verticalArrangement = Arrangement.spacedBy(ListItemDefaults.SegmentedGap),
         ) {
-            Text(stringResource(R.string.screen_settings_003), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(8.dp))
-            SegmentedListItem(
+            SettingsHeading(stringResource(R.string.screen_settings_003), Modifier.padding(8.dp))
+            val publicUrl = s.server?.publicUrl.orEmpty()
+            // 保存済みの公開 URL があれば、古い一時 URL を隠す。
+            val urls = s.server?.candidates.orEmpty().filterNot { url ->
+                url.contains("trycloudflare.com") && publicUrl.isNotBlank() && url != publicUrl.trimEnd('/')
+            }
+            SettingsRow(
+                s.server?.name?.ifBlank { null } ?: meta?.host ?: appString(R.string.screen_settings_005),
+                Icons.Rounded.Computer, 0, 4,
+                summary = if (urls.isEmpty()) appString(R.string.screen_settings_004)
+                    else urls.joinToString("\n") { "${dev.remotecode.data.routeLabel(it)}: $it" },
                 onClick = onChangeServer,
-                shapes = ListItemDefaults.segmentedShapes(0, 4),
-                colors = ListItemDefaults.segmentedColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
-                leadingContent = { Icon(Icons.Rounded.Computer, null) },
-                supportingContent = {
-                    val server = s.server
-                    // 保存済みの公開 URL があれば、古い一時 URL を隠す。
-                    val urls = server?.candidates.orEmpty().filter { u ->
-                        !(u.contains("trycloudflare.com") && server!!.publicUrl.isNotBlank() && u != server.publicUrl.trimEnd('/'))
-                    }
-                    Text(
-                        if (urls.isEmpty()) appString(R.string.screen_settings_004) else urls.joinToString("\n") { "${dev.remotecode.data.routeLabel(it)}: $it" },
-                    )
-                },
-            ) { Text(s.server?.name?.ifBlank { null } ?: meta?.host ?: appString(R.string.screen_settings_005)) }
-            SegmentedListItem(
-                onClick = { repo.reconnectNow() },
-                shapes = ListItemDefaults.segmentedShapes(1, 4),
-                colors = ListItemDefaults.segmentedColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
-                leadingContent = { Icon(Icons.Rounded.Sync, null) },
-            ) { Text(stringResource(R.string.screen_settings_006)) }
-            SegmentedListItem(
-                onClick = onNetLog,
-                shapes = ListItemDefaults.segmentedShapes(2, 4),
-                colors = ListItemDefaults.segmentedColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
-                leadingContent = { Icon(Icons.Rounded.NetworkCheck, null) },
-                supportingContent = { Text(stringResource(R.string.screen_settings_007)) },
-            ) { Text(stringResource(R.string.screen_settings_008)) }
-            SegmentedListItem(
-                onClick = onControlPaths,
-                shapes = ListItemDefaults.segmentedShapes(3, 4),
-                colors = ListItemDefaults.segmentedColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
-                leadingContent = { Icon(Icons.Rounded.AccountTree, null) },
-                supportingContent = { Text(stringResource(R.string.screen_settings_009)) },
-            ) { Text(stringResource(R.string.screen_settings_010)) }
+            )
+            SettingsRow(stringResource(R.string.screen_settings_006), Icons.Rounded.Sync, 1, 4) { repo.reconnectNow() }
+            SettingsRow(
+                stringResource(R.string.screen_settings_008), Icons.Rounded.NetworkCheck, 2, 4,
+                summary = stringResource(R.string.screen_settings_007), onClick = onNetLog,
+            )
+            SettingsRow(
+                stringResource(R.string.screen_settings_010), Icons.Rounded.AccountTree, 3, 4,
+                summary = stringResource(R.string.screen_settings_009), onClick = onControlPaths,
+            )
 
-            Text("PC", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(start = 8.dp, top = 16.dp, bottom = 8.dp))
-            SegmentedListItem(
-                onClick = onTerminals,
-                shapes = ListItemDefaults.segmentedShapes(0, 2),
-                colors = ListItemDefaults.segmentedColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
-                leadingContent = { Icon(Icons.Rounded.Terminal, null) },
-                supportingContent = { Text(stringResource(R.string.screen_settings_011)) },
-            ) { Text(stringResource(R.string.screen_settings_012)) }
+            SettingsHeading("PC")
+            SettingsRow(
+                stringResource(R.string.screen_settings_012), Icons.Rounded.Terminal, 0, 2,
+                summary = stringResource(R.string.screen_settings_011), onClick = onTerminals,
+            )
             ServerDependenciesSection(api = repo.api, server = dependencyServer, connected = conn is ConnState.Connected, refreshAvailability = { expected, fresh -> repo.refreshMeta(expected, fresh) })
 
-            Text(stringResource(R.string.screen_settings_013), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(start = 8.dp, top = 16.dp, bottom = 8.dp))
+            SettingsHeading(stringResource(R.string.screen_settings_013))
             listOf(
                 Triple("claude", appString(R.string.screen_settings_014), appString(R.string.screen_settings_015)),
                 Triple("codex", appString(R.string.screen_settings_016), appString(R.string.screen_settings_017)),
@@ -153,52 +136,38 @@ fun SettingsScreen(onBack: () -> Unit, onChangeServer: () -> Unit, onAppearance:
                 ) { Text(title) }
             }
 
-            Text(stringResource(R.string.screen_settings_019), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(start = 8.dp, top = 16.dp, bottom = 8.dp))
-            SegmentedListItem(
-                onClick = {
-                    val on = !s.backgroundNotify
-                    haptics.toggle(on)
-                    scope.launch { repo.settingsStore.setBackgroundNotify(on) }
-                    if (on) ConnectionService.start(context) else ConnectionService.stop(context)
-                },
-                shapes = ListItemDefaults.segmentedShapes(0, 2),
-                colors = ListItemDefaults.segmentedColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
-                leadingContent = { Icon(Icons.Rounded.NotificationsActive, null) },
-                supportingContent = { Text(stringResource(R.string.screen_settings_020)) },
-                trailingContent = { Switch(checked = s.backgroundNotify, onCheckedChange = null) },
-            ) { Text(stringResource(R.string.screen_settings_021)) }
-            SegmentedListItem(
-                onClick = {
-                    context.startActivity(
-                        Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
-                    )
-                },
-                shapes = ListItemDefaults.segmentedShapes(1, 2),
-                colors = ListItemDefaults.segmentedColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
-                leadingContent = { Icon(Icons.Rounded.Notifications, null) },
-                supportingContent = { Text(stringResource(R.string.screen_settings_022)) },
-            ) { Text(stringResource(R.string.screen_settings_023)) }
+            SettingsHeading(stringResource(R.string.screen_settings_019))
+            SettingsRow(
+                stringResource(R.string.screen_settings_021), Icons.Rounded.NotificationsActive, 0, 2,
+                summary = stringResource(R.string.screen_settings_020), checked = s.backgroundNotify,
+            ) {
+                val on = !s.backgroundNotify
+                haptics.toggle(on)
+                scope.launch { repo.settingsStore.setBackgroundNotify(on) }
+                if (on) ConnectionService.start(context) else ConnectionService.stop(context)
+            }
+            SettingsRow(
+                stringResource(R.string.screen_settings_023), Icons.Rounded.Notifications, 1, 2,
+                summary = stringResource(R.string.screen_settings_022),
+            ) {
+                context.startActivity(
+                    Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+                )
+            }
 
-            Text(stringResource(R.string.screen_settings_024), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(start = 8.dp, top = 16.dp, bottom = 8.dp))
-            SegmentedListItem(
-                onClick = onAppearance,
-                shapes = ListItemDefaults.segmentedShapes(0, 1),
-                colors = ListItemDefaults.segmentedColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
-                leadingContent = { Icon(Icons.Rounded.Palette, null) },
-                supportingContent = { Text(stringResource(R.string.screen_settings_025)) },
-            ) { Text(stringResource(R.string.screen_settings_026)) }
+            SettingsHeading(stringResource(R.string.screen_settings_024))
+            SettingsRow(
+                stringResource(R.string.screen_settings_026), Icons.Rounded.Palette, 0, 1,
+                summary = stringResource(R.string.screen_settings_025), prominent = true, onClick = onAppearance,
+            )
             LanguageSettingsItem()
             RegionalCurrencySettingsItem(s.localCurrency, meta, repo.settingsStore::setLocalCurrency)
             Spacer(Modifier.height(8.dp))
             Box {
-                SegmentedListItem(
-                    onClick = { thinkingMenu = true },
-                    shapes = ListItemDefaults.segmentedShapes(0, 3),
-                    colors = ListItemDefaults.segmentedColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
-                    leadingContent = { Icon(Icons.Rounded.Lightbulb, null) },
-                    supportingContent = { Text(ThinkingModes.description(s.thinking)) },
-                    trailingContent = { Text(ThinkingModes.label(s.thinking), color = MaterialTheme.colorScheme.primary) },
-                ) { Text(stringResource(R.string.screen_settings_027)) }
+                SettingsRow(
+                    stringResource(R.string.screen_settings_027), Icons.Rounded.Lightbulb, 0, 4,
+                    summary = ThinkingModes.description(s.thinking), value = ThinkingModes.label(s.thinking),
+                ) { thinkingMenu = true }
                 DropdownMenu(
                     expanded = thinkingMenu,
                     onDismissRequest = { thinkingMenu = false },
@@ -223,20 +192,25 @@ fun SettingsScreen(onBack: () -> Unit, onChangeServer: () -> Unit, onAppearance:
                     }
                 }
             }
-            SegmentedListItem(
-                onClick = { haptics.toggle(!s.toolDetail); scope.launch { repo.settingsStore.setToolDetail(!s.toolDetail) } },
-                shapes = ListItemDefaults.segmentedShapes(1, 3),
-                colors = ListItemDefaults.segmentedColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
-                leadingContent = { Icon(Icons.Rounded.Build, null) },
-                supportingContent = { Text(stringResource(R.string.screen_settings_028)) },
-                trailingContent = { Switch(checked = s.toolDetail, onCheckedChange = null) },
-            ) { Text(stringResource(R.string.screen_settings_029)) }
-            SegmentedListItem(
-                onClick = { haptics.tick(); showFooterDisplay = true },
-                shapes = ListItemDefaults.segmentedShapes(2, 3),
-                colors = ListItemDefaults.segmentedColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
-                leadingContent = { Icon(Icons.Rounded.Visibility, null) },
-            ) { Text(stringResource(R.string.chat_chat_screen_054)) }
+            SettingsRow(
+                stringResource(R.string.screen_settings_029), Icons.Rounded.Build, 1, 4,
+                summary = stringResource(R.string.screen_settings_028), checked = s.toolDetail,
+            ) {
+                haptics.toggle(!s.toolDetail)
+                scope.launch { repo.settingsStore.setToolDetail(!s.toolDetail) }
+            }
+            SettingsRow(stringResource(R.string.chat_chat_screen_054), Icons.Rounded.Visibility, 2, 4) {
+                haptics.tick()
+                showFooterDisplay = true
+            }
+            SettingsRow(
+                stringResource(R.string.settings_background_commands), Icons.Rounded.Terminal, 3, 4,
+                summary = stringResource(R.string.settings_background_commands_description), checked = s.showBackgroundCommands,
+            ) {
+                val on = !s.showBackgroundCommands
+                haptics.toggle(on)
+                scope.launch { repo.settingsStore.setShowBackgroundCommands(on) }
+            }
 
             Spacer(Modifier.height(8.dp))
             WrapSetting(R.string.settings_wrap_tool_input, s.toolWrap.input, 0) { on ->
@@ -249,7 +223,7 @@ fun SettingsScreen(onBack: () -> Unit, onChangeServer: () -> Unit, onAppearance:
                 scope.launch { repo.settingsStore.setCodeWrap(on) }
             }
 
-            Text(stringResource(R.string.screen_settings_030), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(start = 8.dp, top = 16.dp, bottom = 8.dp))
+            SettingsHeading(stringResource(R.string.screen_settings_030))
             AppUpdateItem(connected = conn is ConnState.Connected)
 
             run {
@@ -279,13 +253,44 @@ fun SettingsScreen(onBack: () -> Unit, onChangeServer: () -> Unit, onAppearance:
 @Composable
 private fun WrapSetting(title: Int, checked: Boolean, index: Int, onChange: (Boolean) -> Unit) {
     val haptics = dev.remotecode.ui.common.rememberHaptics()
+    SettingsRow(stringResource(title), Icons.AutoMirrored.Rounded.WrapText, index, 3, checked = checked) {
+        haptics.toggle(!checked)
+        onChange(!checked)
+    }
+}
+
+@Composable
+private fun SettingsHeading(title: String, modifier: Modifier = Modifier.padding(start = 8.dp, top = 16.dp, bottom = 8.dp)) {
+    Text(title, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary, modifier = modifier)
+}
+
+@Composable
+private fun SettingsRow(
+    title: String,
+    icon: ImageVector,
+    index: Int,
+    count: Int,
+    summary: String? = null,
+    checked: Boolean? = null,
+    value: String? = null,
+    prominent: Boolean = false,
+    onClick: () -> Unit,
+) {
+    val supporting: (@Composable () -> Unit)? = if (summary != null) ({ Text(summary) }) else null
+    val trailing: (@Composable () -> Unit)? = when {
+        checked != null -> ({ Switch(checked = checked, onCheckedChange = null) })
+        value != null -> ({ Text(value, color = MaterialTheme.colorScheme.primary) })
+        else -> null
+    }
+    val colors = MaterialTheme.colorScheme
     SegmentedListItem(
-        onClick = { haptics.toggle(!checked); onChange(!checked) },
-        shapes = ListItemDefaults.segmentedShapes(index, 3),
-        colors = ListItemDefaults.segmentedColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
-        leadingContent = { Icon(Icons.AutoMirrored.Rounded.WrapText, null) },
-        trailingContent = { Switch(checked = checked, onCheckedChange = null) },
-    ) { Text(stringResource(title)) }
+        onClick = onClick,
+        shapes = ListItemDefaults.segmentedShapes(index, count),
+        colors = ListItemDefaults.segmentedColors(containerColor = if (prominent) colors.primaryContainer else colors.surfaceContainer),
+        leadingContent = { Icon(icon, null) },
+        supportingContent = supporting,
+        trailingContent = trailing,
+    ) { Text(title) }
 }
 
 private fun appVersion(context: android.content.Context): String =

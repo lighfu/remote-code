@@ -19,14 +19,18 @@ internal class DesktopInputQueue {
     fun offer(cmd: DesktopCommand): Boolean {
         if (closed) return false
         val last = pending.lastOrNull()
-        if (last != null && cmd.layout == last.layout && last.input.type == cmd.input.type) {
+        if (last != null && cmd.layout == last.layout && last.input.type == cmd.input.type &&
+            last.input.dragId == cmd.input.dragId) {
             when (cmd.input.type) {
-                "moveBy" -> {
+                "moveBy", "cursorDragMove" -> {
                     val a = requireNotNull(last.input.point)
                     val b = requireNotNull(cmd.input.point)
-                    val delta = DesktopPoint((a.x + b.x).coerceIn(-1.0, 1.0), (a.y + b.y).coerceIn(-1.0, 1.0))
-                    pending[pending.lastIndex] = last.copy(input = last.input.copy(point = delta))
-                    return true
+                    val delta = DesktopPoint(a.x + b.x, a.y + b.y)
+                    // Reversing direction at a monitor edge must preserve the return movement.
+                    if (a.x * b.x >= 0.0 && a.y * b.y >= 0.0 && delta.x in -1.0..1.0 && delta.y in -1.0..1.0) {
+                        pending[pending.lastIndex] = last.copy(input = last.input.copy(point = delta))
+                        return true
+                    }
                 }
                 "cursorScroll" -> {
                     val a = requireNotNull(last.input.delta)
@@ -40,7 +44,9 @@ internal class DesktopInputQueue {
                 }
             }
         }
-        if (pending.size >= 16) return false
+        // Leave one slot to release an already pressed button during a burst of input.
+        val limit = if (cmd.input.type == "cursorDragEnd") 17 else 16
+        if (pending.size >= limit) return false
         pending.addLast(cmd)
         available.trySend(Unit)
         return true

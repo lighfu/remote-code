@@ -15,20 +15,27 @@ import (
 )
 
 type agyLogHub struct {
-	p        *nativeProvider
-	mu       sync.Mutex
-	closed   bool
-	children map[string]string
-	tasks    map[string]string
-	stops    map[string]context.CancelFunc
-	reports  map[string]string
+	p             *nativeProvider
+	mu            sync.Mutex
+	closed        bool
+	children      map[string]string
+	tasks         map[string]agyBackgroundTask
+	finishedTasks map[string]string
+	stops         map[string]context.CancelFunc
+	reports       map[string]string
+}
+
+type agyBackgroundTask struct {
+	entryID           string
+	transcriptEntryID string
+	live              bool
 }
 
 func (p *nativeProvider) agyHub() *agyLogHub {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	if p.agyLogs == nil {
-		p.agyLogs = &agyLogHub{p: p, children: map[string]string{}, tasks: map[string]string{}, stops: map[string]context.CancelFunc{}, reports: map[string]string{}}
+		p.agyLogs = &agyLogHub{p: p, children: map[string]string{}, tasks: map[string]agyBackgroundTask{}, finishedTasks: map[string]string{}, stops: map[string]context.CancelFunc{}, reports: map[string]string{}}
 	}
 	return p.agyLogs
 }
@@ -44,26 +51,41 @@ func (p *nativeProvider) closeAgyLogs() {
 	for _, stop := range hub.stops {
 		stop()
 	}
-	hub.mu.Unlock()
-}
-func (p *nativeProvider) stopAgyLogs(sid string) {
-	p.mu.Lock()
-	hub := p.agyLogs
-	p.mu.Unlock()
-	if hub == nil {
-		return
-	}
-	hub.mu.Lock()
-	for key, stop := range hub.stops {
-		if strings.HasPrefix(key, sid+"\x00") {
-			stop()
-			delete(hub.stops, key)
-			delete(hub.children, key)
-			delete(hub.tasks, key)
-			delete(hub.reports, key)
+	liveSessions := map[string]bool{}
+	for key, task := range hub.tasks {
+		if task.live {
+			sid, _, _ := strings.Cut(key, "\x00")
+			liveSessions[sid] = true
 		}
 	}
+	clear(hub.tasks)
+	for sid := range liveSessions {
+		p.store.Update(sid, M{"backgroundCommandCount": 0}, false)
+	}
 	hub.mu.Unlock()
+}
+func (h *agyLogHub) stopSession(sid string) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	prefix := sid + "\x00"
+	for key, stop := range h.stops {
+		if strings.HasPrefix(key, prefix) {
+			stop()
+			delete(h.stops, key)
+			delete(h.children, key)
+			delete(h.tasks, key)
+		}
+	}
+	for key := range h.reports {
+		if strings.HasPrefix(key, prefix) {
+			delete(h.reports, key)
+		}
+	}
+	for key := range h.finishedTasks {
+		if strings.HasPrefix(key, prefix) {
+			delete(h.finishedTasks, key)
+		}
+	}
 }
 
 var agyChildID = regexp.MustCompile(`(?i)"conversationId"\s*:\s*"([a-f0-9-]{36})"`)
@@ -123,29 +145,28 @@ func agyParseBackground(raw string) (string, string, string) {
 func agySubagent(name string, args M) bool {
 	return strings.Contains(strings.ToLower(name), "invoke_subagent") || S(args, "Prompt") != "" && (args["TypeName"] != nil || args["Role"] != nil)
 }
-func (p *nativeProvider) agyObserveTool(sid, entryID, raw string) {
+func (p *nativeProvider) agyObserveTool(sid string, entry M, raw, output string, r *nativeSession) {
 	if p.name != "antigravity" {
 		return
 	}
 	hub := p.agyHub()
-	rec := p.store.Get(sid)
-	if rec == nil {
-		return
-	}
-	agent := false
-	for _, entry := range rec.Entries {
-		if S(entry, "id") == entryID {
-			agent = S(entry, "tool") == "Agent"
-			break
-		}
-	}
-	if agent {
-		if child, path := agyParseChild(raw); child != "" {
+	entryID, tool := S(entry, "id"), S(entry, "tool")
+	if tool == "Agent" {
+		if child, path := agyParseChild(output + "\n" + raw); child != "" {
 			hub.linkChild(sid, entryID, child, path)
 		}
 	}
-	if task, path, output := agyParseBackground(raw); task != "" {
-		hub.startTask(sid, entryID, task, path, output)
+	task, path, logOutput := agyParseBackground(output)
+	if task == "" {
+		// Preserve the existing log discovery for providers that include markers in the update envelope.
+		task, path, logOutput = agyParseBackground(raw)
+		r = nil
+	}
+	if tool != "Bash" && tool != "PowerShell" && tool != "command" {
+		r = nil
+	}
+	if task != "" {
+		hub.startTask(sid, entryID, task, path, logOutput, r)
 	}
 }
 func (p *nativeProvider) agyObserveRecords(rec *Record, path string, messages []M) {
@@ -193,7 +214,7 @@ func (p *nativeProvider) agyObserveRecords(rec *Record, path string, messages []
 				hub.linkChild(sid, toolID, child, log)
 			}
 			if task, log, output := agyParseBackground(raw); task != "" {
-				hub.startTask(sid, toolID, task, log, output)
+				hub.startTask(sid, toolID, task, log, output, nil)
 			}
 		}
 	}
@@ -207,37 +228,45 @@ func (h *agyLogHub) report(sid, raw string) {
 	sender, content := m[1], strings.TrimSpace(m[2])
 	key := sid + "\x00" + sender
 	h.mu.Lock()
-	if h.reports[key] == content {
-		h.mu.Unlock()
+	defer h.mu.Unlock()
+	if h.closed || h.finishedTasks[key] != "" || h.reports[key] == content {
 		return
 	}
-	entryID := h.tasks[key]
-	task := entryID != ""
-	if !task {
-		entryID = h.children[key]
-	}
-	if entryID != "" {
+	background, task := h.tasks[key]
+	entryID := h.children[key]
+	code := agyTaskCode.FindStringSubmatch(content)
+	status := "done"
+	if task || (entryID == "" && code != nil && strings.Contains(sender, "/")) {
+		if code != nil && code[1] != "0" {
+			status = "error"
+		}
+		// Cache the terminal status even if the transcript saw the exit before the live event.
+		h.finishedTasks[key] = status
+	} else if entryID != "" {
 		h.reports[key] = content
 	}
 	stop := h.stops[key]
 	if task {
+		entryID = background.entryID
 		delete(h.tasks, key)
 		delete(h.stops, key)
 	}
-	h.mu.Unlock()
 	if entryID == "" {
 		return
 	}
-	status := "done"
 	if task {
-		if code := agyTaskCode.FindStringSubmatch(content); code != nil && code[1] != "0" {
-			status = "error"
-		}
 		if at := strings.Index(content, "Command output:\n"); at >= 0 {
 			content = content[at+len("Command output:\n"):]
 		}
 	}
-	h.p.store.Patch(sid, entryID, M{"status": status, "output": providerTruncate(content, 20000)})
+	patch := M{"status": status, "output": providerTruncate(content, 20000)}
+	h.p.store.Patch(sid, entryID, patch)
+	if background.transcriptEntryID != "" {
+		h.p.store.Patch(sid, background.transcriptEntryID, patch)
+	}
+	if background.live {
+		h.publishTaskCountLocked(sid)
+	}
 	if stop != nil {
 		if task {
 			stop()
@@ -260,22 +289,52 @@ func (h *agyLogHub) linkChild(sid, entryID, child, path string) {
 	h.p.store.Patch(sid, entryID, M{"status": "running"})
 	go h.followChild(ctx, sid, entryID, child, path)
 }
-func (h *agyLogHub) startTask(sid, entryID, task, path, output string) {
+func (h *agyLogHub) startTask(sid, entryID, task, path, output string, r *nativeSession) {
+	live := false
+	if r != nil {
+		h.p.mu.Lock()
+		defer h.p.mu.Unlock()
+		if h.p.closed || h.p.sessions[sid] != r {
+			return
+		}
+		// ACP can replay old tool updates while loading a session.
+		live = r.agyPromptActive.Load()
+	}
 	key := sid + "\x00" + task
 	h.mu.Lock()
-	if h.closed || h.tasks[key] != "" {
-		h.mu.Unlock()
+	defer h.mu.Unlock()
+	if h.closed {
 		return
 	}
-	h.tasks[key] = entryID
+	if status := h.finishedTasks[key]; status != "" {
+		h.p.store.Patch(sid, entryID, M{"status": status})
+		return
+	}
+	if previous, exists := h.tasks[key]; exists {
+		if live && !previous.live {
+			if previous.entryID != entryID {
+				previous.transcriptEntryID = previous.entryID
+			}
+			previous.entryID, previous.live = entryID, true
+			h.tasks[key] = previous
+			h.publishTaskCountLocked(sid)
+		}
+		if previous.entryID == entryID {
+			h.p.store.Patch(sid, entryID, M{"status": "running"})
+		}
+		return
+	}
+	h.tasks[key] = agyBackgroundTask{entryID: entryID, live: live}
 	ctx, stop := context.WithCancel(context.Background())
 	h.stops[key] = stop
-	h.mu.Unlock()
 	patch := M{"status": "running"}
 	if output != "" {
 		patch["output"] = providerTruncate(output, 20000)
 	}
 	h.p.store.Patch(sid, entryID, patch)
+	if live {
+		h.publishTaskCountLocked(sid)
+	}
 	if path == "" {
 		return
 	}
@@ -302,11 +361,26 @@ func (h *agyLogHub) startTask(sid, entryID, task, path, output string) {
 				bytes, err := io.ReadAll(io.LimitReader(f, 20000))
 				_ = f.Close()
 				if err == nil {
-					h.p.store.Patch(sid, entryID, M{"output": strings.ToValidUTF8(strings.TrimRight(strings.ReplaceAll(string(bytes), "\r\n", "\n"), "\n"), "�")})
+					h.mu.Lock()
+					if current, exists := h.tasks[key]; exists {
+						h.p.store.Patch(sid, current.entryID, M{"output": strings.ToValidUTF8(strings.TrimRight(strings.ReplaceAll(string(bytes), "\r\n", "\n"), "\n"), "�")})
+					}
+					h.mu.Unlock()
 				}
 			}
 		}
 	}()
+}
+
+func (h *agyLogHub) publishTaskCountLocked(sid string) {
+	prefix := sid + "\x00"
+	count := 0
+	for key, task := range h.tasks {
+		if task.live && strings.HasPrefix(key, prefix) {
+			count++
+		}
+	}
+	h.p.store.Update(sid, M{"backgroundCommandCount": count}, false)
 }
 func (h *agyLogHub) followChild(ctx context.Context, sid, parent, child, path string) {
 	var offset int64
@@ -411,7 +485,7 @@ func (h *agyLogHub) followChild(ctx context.Context, sid, parent, child, path st
 						h.p.store.Patch(sid, toolID, M{"status": status, "output": providerTruncate(content, 20000)})
 					}
 					if task, log, out := agyParseBackground(content); task != "" {
-						h.startTask(sid, toolID, task, log, out)
+						h.startTask(sid, toolID, task, log, out, nil)
 					}
 				} else if content != "" {
 					add(M{"id": id, "kind": "tool", "tool": strings.ToLower(S(row, "type")), "output": providerTruncate(content, 20000), "status": status})
@@ -441,7 +515,7 @@ func (p *nativeProvider) agyBackgroundEntry(sid, id string) bool {
 	hub.mu.Lock()
 	defer hub.mu.Unlock()
 	for key, entry := range hub.tasks {
-		if strings.HasPrefix(key, sid+"\x00") && entry == id {
+		if strings.HasPrefix(key, sid+"\x00") && entry.entryID == id {
 			return true
 		}
 	}

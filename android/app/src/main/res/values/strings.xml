@@ -20,5 +20,7 @@
     <string name="server_dependencies_title">"サーバーの依存関係"</string>
     <string name="server_dependencies_unavailable">"自動インストールは Windows のみで利用可能です。"</string>
     <string name="server_dependencies_unknown">"不明な依存関係です。"</string>
-    <string name="server_dependencies_working">"別のインストールが進行中です。"</string>
+    <string name="session_background_command_running">シェル実行中</string>
+    <string name="settings_background_commands">シェル実行中の会話を表示</string>
+    <string name="settings_background_commands_description">Antigravity の応答が終わったあとも、シェルのコマンドが動いている間は会話を作業中に表示します。</string>
 </resources>

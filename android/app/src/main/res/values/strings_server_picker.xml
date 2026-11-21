@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="server_picker_title">接続先の PC</string>
+    <string name="server_picker_default_pc">PC</string>
+    <string name="server_picker_current">接続先 %1$s</string>
+    <string name="server_picker_add">PC を追加</string>
+    <string name="server_picker_add_hint">追加する PC で Remote Code を起動し、接続用 QR コードを表示します。</string>
+    <string name="server_picker_forget_title">PC を一覧から削除</string>
+    <string name="server_picker_forget">「%1$s」を接続先の一覧から削除しますか？</string>
+    <string name="server_picker_failed">接続先の設定を更新できませんでした。</string>
+</resources>

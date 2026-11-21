@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="server_picker_title">連線的電腦</string>
+    <string name="server_picker_default_pc">電腦</string>
+    <string name="server_picker_current">電腦 %1$s</string>
+    <string name="server_picker_add">新增電腦</string>
+    <string name="server_picker_add_hint">在要新增的電腦上啟動 Remote Code，並顯示連線 QR 碼。</string>
+    <string name="server_picker_forget_title">移除電腦</string>
+    <string name="server_picker_forget">要從連線清單移除「%1$s」嗎？</string>
+    <string name="server_picker_failed">無法更新電腦連線設定。</string>
+</resources>

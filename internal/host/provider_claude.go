@@ -77,30 +77,8 @@ func (p *nativeProvider) claudeMessage(sid string, r *nativeSession, msg M) {
 			if mode := S(msg, "permissionMode"); mode != "" {
 				p.store.Update(sid, M{"mode": mode}, false)
 			}
-		case "task_started", "task_progress", "task_notification":
-			id := S(msg, "tool_use_id")
-			task := S(msg, "task_id")
-			if id == "" {
-				id = r.Parent("task:" + task)
-			}
-			if id == "" {
-				id = "agent:" + task
-			}
-			r.SetParent("task:"+task, id)
-			patch := M{"id": id, "kind": "tool", "tool": "Agent", "status": "running"}
-			if parent != "" {
-				patch["parent"] = parent
-			}
-			if title := S(msg, "description"); title != "" {
-				patch["title"] = title
-			}
-			if title := S(msg, "summary"); title != "" {
-				patch["progress"] = title
-			}
-			if S(msg, "subtype") == "task_notification" {
-				patch["status"] = providerStatus(S(msg, "status"))
-			}
-			p.store.Add(sid, patch)
+		case "task_started", "task_progress", "task_updated", "task_notification", "background_tasks_changed":
+			p.store.claudeTaskMessage(sid, msg)
 		case "local_command_output":
 			p.store.Add(sid, M{"kind": "assistant", "text": S(msg, "content")})
 		}
@@ -209,7 +187,13 @@ func (p *nativeProvider) claudeMessage(sid string, r *nativeSession, msg M) {
 		p.claudeUserMessage(sid, r.Remote() || S(msg, "_transcript_hash") != "", msg)
 	case "result":
 		if parent != "" {
-			p.store.Patch(sid, parent, M{"status": providerStatus(S(msg, "subtype")), "progress": S(msg, "result")})
+			status := claudeTaskStatus(S(msg, "subtype"))
+			if B(msg, "is_error") || strings.HasPrefix(S(msg, "subtype"), "error_") {
+				status = "error"
+			}
+			if status != "" {
+				p.store.Patch(sid, parent, M{"status": status, "progress": S(msg, "result")})
+			}
 			return
 		}
 		ok := S(msg, "subtype") == "success" && !B(msg, "is_error")
@@ -352,7 +336,9 @@ func (p *nativeProvider) claudeUserMessage(sid string, fromPC bool, msg M) {
 		if B(block, "is_error") {
 			status = "error"
 		}
-		p.store.Patch(sid, id, M{"output": providerText(block["content"]), "status": status})
+		if !p.store.claudeTaskLaunchResult(sid, id, msg, block) {
+			p.store.Patch(sid, id, M{"output": providerText(block["content"]), "status": status})
+		}
 		p.addToolMedia(sid, id, block["content"])
 		if status == "done" {
 			for _, video := range p.store.claudeSentVideos(sid, id) {
@@ -436,6 +422,11 @@ func (p *nativeProvider) describeClaudeTool(name string, input M) M {
 		entry["title"] = title
 		entry["detail"] = S(input, "prompt")
 		entry["text"] = S(input, "model")
+	}
+	if name == "Workflow" {
+		if title := S(input, "name"); title != "" {
+			entry["title"] = title
+		}
 	}
 	return entry
 }

@@ -1,15 +1,95 @@
 package host
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"strings"
 	"testing"
 	"time"
 )
+
+type btwWireInput chan []byte
+
+func (input btwWireInput) Write(data []byte) (int, error) {
+	input <- bytes.Clone(data)
+	return len(data), nil
+}
+
+func (btwWireInput) Close() error { return nil }
+
+func TestBtwClaudeWireUsesArrayHistory(t *testing.T) {
+	a := testApp(t)
+	p := NewProvider("claude", a.Store, t.TempDir()).(*nativeProvider)
+	a.Providers["claude"] = p
+	sid := S(a.Store.Create(M{"provider": "claude"}).Info, "id")
+	input := make(btwWireInput, 3)
+	wire := &providerWire{
+		claude: true, waiting: map[string]chan providerReply{}, done: make(chan struct{}),
+		in: input, closeFunc: func() error { return nil },
+	}
+	p.sessions[sid] = &nativeSession{wire: wire}
+	events, unsubscribe := a.Store.Subscribe()
+	defer unsubscribe()
+	type turn struct{ Question, Response string }
+	ask := func(question string, history []turn, providerError string) {
+		t.Helper()
+		body, _ := json.Marshal(M{"question": question})
+		response := testRequest(a, http.MethodPost, "/api/sessions/"+sid+"/btw", string(body))
+		var pending M
+		if err := json.Unmarshal(response.Body.Bytes(), &pending); err != nil || response.Code != http.StatusOK {
+			t.Fatalf("could not submit quick question: %d %s", response.Code, response.Body)
+		}
+		var message struct {
+			Type      string
+			RequestID string `json:"request_id"`
+			Request   struct {
+				Subtype  string
+				Question string
+				History  []turn
+			}
+		}
+		select {
+		case data := <-input:
+			if err := json.Unmarshal(data, &message); err != nil {
+				t.Fatal(err)
+			}
+		case <-time.After(3 * time.Second):
+			t.Fatal("no Claude control request")
+		}
+		if message.Type != "control_request" || message.Request.Subtype != "side_question" ||
+			message.Request.Question != question || message.Request.History == nil ||
+			!slices.Equal(message.Request.History, history) {
+			t.Fatalf("unexpected Claude control request: %+v", message)
+		}
+		reply := M{"subtype": "success", "request_id": message.RequestID, "response": M{"response": "Recorded answer"}}
+		status := "done"
+		if providerError != "" {
+			reply = M{"subtype": "error", "request_id": message.RequestID, "error": providerError}
+			status = "error"
+		}
+		wire.receive(M{"type": "control_response", "response": reply})
+		timeout := time.After(3 * time.Second)
+		for {
+			select {
+			case event := <-events:
+				item := providerMap(event["item"])
+				if S(item, "id") == S(pending, "id") && S(item, "status") == status {
+					return
+				}
+			case <-timeout:
+				t.Fatalf("quick question did not reach status %q", status)
+			}
+		}
+	}
+	ask("What is happening?", nil, "Temporary provider error")
+	ask("What is happening?", nil, "")
+	ask("What is next?", []turn{{"What is happening?", "Recorded answer"}}, "")
+}
 
 func BenchmarkBtwGetLongConversation(b *testing.B) {
 	for _, count := range []int{10, 10000} {

@@ -10,6 +10,7 @@ class ControlPathLabelsTest {
     @Test fun englishAndJapaneseCatalogLabelsUseTheSameResource() {
         for (label in listOf("Android App", "Android アプリ")) {
             assertEquals(strings.text(R.string.control_path_catalog_001), localizedControlPathText(label, strings))
+            assertEquals(strings.text(R.string.control_path_catalog_001), localizedServerMessage(label, strings))
         }
         assertEquals(strings.text(R.string.control_path_catalog_015), localizedControlPathText("Claude Code connects to the service.", strings))
         assertEquals("Custom path", localizedControlPathText("Custom path", strings))

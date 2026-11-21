@@ -13,6 +13,7 @@ import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
 import kotlinx.serialization.KSerializer
 import kotlinx.serialization.builtins.ListSerializer
+import kotlinx.serialization.builtins.nullable
 import kotlinx.serialization.builtins.serializer
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonElement
@@ -79,6 +80,7 @@ class Api(private val client: OkHttpClient, private val strings: AppStringResolv
             .writeTimeout(2, java.util.concurrent.TimeUnit.MINUTES).readTimeout(2, java.util.concurrent.TimeUnit.MINUTES)
             .callTimeout(5, java.util.concurrent.TimeUnit.MINUTES).build()
     }
+    private val attachmentUpload by lazy { AttachmentUpload(fileUploadClient, strings) { server } }
 
     private suspend fun <T> callAs(
         method: String, path: String, body: JsonElement? = null, cfg: ServerConfig = base(), privatePayload: Boolean = false, decode: (String) -> T,
@@ -158,49 +160,66 @@ class Api(private val client: OkHttpClient, private val strings: AppStringResolv
 
     suspend fun controlPaths(): ControlPathsSnapshot = get("/api/control-paths", ControlPathsSnapshot.serializer())
 
-    private fun dependencyTarget(expectedServer: ServerConfig?): ServerConfig {
+    private fun checkedTarget(expectedServer: ServerConfig?, changedMessage: Int, code: Int = 409): ServerConfig {
         val current = base()
         if (expectedServer != null && current.connectionIdentity() != expectedServer.connectionIdentity()) {
-            throw ApiException(localString(R.string.server_dependencies_changed), 409)
+            throw ApiException(localString(changedMessage), code)
         }
         return expectedServer ?: current
     }
 
-    suspend fun dependencies(expectedServer: ServerConfig? = null): ServerDependencies {
-        val target = dependencyTarget(expectedServer)
-        val result = callAs("GET", "/api/dependencies", cfg = target) { AppJson.decodeFromString(ServerDependencies.serializer(), it) }
-        dependencyTarget(target)
-        return result
+    private suspend fun <T> callOnServer(
+        path: String, serializer: KSerializer<T>, expectedServer: ServerConfig?, resolve: (ServerConfig?) -> ServerConfig,
+        method: String = "GET", body: JsonObject? = null, privatePayload: Boolean = false,
+    ): T {
+        val target = resolve(expectedServer)
+        return callAs(method, path, body, cfg = target, privatePayload = privatePayload) { AppJson.decodeFromString(serializer, it) }
+            .also { resolve(target) }
     }
+
+    private fun dependencyTarget(expectedServer: ServerConfig?) = checkedTarget(expectedServer, R.string.server_dependencies_changed)
+
+    suspend fun dependencies(expectedServer: ServerConfig? = null): ServerDependencies =
+        callOnServer("/api/dependencies", ServerDependencies.serializer(), expectedServer, ::dependencyTarget)
 
     suspend fun installDependency(dependency: String, expectedServer: ServerConfig? = null): ServerDependencies {
         if (dependency !in serverDependencyTargets) throw ApiException(localString(R.string.server_dependencies_unknown), 400)
-        val target = dependencyTarget(expectedServer)
-        val result = callAs("POST", "/api/dependencies/$dependency/install", buildJsonObject {}, cfg = target) {
-            AppJson.decodeFromString(ServerDependencies.serializer(), it)
-        }
-        dependencyTarget(target)
-        return result
+        return callOnServer("/api/dependencies/$dependency/install", ServerDependencies.serializer(), expectedServer,
+            ::dependencyTarget, method = "POST", body = buildJsonObject {})
     }
 
     suspend fun sessions(): List<SessionInfo> = get("/api/sessions", ListSerializer(SessionInfo.serializer()))
 
     suspend fun session(id: String): SessionDetail = get("/api/sessions/$id?limit=600", SessionDetail.serializer())
 
-    private fun projectTarget(expectedServer: ServerConfig?): ServerConfig {
-        val current = base()
-        if (expectedServer != null && current.connectionIdentity() != expectedServer.connectionIdentity()) {
-            throw ApiException(localString(R.string.core_project_server_changed), 409)
+    internal suspend fun claudeWorkflow(id: String, expectedServer: ServerConfig?): List<Entry> =
+        callOnServer("/api/sessions/$id/workflow", ListSerializer(Entry.serializer()), expectedServer, ::projectTarget, privatePayload = true)
+
+    internal suspend fun claudeWorkflowAgentTimeline(
+        id: String, entryId: String, expectedServer: ServerConfig, before: String? = null,
+    ): WorkflowAgentTimeline {
+        val query = "entryId=${java.net.URLEncoder.encode(entryId, "UTF-8")}"
+        val cursor = before?.let { "&before=${java.net.URLEncoder.encode(it, "UTF-8")}" }.orEmpty()
+        val path = "/api/sessions/$id/workflow/agent"
+        return try {
+            callOnServer("$path/timeline?$query$cursor", WorkflowAgentTimeline.serializer(),
+                expectedServer, ::projectTarget, privatePayload = true)
+        } catch (e: ApiException) {
+            if (before != null || e.code != 404) throw e
+            val entries = callOnServer("$path?$query", ListSerializer(Entry.serializer()),
+                expectedServer, ::projectTarget, privatePayload = true)
+            WorkflowAgentTimeline(entries)
         }
-        return expectedServer ?: current
     }
 
-    private suspend fun <T> projectGet(path: String, serializer: KSerializer<T>, expectedServer: ServerConfig?): T {
-        val target = projectTarget(expectedServer)
-        val result = callAs("GET", path, cfg = target) { AppJson.decodeFromString(serializer, it) }
-        projectTarget(target)
-        return result
-    }
+    internal suspend fun claudeWorkflowAgentUsage(id: String, entryId: String, expectedServer: ServerConfig): WorkflowAgentUsage? =
+        callOnServer("/api/sessions/$id/workflow/agent/usage?entryId=${java.net.URLEncoder.encode(entryId, "UTF-8")}",
+            WorkflowAgentUsage.serializer().nullable, expectedServer, ::projectTarget, privatePayload = true)
+
+    private fun projectTarget(expectedServer: ServerConfig?) = checkedTarget(expectedServer, R.string.core_project_server_changed)
+
+    private suspend fun <T> projectGet(path: String, serializer: KSerializer<T>, expectedServer: ServerConfig?): T =
+        callOnServer(path, serializer, expectedServer, ::projectTarget)
 
     suspend fun projectFiles(sessionId: String, path: String = "", expectedServer: ServerConfig? = null, query: String = ""): ProjectDirectory =
         projectGet("/api/sessions/$sessionId/project/files?path=" + java.net.URLEncoder.encode(path, "UTF-8") + "&query=" + java.net.URLEncoder.encode(query, "UTF-8"), ProjectDirectory.serializer(), expectedServer)
@@ -318,49 +337,12 @@ class Api(private val client: OkHttpClient, private val strings: AppStringResolv
         }, cfg = expectedServer ?: base(), privatePayload = quotedCode)
     }
 
-    internal suspend fun uploadFile(context: android.content.Context, file: SelectedFile, cfg: ServerConfig, onProgress: (Long) -> Unit): UploadedFile = withContext(Dispatchers.IO) {
-        if (server?.connectionIdentity() != cfg.connectionIdentity()) throw ApiException(localString(R.string.core_send_server_changed))
-        val coroutineContext = currentCoroutineContext()
-        val path = "/api/uploads"
-        val started = System.nanoTime()
-        fun elapsed() = (System.nanoTime() - started) / 1_000_000
-        val trace = HttpTrace()
-        trace.dispatched()
-        val body = FileUploadBody(
+    internal suspend fun uploadFile(context: android.content.Context, file: SelectedFile, cfg: ServerConfig, onProgress: (Long) -> Unit): UploadedFile =
+        attachmentUpload.upload(
+            cfg, file.name, file.mime, file.size,
             open = { context.contentResolver.openInputStream(file.uri) ?: throw IOException(localString(R.string.core_open_file_error, file.name)) },
             onProgress = onProgress,
-            checkActive = { coroutineContext.ensureActive() },
         )
-        val url = (cfg.url.trimEnd('/') + path).toHttpUrl().newBuilder().addQueryParameter("name", file.name).addQueryParameter("mime", file.mime).build()
-        val request = Request.Builder().url(url).auth(cfg).tag(HttpTrace::class.java, trace).post(body).build()
-        try {
-            fileUploadClient.newCall(request).execute().use { response ->
-                val headersMs = elapsed()
-                val text = response.body.string()
-                val timing = NetTiming.fromResponse(response, headersMs, elapsed() - headersMs)
-                if (!response.isSuccessful) {
-                    val parsed = runCatching { AppJson.parseToJsonElement(text) as? JsonObject }.getOrNull()
-                    val message = when {
-                        response.code == 404 -> localString(R.string.core_upload_server_update_required)
-                        response.code == 403 && response.header("cf-ray") != null -> localString(R.string.core_upload_access_denied)
-                        else -> parsed?.get("error")?.jsonPrimitive?.contentOrNull?.let { localizedServerMessage(it, strings) } ?: localString(R.string.core_upload_http_error, response.code)
-                    }
-                    NetLog.api("POST", path, response.code, elapsed(), text.toByteArray().size.toLong(), message, response = text, timing = timing)
-                    throw ApiException(message, response.code)
-                }
-                val uploaded = AppJson.decodeFromString(UploadedFile.serializer(), text)
-                if (uploaded.id.isBlank() || uploaded.size < 0 || uploaded.size > MAX_ATTACHMENT_BYTES) throw ApiException(localString(R.string.core_upload_decode_error))
-                NetLog.api("POST", path, response.code, elapsed(), text.toByteArray().size.toLong(), response = text, timing = timing)
-                coroutineContext.ensureActive()
-                uploaded
-            }
-        } catch (e: IOException) {
-            NetLog.api("POST", path, null, elapsed(), null, e.message ?: localString(R.string.core_upload_error))
-            throw ApiException(e.message ?: localString(R.string.core_upload_error))
-        } catch (_: SecurityException) {
-            throw ApiException(localString(R.string.core_file_access_revoked))
-        }
-    }
 
     /** cached: 保存済み内訳を返し、古ければ裏で更新する。 */
     suspend fun contextDetail(id: String, cached: Boolean = false, expectedServer: ServerConfig? = null): ContextDetail {
@@ -413,11 +395,14 @@ class Api(private val client: OkHttpClient, private val strings: AppStringResolv
         call("POST", "/api/sessions/$id/takeover")
     }
 
-    suspend fun detach(id: String) {
-        call("POST", "/api/sessions/$id/detach")
+    suspend fun detach(id: String, expectedServer: ServerConfig? = null) {
+        call("POST", "/api/sessions/$id/detach", cfg = checkedTarget(expectedServer, R.string.core_server_changed))
     }
 
-    suspend fun respond(id: String, requestId: String, choice: String? = null, answers: Map<String, List<String>>? = null, message: String? = null) {
+    suspend fun respond(
+        id: String, requestId: String, choice: String? = null, answers: Map<String, List<String>>? = null,
+        message: String? = null, expectedServer: ServerConfig? = null,
+    ) {
         call("POST", "/api/sessions/$id/respond", buildJsonObject {
             put("requestId", requestId)
             if (choice != null) put("choice", choice)
@@ -425,17 +410,20 @@ class Api(private val client: OkHttpClient, private val strings: AppStringResolv
             if (answers != null) putJsonObject("answers") {
                 for ((k, v) in answers) putJsonArray(k) { v.forEach { add(kotlinx.serialization.json.JsonPrimitive(it)) } }
             }
-        })
+        }, cfg = checkedTarget(expectedServer, R.string.core_server_changed))
     }
 
-    suspend fun patch(id: String, title: String? = null, mode: String? = null, archived: Boolean? = null, fastMode: Boolean? = null): SessionInfo {
+    suspend fun patch(
+        id: String, title: String? = null, mode: String? = null, archived: Boolean? = null,
+        fastMode: Boolean? = null, expectedServer: ServerConfig? = null,
+    ): SessionInfo {
         val body = buildJsonObject {
             if (title != null) put("title", title)
             if (mode != null) put("mode", mode)
             if (archived != null) put("archived", archived)
             if (fastMode != null) put("fastMode", fastMode)
         }
-        return AppJson.decodeFromJsonElement(SessionInfo.serializer(), call("PATCH", "/api/sessions/$id", body))
+        return AppJson.decodeFromJsonElement(SessionInfo.serializer(), call("PATCH", "/api/sessions/$id", body, cfg = checkedTarget(expectedServer, R.string.core_server_changed)))
     }
 
     suspend fun setThinking(id: String, thinking: String): SessionInfo =
@@ -451,19 +439,21 @@ class Api(private val client: OkHttpClient, private val strings: AppStringResolv
         return AppJson.decodeFromJsonElement(SessionInfo.serializer(), call("PATCH", "/api/sessions/$id", body))
     }
 
-    suspend fun models(provider: String): List<ModelOption> = get("/api/models/$provider", ListSerializer(ModelOption.serializer()))
+    suspend fun models(provider: String, expectedServer: ServerConfig? = null): List<ModelOption> =
+        callOnServer("/api/models/$provider", ListSerializer(ModelOption.serializer()), expectedServer, ::sessionTarget)
 
     suspend fun commands(provider: String, sessionId: String?): List<CommandInfo> =
         get("/api/commands/$provider" + (sessionId?.let { "?session=$it" } ?: ""), ListSerializer(CommandInfo.serializer()))
 
-    suspend fun runCommand(id: String, name: String, args: String) {
+    suspend fun runCommand(id: String, name: String, args: String, expectedServer: ServerConfig? = null) {
         call("POST", "/api/sessions/$id/command", buildJsonObject {
             put("name", name)
             put("args", args)
-        })
+        }, cfg = sessionTarget(expectedServer))
     }
 
-    suspend fun usage(force: Boolean): UsageInfo = get("/api/usage" + if (force) "?force=1" else "", UsageInfo.serializer())
+    suspend fun usage(force: Boolean, expectedServer: ServerConfig? = null): UsageInfo =
+        callOnServer("/api/usage" + if (force) "?force=1" else "", UsageInfo.serializer(), expectedServer, ::sessionTarget)
 
     suspend fun dirs(): DirsInfo = get("/api/dirs", DirsInfo.serializer())
 
@@ -513,48 +503,35 @@ class Api(private val client: OkHttpClient, private val strings: AppStringResolv
     internal suspend fun copyMediaTo(source: MediaPlaybackSource, destination: java.io.OutputStream): Long =
         copyMediaTo(source, destination, directClient)
 
-    private suspend fun copyMediaTo(source: MediaPlaybackSource, destination: java.io.OutputStream, transferClient: OkHttpClient): Long =
-        kotlinx.coroutines.suspendCancellableCoroutine { continuation ->
-            val request = Request.Builder().url(source.url).apply { source.headers.forEach { (name, value) -> header(name, value) } }
-                .cacheControl(CacheControl.FORCE_NETWORK).build()
-            val call = transferClient.newCall(request)
-            val started = System.nanoTime()
-            fun elapsed() = (System.nanoTime() - started) / 1_000_000
-            continuation.invokeOnCancellation { call.cancel() }
-            call.enqueue(object : okhttp3.Callback {
-                override fun onFailure(call: okhttp3.Call, e: IOException) {
-                    if (continuation.isActive) continuation.resumeWith(Result.failure(ApiException(localString(R.string.core_video_save_error_details, e.message.orEmpty()))))
-                }
-                override fun onResponse(call: okhttp3.Call, response: okhttp3.Response) {
-                    response.use { res ->
-                        val headersMs = elapsed()
-                        try {
-                            if (!res.isSuccessful) throw ApiException(localString(R.string.core_video_save_http_error, res.code), res.code)
-                            var bytes = 0L
-                            res.body.byteStream().use { input ->
-                                val buffer = ByteArray(64 * 1024)
-                                while (continuation.isActive) {
-                                    val read = input.read(buffer)
-                                    if (read < 0) break
-                                    destination.write(buffer, 0, read)
-                                    bytes += read
-                                }
-                            }
-                            if (continuation.isActive) {
-                                val total = elapsed()
-                                NetLog.api("GET", "/api/media/…", res.code, total, bytes, timing = NetTiming.fromResponse(res, headersMs, total - headersMs))
-                                continuation.resumeWith(Result.success(bytes))
-                            }
-                        } catch (e: Exception) {
-                            if (continuation.isActive) continuation.resumeWith(Result.failure(e))
-                        }
-                    }
-                }
-            })
+    private suspend fun copyMediaTo(source: MediaPlaybackSource, destination: java.io.OutputStream, transferClient: OkHttpClient): Long {
+        val request = Request.Builder().url(source.url).apply { source.headers.forEach { (name, value) -> header(name, value) } }
+            .cacheControl(CacheControl.FORCE_NETWORK).build()
+        val started = System.nanoTime()
+        fun elapsed() = (System.nanoTime() - started) / 1_000_000
+        return transferClient.newCall(request).readResponse({ error ->
+            ApiException(localString(R.string.core_video_save_error_details, error.message.orEmpty()))
+        }) { response, isActive ->
+            val headersMs = elapsed()
+            if (!response.isSuccessful) throw ApiException(localString(R.string.core_video_save_http_error, response.code), response.code)
+            val input = response.body.byteStream()
+            val buffer = ByteArray(64 * 1024)
+            var bytes = 0L
+            while (isActive()) {
+                val read = input.read(buffer)
+                if (read < 0) break
+                destination.write(buffer, 0, read)
+                bytes += read
+            }
+            if (isActive()) {
+                val total = elapsed()
+                NetLog.api("GET", "/api/media/…", response.code, total, bytes, timing = NetTiming.fromResponse(response, headersMs, total - headersMs))
+            }
+            bytes
         }
+    }
 
-    suspend fun delete(id: String) {
-        call("DELETE", "/api/sessions/$id")
+    suspend fun delete(id: String, expectedServer: ServerConfig? = null) {
+        call("DELETE", "/api/sessions/$id", cfg = checkedTarget(expectedServer, R.string.core_server_changed))
     }
 
 
@@ -686,20 +663,10 @@ class Api(private val client: OkHttpClient, private val strings: AppStringResolv
         call("POST", "/api/client/crash", buildJsonObject { put("text", text.take(60_000)) })
     }
 
-    suspend fun appUpdate(expectedServer: ServerConfig? = null): AppUpdateInfo {
-        val target = updateTarget(expectedServer)
-        val info = callAs("GET", "/api/app", cfg = target) { AppJson.decodeFromString(AppUpdateInfo.serializer(), it) }
-        updateTarget(target)
-        return info
-    }
+    suspend fun appUpdate(expectedServer: ServerConfig? = null): AppUpdateInfo =
+        callOnServer("/api/app", AppUpdateInfo.serializer(), expectedServer, ::updateTarget)
 
-    private fun updateTarget(expectedServer: ServerConfig?): ServerConfig {
-        val current = base()
-        if (expectedServer != null && current.connectionIdentity() != expectedServer.connectionIdentity()) {
-            throw ApiException(localString(R.string.core_update_server_changed))
-        }
-        return expectedServer ?: current
-    }
+    private fun updateTarget(expectedServer: ServerConfig?) = checkedTarget(expectedServer, R.string.core_update_server_changed, code = 0)
 
     /** onProgress は 0〜1。 */
     suspend fun downloadApk(dest: java.io.File, onProgress: (Float) -> Unit): String = downloadApk(dest, onProgress, base())
@@ -753,15 +720,18 @@ class Api(private val client: OkHttpClient, private val strings: AppStringResolv
         }
     }
 
-    suspend fun history(provider: String): List<HistoryItem> = get("/api/history/$provider", ListSerializer(HistoryItem.serializer()))
+    suspend fun history(provider: String, expectedServer: ServerConfig? = null): List<HistoryItem> =
+        callOnServer("/api/history/$provider", ListSerializer(HistoryItem.serializer()), expectedServer, ::sessionTarget)
 
-    suspend fun import(provider: String, item: HistoryItem): SessionInfo {
+    private fun sessionTarget(expectedServer: ServerConfig?) = checkedTarget(expectedServer, R.string.core_server_changed)
+
+    suspend fun import(provider: String, item: HistoryItem, expectedServer: ServerConfig? = null): SessionInfo {
         val body = buildJsonObject {
             put("externalId", item.externalId)
             put("title", item.title)
             put("cwd", item.cwd)
         }
-        return AppJson.decodeFromJsonElement(SessionInfo.serializer(), call("POST", "/api/history/$provider/import", body))
+        return AppJson.decodeFromJsonElement(SessionInfo.serializer(), call("POST", "/api/history/$provider/import", body, cfg = sessionTarget(expectedServer)))
     }
 
     suspend fun fs(path: String): FsListing {
@@ -819,8 +789,7 @@ class Api(private val client: OkHttpClient, private val strings: AppStringResolv
             projectActionClient.newCall(request).execute().use { response ->
                 val headersMs = (System.nanoTime() - started) / 1_000_000
                 if (response.code != 200) {
-                    val detail = runCatching { AppJson.parseToJsonElement(response.peekBody(2048).string()).str("error") }.getOrNull()
-                    val message = detail?.let { localizedServerMessage(it, strings) } ?: localString(R.string.core_file_http_error, response.code)
+                    val message = response.peekServerError()?.let { localizedServerMessage(it, strings) } ?: localString(R.string.core_file_http_error, response.code)
                     NetLog.api("GET", "/api/file/raw", response.code, headersMs, null, message)
                     throw ApiException(message, response.code)
                 }
@@ -848,25 +817,6 @@ class Api(private val client: OkHttpClient, private val strings: AppStringResolv
         Unit
     }
 
-    suspend fun fileRaw(link: String, sessionId: String): ByteArray = withContext(Dispatchers.IO) {
-        val cfg = base()
-        val q = java.net.URLEncoder.encode(link, "UTF-8")
-        val req = Request.Builder().url(cfg.url.trimEnd('/') + "/api/file/raw?link=$q&session=$sessionId").auth(cfg).build()
-        val started = System.nanoTime()
-        fun elapsed() = (System.nanoTime() - started) / 1_000_000
-        slowClient.newCall(req).execute().use {
-            val headersMs = elapsed()
-            if (!it.isSuccessful) {
-                val msg = runCatching { (AppJson.parseToJsonElement(it.body.string()) as? JsonObject)?.get("error")?.jsonPrimitive?.contentOrNull }.getOrNull()?.let { message -> localizedServerMessage(message, strings) }
-                NetLog.api("GET", "/api/file/raw", it.code, elapsed(), null, msg ?: localString(R.string.core_file_http_error, it.code), timing = NetTiming.fromResponse(it, headersMs, elapsed() - headersMs))
-                throw ApiException(msg ?: localString(R.string.core_file_http_error, it.code), it.code)
-            }
-            val bytes = it.body.bytes()
-            NetLog.api("GET", "/api/file/raw", it.code, elapsed(), bytes.size.toLong(), timing = NetTiming.fromResponse(it, headersMs, elapsed() - headersMs))
-            bytes
-        }
-    }
-
     /** PC の認証情報を付けず、先頭 256 KB だけ読む。 */
     suspend fun webPreview(url: String): WebPreview = withContext(Dispatchers.IO) {
         val plain = client.newBuilder().callTimeout(8, java.util.concurrent.TimeUnit.SECONDS).build()
@@ -887,9 +837,6 @@ class Api(private val client: OkHttpClient, private val strings: AppStringResolv
             WebPreview(title?.take(200), desc?.take(400), clean(meta("og:site_name")) ?: res.request.url.host, finalUrl)
         }
     }
-
-    suspend fun recentDirs(): List<String> = get("/api/recent-dirs", ListSerializer(String.serializer()))
-
 
     suspend fun terminals(): List<TerminalInfo> = get("/api/terminals", ListSerializer(TerminalInfo.serializer()))
 

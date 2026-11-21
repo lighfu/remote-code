@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="chat_workflow_title">워크플로</string>
+    <string name="chat_workflow_empty">이 대화에는 아직 워크플로 또는 하위 에이전트 기록이 없습니다.</string>
+    <string name="chat_workflow_unavailable">워크플로를 불러오지 못했습니다.</string>
+    <string name="chat_workflow_summary">에이전트 %1$d개 · 진행 중 %2$d개 · 종료 %3$d개</string>
+    <string name="chat_workflow_status_unknown">상태 알 수 없음</string>
+    <string name="chat_workflow_expand_branch">하위 항목 펼치기</string>
+    <string name="chat_workflow_collapse_branch">하위 항목 접기</string>
+    <string name="chat_workflow_show_entry">대화에서 보기</string>
+    <string name="chat_workflow_depth">%1$d단계 깊이</string>
+    <string name="chat_workflow_details">상세 정보 표시 전환</string>
+    <string name="chat_workflow_earlier">이전 활동</string>
+    <string name="chat_workflow_children">하위 항목 %1$d개</string>
+    <string name="chat_workflow_phase">단계</string>
+    <string name="chat_workflow_open_conversation">%1$s 대화 열기</string>
+    <string name="chat_workflow_latest_activity">최근 활동</string>
+    <string name="chat_workflow_conversation_empty">이 에이전트의 대화 기록이 없습니다.</string>
+    <string name="chat_workflow_conversation_unavailable">에이전트 대화를 불러오지 못했습니다.</string>
+    <string name="chat_workflow_retry">다시 시도</string>
+    <string name="chat_workflow_context_tokens">컨텍스트 %1$s</string>
+    <string name="chat_workflow_input_tokens">입력 %1$s</string>
+    <string name="chat_workflow_output_tokens">출력 %1$s</string>
+    <string name="chat_workflow_cache_read">캐시 읽기 %1$s</string>
+    <string name="chat_workflow_cache_write">캐시 쓰기 %1$s</string>
+    <string name="chat_workflow_usage_requests">요청 %1$s건</string>
+    <string name="chat_workflow_usage_partial">확인 가능한 기록의 합계</string>
+    <string name="chat_workflow_usage_empty">사용량 기록이 없습니다.</string>
+    <string name="chat_workflow_older">이전 메시지 불러오기</string>
+</resources>

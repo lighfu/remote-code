@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="chat_workflow_title">Workflow</string>
+    <string name="chat_workflow_empty">This chat has no workflow or subagent activity yet.</string>
+    <string name="chat_workflow_unavailable">Could not load the workflow.</string>
+    <string name="chat_workflow_summary">Agents %1$d · Active %2$d · Finished %3$d</string>
+    <string name="chat_workflow_status_unknown">Unknown status</string>
+    <string name="chat_workflow_expand_branch">Expand child items</string>
+    <string name="chat_workflow_collapse_branch">Collapse child items</string>
+    <string name="chat_workflow_show_entry">Show in chat</string>
+    <string name="chat_workflow_depth">Level %1$d</string>
+    <string name="chat_workflow_details">Toggle details</string>
+    <string name="chat_workflow_earlier">Earlier activity</string>
+    <string name="chat_workflow_children">Child items %1$d</string>
+    <string name="chat_workflow_phase">Phase</string>
+    <string name="chat_workflow_open_conversation">Open conversation with %1$s</string>
+    <string name="chat_workflow_latest_activity">Latest activity</string>
+    <string name="chat_workflow_conversation_empty">This agent has no recorded conversation.</string>
+    <string name="chat_workflow_conversation_unavailable">Could not load the agent conversation.</string>
+    <string name="chat_workflow_retry">Retry</string>
+    <string name="chat_workflow_context_tokens">Context %1$s</string>
+    <string name="chat_workflow_input_tokens">Input %1$s</string>
+    <string name="chat_workflow_output_tokens">Output %1$s</string>
+    <string name="chat_workflow_cache_read">Cache read %1$s</string>
+    <string name="chat_workflow_cache_write">Cache write %1$s</string>
+    <string name="chat_workflow_usage_requests">Requests %1$s</string>
+    <string name="chat_workflow_usage_partial">Totals from available records</string>
+    <string name="chat_workflow_usage_empty">No usage recorded.</string>
+    <string name="chat_workflow_older">Load earlier messages</string>
+</resources>

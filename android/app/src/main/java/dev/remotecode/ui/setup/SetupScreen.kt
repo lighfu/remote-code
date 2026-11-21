@@ -72,12 +72,13 @@ import dev.remotecode.data.ServerConfig
 import dev.remotecode.data.cleartextBlocked
 import dev.remotecode.ui.common.openQrReader
 import dev.remotecode.ui.theme.Mono
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 
 private const val SERVER_DOWNLOAD_URL = "https://github.com/lighfu/remote-code/releases/latest"
 
 @Composable
-fun SetupScreen(initial: ServerConfig?, canGoBack: Boolean, onBack: () -> Unit, onDone: () -> Unit) {
+fun SetupScreen(initial: ServerConfig?, adding: Boolean, canGoBack: Boolean, onBack: () -> Unit, onPair: suspend (ServerConfig) -> Unit) {
     val repo = RemoteCodeApp.instance.repository
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -102,8 +103,9 @@ fun SetupScreen(initial: ServerConfig?, canGoBack: Boolean, onBack: () -> Unit, 
         scope.launch {
             try {
                 val meta = repo.api.check(cfg)
-                repo.settingsStore.mergePair(repo.settings.value?.server, cfg.copy(name = cfg.name.ifBlank { meta.host }))
-                onDone()
+                onPair(cfg.copy(name = cfg.name.ifBlank { meta.host }))
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 error = e.message ?: appString(R.string.screen_setup_001)
             } finally {
@@ -131,7 +133,7 @@ fun SetupScreen(initial: ServerConfig?, canGoBack: Boolean, onBack: () -> Unit, 
         modifier = Modifier.nestedScroll(scroll.nestedScrollConnection),
         topBar = {
             LargeFlexibleTopAppBar(
-                title = { Text(stringResource(R.string.screen_setup_003)) },
+                title = { Text(stringResource(if (adding) R.string.server_picker_add else R.string.screen_setup_003)) },
                 navigationIcon = {
                     if (canGoBack) IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Rounded.ArrowBack, stringResource(R.string.screen_setup_004)) }
                 },
@@ -160,6 +162,7 @@ fun SetupScreen(initial: ServerConfig?, canGoBack: Boolean, onBack: () -> Unit, 
                 Icon(Icons.Rounded.Computer, null, Modifier.size(52.dp), tint = MaterialTheme.colorScheme.onPrimaryContainer)
             }
             ServerDownloadCard()
+            if (adding) Text(stringResource(R.string.server_picker_add_hint), style = MaterialTheme.typography.bodyMedium)
             FilledTonalButton(
                 onClick = {
                     error = null

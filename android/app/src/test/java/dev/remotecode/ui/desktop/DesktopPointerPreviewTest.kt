@@ -42,6 +42,22 @@ class DesktopPointerPreviewTest {
         assertEquals(point(0.48), preview.position)
     }
 
+    @Test fun tinyDeltasAccumulateAsPhysicalPixelsEvenAcrossAcknowledgements() {
+        sample(0.5, 1)
+        assertNull(preview.quantize(move(0.002)))
+        assertNull(preview.quantize(move(0.002)))
+        val right = preview.quantize(move(0.002))!!
+        assertEquals(point(0.01, 0.0), right.point)
+        preview.queued(right)
+        assertEquals(point(0.51), preview.position)
+        preview.settle(2, false)
+        sample(0.51, 2)
+        val left = preview.quantize(move(-0.002))!!
+        assertEquals(-0.01, left.point!!.x, 0.0)
+        preview.queued(left)
+        assertEquals(point(0.5), preview.position)
+    }
+
     @Test fun virtualDesktopGapsUseTheClosestMonitorAndASelectionChangeDropsTheOldPosition() {
         preview.setDisplays("all", listOf(first, second))
         preview.sample(DesktopCursor(point(0.45, 0.25), revision = 1))

@@ -107,7 +107,8 @@ func (a *App) askBtw(rec *Record, question string) (M, error) {
 	if err != nil {
 		return nil, err
 	}
-	var history []M
+	// Claude's side_question requires a JSON array even before the first answer.
+	history := []M{}
 	for _, row := range rows {
 		if S(row, "status") == "pending" {
 			return nil, errors.New("Waiting for response to previous quick question")

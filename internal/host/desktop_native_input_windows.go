@@ -118,6 +118,9 @@ func desktopKeyboardEvents(input desktopInput) ([]desktopWinEvent, error) {
 }
 
 func desktopInputEvents(input desktopInput, monitors []desktopDisplay) ([]desktopWinEvent, error) {
+	if input.Type == "cursorDragEnd" {
+		return []desktopWinEvent{desktopButton(mouseLeftUp)}, nil
+	}
 	target, virtual, err := desktopRectangles(monitors, input.Display)
 	if err != nil {
 		return nil, err
@@ -131,6 +134,8 @@ func desktopInputEvents(input desktopInput, monitors []desktopDisplay) ([]deskto
 	}
 	events := []desktopWinEvent{start}
 	switch input.Type {
+	case "cursorDragStart":
+		return []desktopWinEvent{desktopButton(mouseLeftDown)}, nil
 	case "move":
 		return events, nil
 	case "click":
@@ -195,7 +200,7 @@ func desktopTouchpadInput(in desktopInput, monitors []desktopDisplay, cursor ima
 	}
 	in.X, in.Y = normalized(cursor)
 	switch in.Type {
-	case "moveBy":
+	case "moveBy", "cursorDragMove":
 		in.Type = "move"
 		in.X, in.Y = normalized(end)
 	case "cursorDragBy":
@@ -254,6 +259,9 @@ func applyDesktopInput(input desktopInput) error {
 		return err
 	}
 	defer leave()
+	if input.Type == "cursorDragEnd" {
+		return injectDesktopInput(input, nil)
+	}
 	monitors, err := desktopMonitors()
 	if err != nil {
 		return err
@@ -262,6 +270,7 @@ func applyDesktopInput(input desktopInput) error {
 		return errDesktopDisplayChanged
 	}
 	if input.Type == "moveBy" || strings.HasPrefix(input.Type, "cursor") {
+		keepalive := input.Type == "cursorDragMove" && input.X == 0 && input.Y == 0
 		var pos struct{ X, Y int32 }
 		ok, _, e := desktopCursorPos.Call(uintptr(unsafe.Pointer(&pos)))
 		if ok == 0 {
@@ -271,7 +280,14 @@ func applyDesktopInput(input desktopInput) error {
 		if err != nil {
 			return err
 		}
+		if keepalive {
+			return nil
+		}
 	}
+	return injectDesktopInput(input, monitors)
+}
+
+func injectDesktopInput(input desktopInput, monitors []desktopDisplay) error {
 	events, err := desktopInputEvents(input, monitors)
 	if err != nil {
 		return err

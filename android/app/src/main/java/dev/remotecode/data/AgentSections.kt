@@ -6,16 +6,25 @@ private val activeAgentStatuses = setOf(
     "running", "waiting", "pending", "queued", "starting", "initializing", "working",
     "in_progress", "inprogress", "awaiting_input", "awaiting_approval", "paused",
 )
-private val finishedAgentStatuses = setOf(
-    "done", "completed", "complete", "succeeded", "success", "error", "failed", "failure",
-    "stopped", "declined", "cancelled", "canceled", "interrupted", "closed", "shutdown",
-)
+internal enum class AgentWorkflowState { ACTIVE, COMPLETED, FAILED, CANCELLED, UNKNOWN }
 
-internal fun isActiveAgent(status: String?, streaming: Boolean = false): Boolean {
+internal fun agentState(status: String?, streaming: Boolean, ok: Boolean? = null): AgentWorkflowState {
     val value = status?.trim()?.lowercase(Locale.ROOT)?.replace('-', '_')
-    if (value in finishedAgentStatuses) return false
-    return streaming || value in activeAgentStatuses
+    return when (value) {
+        "done", "completed", "complete", "succeeded", "success" -> AgentWorkflowState.COMPLETED
+        "error", "failed", "failure" -> AgentWorkflowState.FAILED
+        "stopped", "declined", "cancelled", "canceled", "interrupted", "closed", "shutdown" -> AgentWorkflowState.CANCELLED
+        else -> when {
+            streaming || value in activeAgentStatuses -> AgentWorkflowState.ACTIVE
+            ok == true -> AgentWorkflowState.COMPLETED
+            ok == false -> AgentWorkflowState.FAILED
+            else -> AgentWorkflowState.UNKNOWN
+        }
+    }
 }
+
+internal fun isActiveAgent(status: String?, streaming: Boolean = false): Boolean =
+    agentState(status, streaming) == AgentWorkflowState.ACTIVE
 
 internal data class AgentSections(val active: List<Entry>, val completed: List<Entry>)
 

@@ -271,12 +271,8 @@ func (p *nativeProvider) startClaudeRemote(ctx context.Context, rec *Record, r *
 }
 
 func connectClaudeRemote(ctx context.Context, bridge string, onMessage func(M)) (*providerWire, error) {
-	token, err := providerClaudeToken()
-	if err != nil {
-		return nil, err
-	}
 	base := "https://api.anthropic.com/v1/code/sessions/" + bridge + "/events"
-	return startRemoteProviderWire(ctx, http.DefaultClient, base, bridge, token, onMessage)
+	return startRemoteProviderWire(ctx, http.DefaultClient, base, bridge, providerClaudeToken, onMessage)
 }
 
 func claudeRemoteContextDetail(ctx context.Context, bridge string) (M, error) {
@@ -295,13 +291,48 @@ func claudeRemoteContextDetail(ctx context.Context, bridge string) (M, error) {
 	return wire.claudeContextUsage(ctx)
 }
 
-func startRemoteProviderWire(startCtx context.Context, client *http.Client, base, bridge, token string, onMessage func(M)) (*providerWire, error) {
-	ctx, cancel := context.WithCancel(context.Background())
-	headers := func(req *http.Request) {
-		req.Header.Set("Authorization", "Bearer "+token)
-		req.Header.Set("anthropic-version", "2023-06-01")
-		req.Header.Set("anthropic-client-platform", "android")
+var errClaudeRemoteUnauthorized = errors.New("Claude Remote Control authentication was rejected. Check the Claude Code sign-in on the PC, then reconnect.")
+
+func claudeRemoteRequest(client *http.Client, request *http.Request, readToken func() (string, error)) (*http.Response, error) {
+	token, err := readToken()
+	if err != nil {
+		return nil, err
 	}
+	request.Header.Set("anthropic-version", "2023-06-01")
+	request.Header.Set("anthropic-client-platform", "android")
+	for attempt := 0; ; attempt++ {
+		request.Header.Set("Authorization", "Bearer "+token)
+		response, err := client.Do(request)
+		if err != nil || response.StatusCode != http.StatusUnauthorized {
+			return response, err
+		}
+		_ = response.Body.Close()
+		if attempt != 0 {
+			return nil, errClaudeRemoteUnauthorized
+		}
+		if err := request.Context().Err(); err != nil {
+			return nil, err
+		}
+		fresh, err := readToken()
+		if err != nil || fresh == token {
+			return nil, errClaudeRemoteUnauthorized
+		}
+		// The rejected request can be replayed with the same identity and content.
+		request = request.Clone(request.Context())
+		if request.GetBody != nil {
+			request.Body, err = request.GetBody()
+			if err != nil {
+				return nil, err
+			}
+		} else if request.Body != nil && request.Body != http.NoBody {
+			return nil, errClaudeRemoteUnauthorized
+		}
+		token = fresh
+	}
+}
+
+func startRemoteProviderWire(startCtx context.Context, client *http.Client, base, bridge string, readToken func() (string, error), onMessage func(M)) (*providerWire, error) {
+	ctx, cancel := context.WithCancel(context.Background())
 	w := &providerWire{claude: true, waiting: map[string]chan providerReply{}, done: make(chan struct{}), onMessage: onMessage}
 	var once sync.Once
 	finish := func(err error) {
@@ -352,9 +383,8 @@ func startRemoteProviderWire(startCtx context.Context, client *http.Client, base
 		if err != nil {
 			return err
 		}
-		headers(req)
 		req.Header.Set("Content-Type", "application/json")
-		response, err := client.Do(req)
+		response, err := claudeRemoteRequest(client, req, readToken)
 		if err != nil {
 			return err
 		}
@@ -391,12 +421,11 @@ func startRemoteProviderWire(startCtx context.Context, client *http.Client, base
 				finish(err)
 				return
 			}
-			headers(req)
 			req.Header.Set("Accept", "text/event-stream")
 			if sequence > 0 {
 				req.Header.Set("Last-Event-ID", strconv.FormatInt(sequence, 10))
 			}
-			response, err := client.Do(req)
+			response, err := claudeRemoteRequest(client, req, readToken)
 			if first {
 				first = false
 				if err != nil {
@@ -412,6 +441,10 @@ func startRemoteProviderWire(startCtx context.Context, client *http.Client, base
 					return
 				}
 				ready <- nil
+			}
+			if errors.Is(err, errClaudeRemoteUnauthorized) {
+				finish(err)
+				return
 			}
 			if err == nil && response.StatusCode == 200 {
 				err = readProviderSSE(response.Body, func(event, id, data string) {
@@ -445,7 +478,7 @@ func startRemoteProviderWire(startCtx context.Context, client *http.Client, base
 						}
 						if typ == "system" {
 							sub := S(payload, "subtype")
-							if sub != "status" && sub != "api_retry" && sub != "task_progress" {
+							if sub != "status" && sub != "api_retry" && !isClaudeTaskEvent(sub) {
 								return
 							}
 						}

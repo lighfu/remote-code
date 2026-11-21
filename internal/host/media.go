@@ -322,7 +322,8 @@ func mediaLinkInfo(raw, cwd string) (M, error) {
 var uploadIDPattern = regexp.MustCompile(`^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$`)
 var uploadMIMEPattern = regexp.MustCompile(`(?i)^[a-z0-9!#$&^_.+-]+/[a-z0-9!#$&^_.+-]+$`)
 
-const uploadLimit = 50 * 1024 * 1024
+const legacyUploadLimit = 50 * 1024 * 1024
+const uploadLimit = 512 * 1024 * 1024
 
 func uploadName(raw string) (string, error) {
 	name := strings.TrimSpace(raw)
@@ -350,22 +351,34 @@ func uploadStoredName(name string) string {
 	}
 	return name
 }
-func receiveUpload(dataDir string, r *http.Request) (M, error) {
-	if strings.ToLower(strings.TrimSpace(strings.SplitN(r.Header.Get("Content-Type"), ";", 2)[0])) != "application/octet-stream" {
-		return nil, fileProblem(415, "Please send files in binary format")
-	}
+func uploadBinary(r *http.Request) bool {
+	return strings.EqualFold(strings.TrimSpace(strings.SplitN(r.Header.Get("Content-Type"), ";", 2)[0]), "application/octet-stream")
+}
+
+func uploadRequestInfo(r *http.Request) (string, string, error) {
 	name, err := uploadName(r.URL.Query().Get("name"))
 	if err != nil {
-		return nil, err
+		return "", "", err
 	}
 	contentType := r.URL.Query().Get("mime")
 	if contentType == "" {
 		contentType = mediaMime(name)
 	}
 	if len(contentType) > 160 || !uploadMIMEPattern.MatchString(contentType) {
-		return nil, fileProblem(400, "Invalid file format")
+		return "", "", fileProblem(400, "Invalid file format")
 	}
-	if r.ContentLength > uploadLimit {
+	return name, strings.ToLower(contentType), nil
+}
+
+func receiveUpload(dataDir string, r *http.Request) (M, error) {
+	if !uploadBinary(r) {
+		return nil, fileProblem(415, "Please send files in binary format")
+	}
+	name, contentType, err := uploadRequestInfo(r)
+	if err != nil {
+		return nil, err
+	}
+	if r.ContentLength > legacyUploadLimit {
 		return nil, fileProblem(413, "File is too large (up to 50 MB)")
 	}
 	id := NewID()
@@ -384,9 +397,9 @@ func receiveUpload(dataDir string, r *http.Request) (M, error) {
 	if err != nil {
 		return nil, err
 	}
-	size, copyErr := io.Copy(f, io.LimitReader(r.Body, uploadLimit+1))
+	size, copyErr := io.Copy(f, io.LimitReader(r.Body, legacyUploadLimit+1))
 	closeErr := f.Close()
-	if size > uploadLimit {
+	if size > legacyUploadLimit {
 		return nil, fileProblem(413, "File is too large (up to 50 MB)")
 	}
 	if copyErr != nil {
@@ -401,7 +414,7 @@ func receiveUpload(dataDir string, r *http.Request) (M, error) {
 	if err = os.Rename(path+".part", path); err != nil {
 		return nil, err
 	}
-	file := M{"id": id, "name": name, "size": size, "mime": strings.ToLower(contentType)}
+	file := M{"id": id, "name": name, "size": size, "mime": contentType}
 	meta, err := json.Marshal(file)
 	if err != nil {
 		return nil, err
@@ -412,7 +425,39 @@ func receiveUpload(dataDir string, r *http.Request) (M, error) {
 	success = true
 	return file, nil
 }
-func ResolveUploads(dataDir string, value any) ([]M, error) {
+func (a *App) attachmentStorage() string {
+	if a.Config.AttachmentStorage != "" {
+		return a.Config.AttachmentStorage
+	}
+	return a.DataDir
+}
+
+var attachmentNotFound = fileProblem(404, "Attachment not found. Please choose the file again")
+
+func findUpload(dataDir, id string) (M, error) {
+	directory := filepath.Join(dataDir, "attachments", id)
+	data, err := os.ReadFile(filepath.Join(directory, "metadata.json"))
+	if err != nil {
+		return nil, attachmentNotFound
+	}
+	var meta M
+	if json.Unmarshal(data, &meta) != nil || S(meta, "id") != id {
+		return nil, attachmentNotFound
+	}
+	name, err := uploadName(S(meta, "name"))
+	if err != nil {
+		return nil, err
+	}
+	path := filepath.Join(directory, "file", uploadStoredName(name))
+	st, err := os.Stat(path)
+	if err != nil || !st.Mode().IsRegular() || st.Size() != int64(N(meta, "size")) || st.Size() > uploadLimit {
+		return nil, attachmentNotFound
+	}
+	meta["path"] = path
+	return meta, nil
+}
+
+func ResolveUploads(dataDir string, value any, fallback ...string) ([]M, error) {
 	result := []M{}
 	if value == nil {
 		return result, nil
@@ -431,25 +476,18 @@ func ResolveUploads(dataDir string, value any) ([]M, error) {
 			continue
 		}
 		seen[id] = true
-		directory := filepath.Join(dataDir, "attachments", id)
-		data, err := os.ReadFile(filepath.Join(directory, "metadata.json"))
-		if err != nil {
-			return nil, fileProblem(404, "Attachment not found. Please choose the file again")
+		meta, err := findUpload(dataDir, id)
+		for _, directory := range fallback {
+			if err != attachmentNotFound {
+				break
+			}
+			if directory != dataDir {
+				meta, err = findUpload(directory, id)
+			}
 		}
-		var meta M
-		if json.Unmarshal(data, &meta) != nil || S(meta, "id") != id {
-			return nil, fileProblem(404, "Attachment not found. Please choose the file again")
-		}
-		name, err := uploadName(S(meta, "name"))
 		if err != nil {
 			return nil, err
 		}
-		path := filepath.Join(directory, "file", uploadStoredName(name))
-		st, err := os.Stat(path)
-		if err != nil || !st.Mode().IsRegular() || st.Size() != int64(N(meta, "size")) || st.Size() > uploadLimit {
-			return nil, fileProblem(404, "Attachment not found. Please choose the file again")
-		}
-		meta["path"] = path
 		result = append(result, meta)
 	}
 	return result, nil
@@ -492,6 +530,7 @@ func boundedRawFileRange(r *http.Request, etag string) bool {
 }
 
 func registerMedia(a *App, mux *http.ServeMux) {
+	storage := a.attachmentStorage()
 	fileRoute(a, mux, "GET /api/file", func(r *http.Request, _ *Record, _ M) (any, error) {
 		cwd := ""
 		if rec := a.Store.infoRecord(r.URL.Query().Get("session")); rec != nil {
@@ -533,13 +572,14 @@ func registerMedia(a *App, mux *http.ServeMux) {
 		http.ServeContent(w, r, filepath.Base(path), st.ModTime(), io.NewSectionReader(f, 0, st.Size()))
 	})
 	mux.HandleFunc("POST /api/uploads", func(w http.ResponseWriter, r *http.Request) {
-		file, err := receiveUpload(a.DataDir, r)
+		file, err := receiveUpload(storage, r)
 		if err != nil {
 			fileError(w, err)
 			return
 		}
 		writeJSON(w, 200, file)
 	})
+	registerChunkedUploads(storage, mux)
 	mux.HandleFunc("GET /api/media/{mediaID}", func(w http.ResponseWriter, r *http.Request) {
 		decoded, err := base64.RawURLEncoding.DecodeString(r.PathValue("mediaID"))
 		if err != nil {

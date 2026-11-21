@@ -244,13 +244,6 @@ private fun ContextBody(d: ContextDetail, header: @Composable () -> Unit = {}) {
                 style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
-            if (d.estimated) {
-                Text(
-                    stringResource(R.string.chat_context_sheet_013),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
             Spacer(Modifier.height(12.dp))
             Row(Modifier.fillMaxWidth().height(14.dp).clip(RoundedCornerShape(7.dp))) {
                 colors.forEach { (c, color) ->

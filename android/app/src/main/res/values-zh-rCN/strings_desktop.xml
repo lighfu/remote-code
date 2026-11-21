@@ -28,9 +28,6 @@
     <string name="desktop_quality_standard">标准</string>
     <string name="desktop_quality_high">高清</string>
     <string name="desktop_refresh_rate">目标帧率</string>
-    <string name="desktop_rate_low">低</string>
-    <string name="desktop_rate_normal">标准</string>
-    <string name="desktop_rate_fast">高速</string>
     <string name="desktop_direct_gestures">单指轻触即可在点击处左键单击；双击执行双击，单指滑动可拖拽。长按或双指轻触执行右键单击。双指平移可移动视图，张开或捏合以鼠标指针为中心缩放。</string>
     <string name="desktop_input_options">输入操作</string>
     <string name="desktop_video_options">画面</string>
@@ -82,7 +79,7 @@
     <string name="desktop_graph_timing">处理时间</string>
     <string name="desktop_bitrate_target">目标视频码率</string>
     <string name="desktop_bitrate_unlimited">无限制</string>
-    <string name="desktop_bitrate_hint">自动模式下，视频到达延迟时会降低数据流量。接收图表显示视频数据的实测值。</string>
+    <string name="desktop_bitrate_hint">自动模式下，视频到达延迟时会降低数据流量。</string>
     <string name="desktop_auto_bitrate">自动（%1$.1f Mbps）</string>
     <string name="desktop_log_title">连接日志</string>
     <string name="desktop_log_displays">正在获取 PC 显示器配置</string>

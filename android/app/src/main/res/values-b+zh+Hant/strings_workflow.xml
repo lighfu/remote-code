@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="chat_workflow_title">工作流程</string>
+    <string name="chat_workflow_empty">這個對話還沒有工作流程或子代理程式的記錄。</string>
+    <string name="chat_workflow_unavailable">無法載入工作流程。</string>
+    <string name="chat_workflow_summary">代理程式 %1$d 個 · 進行中 %2$d 個 · 已結束 %3$d 個</string>
+    <string name="chat_workflow_status_unknown">狀態不明</string>
+    <string name="chat_workflow_expand_branch">展開子項目</string>
+    <string name="chat_workflow_collapse_branch">收合子項目</string>
+    <string name="chat_workflow_show_entry">在對話中查看</string>
+    <string name="chat_workflow_depth">第 %1$d 層</string>
+    <string name="chat_workflow_details">切換詳細資料顯示</string>
+    <string name="chat_workflow_earlier">較早的活動</string>
+    <string name="chat_workflow_children">%1$d 個子項目</string>
+    <string name="chat_workflow_phase">階段</string>
+    <string name="chat_workflow_open_conversation">開啟 %1$s 的對話</string>
+    <string name="chat_workflow_latest_activity">最新動態</string>
+    <string name="chat_workflow_conversation_empty">此子代理程式沒有對話記錄。</string>
+    <string name="chat_workflow_conversation_unavailable">無法載入子代理程式對話。</string>
+    <string name="chat_workflow_retry">重試</string>
+    <string name="chat_workflow_context_tokens">上下文 %1$s</string>
+    <string name="chat_workflow_input_tokens">輸入 %1$s</string>
+    <string name="chat_workflow_output_tokens">輸出 %1$s</string>
+    <string name="chat_workflow_cache_read">快取讀取 %1$s</string>
+    <string name="chat_workflow_cache_write">快取寫入 %1$s</string>
+    <string name="chat_workflow_usage_requests">請求 %1$s 次</string>
+    <string name="chat_workflow_usage_partial">依可用記錄統計</string>
+    <string name="chat_workflow_usage_empty">沒有用量記錄。</string>
+    <string name="chat_workflow_older">載入較早的訊息</string>
+</resources>

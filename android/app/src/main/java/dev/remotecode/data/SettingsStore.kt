@@ -1,6 +1,7 @@
 package dev.remotecode.data
 
 import android.content.Context
+import androidx.datastore.preferences.core.MutablePreferences
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
@@ -30,6 +31,8 @@ data class AppSettings(
     val desktop: DesktopPreferences = DesktopPreferences(),
     val toolWrap: ToolWrapPreferences = ToolWrapPreferences(),
     val localCurrency: String? = null,
+    val showBackgroundCommands: Boolean = false,
+    val savedServers: List<ServerConfig> = listOfNotNull(server),
 )
 
 data class ToolWrapPreferences(val input: Boolean = true, val output: Boolean = false)
@@ -112,11 +115,13 @@ class SettingsStore(private val context: Context) {
         val accessId = stringPreferencesKey("cf_access_id")
         val accessSecret = stringPreferencesKey("cf_access_secret")
         val publicUrl = stringPreferencesKey("public_url")
+        val inactiveServers = stringPreferencesKey("inactive_servers")
         val backgroundNotify = booleanPreferencesKey("background_notify")
         val lastProvider = stringPreferencesKey("last_provider")
         val lastCwd = stringPreferencesKey("last_cwd")
         val thinking = stringPreferencesKey("thinking_mode")
         val toolDetail = booleanPreferencesKey("tool_detail")
+        val showBackgroundCommands = booleanPreferencesKey("show_background_commands")
         val codeWrap = booleanPreferencesKey("code_wrap")
         val toolInputWrap = booleanPreferencesKey("tool_input_wrap")
         val toolOutputWrap = booleanPreferencesKey("tool_output_wrap")
@@ -167,6 +172,41 @@ class SettingsStore(private val context: Context) {
     internal companion object {
         private val defaults = DesktopPreferences()
 
+        fun readPairedServers(p: Preferences): PairedServers {
+            val url = p[Keys.url]
+            val token = p[Keys.token]
+            val active = if (!url.isNullOrBlank() && !token.isNullOrBlank()) {
+                ServerConfig(url, token, p[Keys.name].orEmpty(), p[Keys.accessId].orEmpty(), p[Keys.accessSecret].orEmpty(), p[Keys.publicUrl].orEmpty())
+            } else null
+            return PairedServers.restore(active, p[Keys.inactiveServers])
+        }
+
+        fun writePairedServers(p: MutablePreferences, servers: PairedServers) {
+            val active = servers.active
+            if (active?.token != p[Keys.token]) {
+                p.remove(Keys.desktopClipboard)
+                p.remove(Keys.desktopAudio)
+                p.remove(Keys.lastCwd)
+            }
+            if (active != null) {
+                p[Keys.url] = active.url
+                p[Keys.token] = active.token
+                p[Keys.name] = active.name
+                p[Keys.accessId] = active.accessId
+                p[Keys.accessSecret] = active.accessSecret
+                p[Keys.publicUrl] = active.publicUrl
+            } else {
+                p.remove(Keys.url)
+                p.remove(Keys.token)
+                p.remove(Keys.name)
+                p.remove(Keys.accessId)
+                p.remove(Keys.accessSecret)
+                p.remove(Keys.publicUrl)
+            }
+            if (servers.inactive.isEmpty()) p.remove(Keys.inactiveServers)
+            else p[Keys.inactiveServers] = servers.encodeInactive()
+        }
+
         fun readDesktopPreferences(p: Preferences) = DesktopPreferences(
             fps = p[Keys.desktopFps]?.takeIf { it in DesktopPreferences.frameRates } ?: defaults.fps,
             resolution = DesktopResolution.restore(p[Keys.desktopResolution], p[Keys.desktopHighDetail]) ?: defaults.resolution,
@@ -193,19 +233,16 @@ class SettingsStore(private val context: Context) {
     }
 
     val settings: Flow<AppSettings> = context.dataStore.data.map { p ->
-        val url = p[Keys.url]
-        val token = p[Keys.token]
+        val servers = readPairedServers(p)
         AppSettings(
-            server = if (!url.isNullOrBlank() && !token.isNullOrBlank()) {
-                ServerConfig(url, token, p[Keys.name] ?: "", p[Keys.accessId] ?: "", p[Keys.accessSecret] ?: "", p[Keys.publicUrl] ?: "")
-            } else {
-                null
-            },
+            server = servers.active,
+            savedServers = servers.all,
             backgroundNotify = p[Keys.backgroundNotify] ?: true,
             lastProvider = p[Keys.lastProvider] ?: Providers.CLAUDE,
             lastCwd = p[Keys.lastCwd] ?: "",
             thinking = p[Keys.thinking] ?: "full",
             toolDetail = p[Keys.toolDetail] ?: true,
+            showBackgroundCommands = p[Keys.showBackgroundCommands] ?: false,
             codeWrap = p[Keys.codeWrap] ?: true,
             localCurrency = p[Keys.localCurrency]?.takeIf(::isMonetaryCurrency),
             toolWrap = ToolWrapPreferences(
@@ -242,59 +279,45 @@ class SettingsStore(private val context: Context) {
         )
     }
 
-    suspend fun saveServer(cfg: ServerConfig?) {
-        context.dataStore.edit {
-            if (cfg?.token != it[Keys.token]) {
-                it.remove(Keys.desktopClipboard)
-                it.remove(Keys.desktopAudio)
-            }
-            if (cfg == null) {
-                it.remove(Keys.url); it.remove(Keys.token); it.remove(Keys.name)
-                it.remove(Keys.accessId); it.remove(Keys.accessSecret); it.remove(Keys.publicUrl)
-            } else {
-                it[Keys.url] = cfg.url
-                it[Keys.token] = cfg.token
-                it[Keys.name] = cfg.name
-                it[Keys.accessId] = cfg.accessId
-                it[Keys.accessSecret] = cfg.accessSecret
-                it[Keys.publicUrl] = cfg.publicUrl
-            }
+    private suspend fun <T> set(key: Preferences.Key<T>, value: T?) {
+        context.dataStore.edit { prefs ->
+            if (value == null) prefs.remove(key) else prefs[key] = value
         }
     }
 
-    suspend fun savePublicUrl(url: String) {
-        context.dataStore.edit { it[Keys.publicUrl] = url }
-    }
-
-    /** 同じトークンの HTTPS は公開 URL へ追加し、USB / LAN は差し替える。 */
-    suspend fun mergePair(current: ServerConfig?, incoming: ServerConfig) {
-        val next = if (current != null && current.token == incoming.token) {
-            if (isPublicUrl(incoming.url)) {
-                current.copy(
-                    name = incoming.name.ifBlank { current.name },
-                    publicUrl = incoming.url,
-                    accessId = incoming.accessId.ifBlank { current.accessId },
-                    accessSecret = incoming.accessSecret.ifBlank { current.accessSecret },
-                )
-            } else {
-                current.copy(url = incoming.url, name = incoming.name.ifBlank { current.name })
-            }
-        } else {
-            incoming.copy(publicUrl = if (isPublicUrl(incoming.url)) incoming.url else "")
+    suspend fun savePublicUrl(expectedToken: String, url: String) {
+        context.dataStore.edit { prefs ->
+            if (prefs[Keys.token] == expectedToken) prefs[Keys.publicUrl] = url
         }
-        saveServer(next)
     }
 
-    suspend fun setThinking(mode: String) {
-        context.dataStore.edit { it[Keys.thinking] = mode }
+    suspend fun mergePair(incoming: ServerConfig) {
+        updatePairedServers { it.pair(incoming) }
     }
+
+    suspend fun refreshActivePair(incoming: ServerConfig): Boolean = updatePairedServers { paired ->
+        paired.takeIf { it.active?.token == incoming.token }?.pair(incoming)
+    }
+
+    suspend fun selectServer(token: String): Boolean = updatePairedServers { it.select(token) }
+
+    suspend fun forgetServer(token: String): Boolean = updatePairedServers { it.forget(token) }
+
+    private suspend fun updatePairedServers(transform: (PairedServers) -> PairedServers?): Boolean {
+        var found = false
+        context.dataStore.edit { prefs ->
+            val updated = transform(readPairedServers(prefs)) ?: return@edit
+            writePairedServers(prefs, updated)
+            found = true
+        }
+        return found
+    }
+
+    suspend fun setThinking(mode: String) = set(Keys.thinking, mode)
 
     suspend fun setLocalCurrency(code: String?) {
         require(code == null || isMonetaryCurrency(code))
-        context.dataStore.edit { prefs ->
-            if (code == null) prefs.remove(Keys.localCurrency)
-            else prefs[Keys.localCurrency] = code
-        }
+        set(Keys.localCurrency, code)
     }
 
     suspend fun setAppearance(a: Appearance) {
@@ -311,21 +334,15 @@ class SettingsStore(private val context: Context) {
         }
     }
 
-    suspend fun setToolDetail(on: Boolean) {
-        context.dataStore.edit { it[Keys.toolDetail] = on }
-    }
+    suspend fun setToolDetail(on: Boolean) = set(Keys.toolDetail, on)
 
-    suspend fun setCodeWrap(on: Boolean) {
-        context.dataStore.edit { it[Keys.codeWrap] = on }
-    }
+    suspend fun setShowBackgroundCommands(on: Boolean) = set(Keys.showBackgroundCommands, on)
 
-    suspend fun setToolInputWrap(on: Boolean) {
-        context.dataStore.edit { it[Keys.toolInputWrap] = on }
-    }
+    suspend fun setCodeWrap(on: Boolean) = set(Keys.codeWrap, on)
 
-    suspend fun setToolOutputWrap(on: Boolean) {
-        context.dataStore.edit { it[Keys.toolOutputWrap] = on }
-    }
+    suspend fun setToolInputWrap(on: Boolean) = set(Keys.toolInputWrap, on)
+
+    suspend fun setToolOutputWrap(on: Boolean) = set(Keys.toolOutputWrap, on)
 
     suspend fun setDesktop(prefs: DesktopPreferences, pairedToken: String?) {
         context.dataStore.edit {
@@ -371,9 +388,7 @@ class SettingsStore(private val context: Context) {
         }
     }
 
-    suspend fun setBackgroundNotify(on: Boolean) {
-        context.dataStore.edit { it[Keys.backgroundNotify] = on }
-    }
+    suspend fun setBackgroundNotify(on: Boolean) = set(Keys.backgroundNotify, on)
 
     suspend fun rememberNewSession(provider: String, cwd: String) {
         context.dataStore.edit {

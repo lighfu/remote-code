@@ -22,6 +22,7 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.AutoAwesome
+import androidx.compose.material.icons.rounded.Computer
 import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material.icons.rounded.ExpandLess
 import androidx.compose.material.icons.rounded.ExpandMore
@@ -54,6 +55,7 @@ import androidx.compose.material3.ToggleButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
@@ -61,6 +63,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextOverflow
@@ -68,6 +71,7 @@ import androidx.compose.ui.unit.dp
 import dev.remotecode.RemoteCodeApp
 import dev.remotecode.data.HistoryItem
 import dev.remotecode.data.Providers
+import dev.remotecode.data.connectionIdentity
 import dev.remotecode.ui.common.ProviderBadge
 import dev.remotecode.ui.common.relativeTime
 import dev.remotecode.ui.common.shortPath
@@ -79,6 +83,7 @@ private enum class HistorySort(val label: String) { NEWEST(appString(R.string.sc
 
 private const val AllHistory = "all"
 private val historyFilters = listOf(AllHistory) + Providers.all
+internal val LocalOpenServerPicker = staticCompositionLocalOf<(() -> Unit)?> { null }
 
 internal fun Set<String>.withProjectExpansion(projects: Set<String>, expanded: Boolean): Set<String> =
     if (expanded) this - projects else this + projects
@@ -136,14 +141,19 @@ fun HistoryContent(
     header: (androidx.compose.foundation.lazy.LazyListScope.() -> Unit)? = null,
 ) {
     val repo = RemoteCodeApp.instance.repository
+    val settings by repo.settings.collectAsState()
+    val server = settings?.server
+    val identity by repo.activeServerIdentity.collectAsState()
+    val expectedServer = repo.api.server?.takeIf { it.token == server?.token && it.connectionIdentity() == identity }
+    val openServerPicker = LocalOpenServerPicker.current
     val scope = rememberCoroutineScope()
     val context = androidx.compose.ui.platform.LocalContext.current
     val prefs = remember { context.getSharedPreferences("history_view", android.content.Context.MODE_PRIVATE) }
     val haptics = dev.remotecode.ui.common.rememberHaptics()
     var provider by rememberSaveable { mutableStateOf(prefs.getString("provider", null)?.takeIf { it in historyFilters } ?: Providers.CLAUDE) }
-    var items by remember(provider, reloadKey) { mutableStateOf<List<HistoryItem>>(emptyList()) }
-    var loading by remember(provider, reloadKey) { mutableStateOf(true) }
-    var error by remember(provider, reloadKey) { mutableStateOf<String?>(null) }
+    var items by remember(provider, reloadKey, identity) { mutableStateOf<List<HistoryItem>>(emptyList()) }
+    var loading by remember(provider, reloadKey, identity) { mutableStateOf(true) }
+    var error by remember(provider, reloadKey, identity) { mutableStateOf<String?>(null) }
     var query by rememberSaveable { mutableStateOf("") }
     var confirm by remember { mutableStateOf<HistoryItem?>(null) }
     var importing by remember { mutableStateOf(false) }
@@ -158,11 +168,15 @@ fun HistoryContent(
         prefs.edit().putStringSet("collapsed", collapsed).apply()
     }
 
+    fun isActiveHost(): Boolean = server != null && repo.settings.value?.server?.token == server.token && repo.api.server?.token == server.token
+
     fun importHistory(h: HistoryItem) {
+        val target = expectedServer ?: return
+        if (importing || !isActiveHost()) return
         importing = true
         scope.launch {
             val id = try {
-                repo.api.import(h.provider, h).id
+                repo.api.import(h.provider, h, expectedServer = target).id
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
@@ -171,12 +185,13 @@ fun HistoryContent(
             } finally {
                 importing = false
             }
-            if (id != null) onOpen(id)
+            if (id != null && isActiveHost()) onOpen(id)
         }
     }
 
     /** PC で開いている履歴は取り込み済みでも再取得する。 */
     fun open(h: HistoryItem) {
+        if (!isActiveHost() || importing) return
         val existing = h.sessionId
         when {
             existing != null && h.live -> importHistory(h)
@@ -185,10 +200,11 @@ fun HistoryContent(
         }
     }
 
-    LaunchedEffect(provider, reloadKey) {
+    LaunchedEffect(provider, reloadKey, identity) {
+        val target = expectedServer ?: return@LaunchedEffect
         loadHistorySources(
             if (provider == AllHistory) Providers.all else listOf(provider),
-            fetch = repo.api::history,
+            fetch = { source -> repo.api.history(source, expectedServer = target) },
             onItems = { items = items + it },
             onError = { source, e ->
                 val message = e.localizedMessage ?: e.javaClass.simpleName
@@ -242,6 +258,14 @@ fun HistoryContent(
                         Spacer(Modifier.size(4.dp))
                         Text(if (p == AllHistory) stringResource(R.string.screen_net_log_046) else Providers.label(p), maxLines = 1)
                     }
+                }
+            }
+            if (server != null && openServerPicker != null) {
+                TextButton(onClick = openServerPicker, enabled = !importing, modifier = Modifier.padding(horizontal = 12.dp)) {
+                    Icon(Icons.Rounded.Computer, null, Modifier.size(18.dp))
+                    Spacer(Modifier.size(6.dp))
+                    val name = server.name.ifBlank { server.pickerHost() ?: stringResource(R.string.server_picker_default_pc) }
+                    Text(stringResource(R.string.server_picker_current, name), maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
             }
             OutlinedTextField(
